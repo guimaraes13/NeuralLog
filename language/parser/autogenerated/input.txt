@@ -1,0 +1,78 @@
+2.0e-2::test.
+.10e3::test.
+0.98e+5::test.
+071.0e-29::test.
+/* this
+is
+a
+comment
+*/
+test(a, X, "\" 1", 0.4, .10e3).
+test(a, X, "\'1", 0.4, .10e3).
+test(a, X, '\'1', 0.4, .10e3).
+test(a, X, '\"1', 0.4, .10e3).
+test(a, X, "1", 0.4, .10e3).
+test(a, X, "`'1", 0.4, .10e3).
+test(a, X, '"`1', 0.4, .10e3).
+test(a, X, '1', 0.4, .10e3).
+test(a, X, '1 as 
+oijasd a ', 0.4, .10e3).
+#test(a, x, 1, 0.4, .10e3).
+%test(a, x, 1, 0.4, .10e3).
+
+target(X, Y) :- b1(X, Y).
+target(X, Y) :- b2(X, Z), $b3(Z, Y).
+target(X, Y) :- b2(X, Z), not b3(Z, Y).
+target(X, Y) :- b2(X, Z), not $b3(Z, Y).
+
+0.2e+1::h{0}{1}(X).
+{n}h(X).
+{n}h{0}h2(X).
+{n}h{1}{2}(X).
+{n}h{1}{2}h2(X).
+{n}h{1}{2}h2{3}(X).
+
+for a in {1..10}
+do
+    test{a}(X, b).
+done
+
+for X in 1 2 3 a "b" 'c' do
+    test({X}, Z).
+    for 1Y in A B C do
+        doing({X}, {1Y}).
+    done
+done
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+for n in {1..30} do
+	h_{n}(X, Y) :- $l_{n}(X), $l_{n}(Y).
+done
+
+num(X, Y) :- h_{0}(X, Y).
+
+square_sum(X) :- l_{0}(X), l_{0}(X).
+
+norm(X) :- square_sum(X), square_root(X).
+
+den(X, Y) :- norm(X), norm(Y),
+	inverse(Y).
+
+similarity(X, Y) :- num(X, Y), den(X, Y).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+h1(X, Y) :- b1(X, Y), w(h1).           % weight
+h2(X, Y) :- b2(X, Z), b3(Z, Y), w(h2). % weight
+
+h{0}(X, Y) :- b(h{0}).                 % bias
+
+a{0}(X, Y) :- h{0}(X, Y), act_func(Y).
+
+score(X, Y) :- a{0}(X, Y), w(score{0}).
+score(X, Y) :- b(score).
+
+target(X, Y) :- score(X, Y), output_func(Y). % alternatively: target(X, Y) :- output_func(score(X, Y)).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
