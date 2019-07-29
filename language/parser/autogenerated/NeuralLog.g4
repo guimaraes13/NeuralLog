@@ -7,17 +7,17 @@
 grammar NeuralLog;
 
 //program: (clause)*;
-program: (for_loop|clause)*;
+program: (for_loop|clause)+;
 
-for_loop: FOR_LOOP TERM IN_TOKEN
-((for_term)+| '{' INTEGER '..' INTEGER '}')
-DO_TOKEN
-    (for_loop|clause)+
+for_loop: FOR_LOOP for_variable IN_TOKEN (for_terms|for_range) DO_TOKEN
+    program
 DONE_TOKEN;
 
 clause: (atom | weighted_atom | horn_clause) END_OF_CLAUSE;
 
-atom: (PLACE_HOLDER|TERM)+ list_of_arguments?;
+atom: predicate list_of_arguments?;
+predicate: (PLACE_HOLDER|TERM)+;
+
 weighted_atom: (number WEIGHT_SEPARATOR) atom;
 
 horn_clause: atom IMPLICATION_SIGN (body)?;
@@ -33,7 +33,11 @@ argument: number | term;
 
 term: (QUOTED | (PLACE_HOLDER|TERM)+);
 
-for_term: (term|number);
+for_variable: TERM;
+for_terms: (for_term)+;
+for_term: (TERM|QUOTED|SCIENTIFIC_NUMBER|DECIMAL|INTEGER);
+
+for_range: '{' INTEGER '..' INTEGER '}';
 
 number: SCIENTIFIC_NUMBER | DECIMAL | INTEGER;
 

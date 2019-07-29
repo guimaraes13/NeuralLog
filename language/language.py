@@ -1,10 +1,36 @@
 """
 Define the classes to represent the knowledge of the system.
 """
+
+import re
+
+TRAINABLE_KEY = "$"
+
 WEIGHT_SEPARATOR = "::"
 NEGATION_KEY = "not"
 IMPLICATION_SIGN = ":-"
 END_SIGN = "."
+PLACE_HOLDER = re.compile("({[a-zA-Z0-9_-]+})")
+
+
+def get_term_from_string(string):
+    """
+    Transforms the string into a term. A variable if it starts with an upper
+    case letter, or a constant, otherwise.
+
+    :param string: the string
+    :type string: str
+    :return: the term
+    :rtype: Term
+    """
+    if string[0].isupper():
+        return Variable(string)
+    elif string[0].islower():
+        return Constant(string)
+    elif string[0] == string[-1] and (string[0] == "'" or string[0] == '"'):
+        return Quote(string)
+    else:
+        raise TermMalformedException
 
 
 def build_terms(arguments):
@@ -22,10 +48,9 @@ def build_terms(arguments):
         if isinstance(argument, Term):
             terms.append(argument)
         elif isinstance(argument, str):
-            if argument[0].isupper():
-                terms.append(Variable(argument))
-            else:
-                terms.append(Constant(argument))
+            terms.append(get_term_from_string(argument))
+        elif isinstance(argument, float) or isinstance(argument, int):
+            terms.append(Number(argument))
         else:
             raise TermMalformedException()
 
@@ -63,19 +88,52 @@ class TermMalformedException(Exception):
                          "or a string.")
 
 
+class ClauseMalformedException(Exception):
+    """
+    Represents an term malformed exception.
+    """
+
+    def __init__(self) -> None:
+        """
+        Creates an term malformed exception.
+        """
+        super().__init__("Clause malformed, the clause must be an atom, "
+                         "a weighted atom or a Horn clause.")
+
+
+class BadArgumentException(Exception):
+    """
+    Represents an bad argument exception.
+    """
+
+    def __init__(self, value) -> None:
+        """
+        Creates an term malformed exception.
+        """
+        super().__init__("Expected a number or a term, got {}".format(value))
+
+
 class Term:
     """
     Represents a logic term.
     """
 
-    def __init__(self, name):
+    def __init__(self, value):
         """
         Creates a logic term.
 
-        :param name: the name of the term
-        :type name: str
+        :param value: the value of the term
+        :type value: str or float
         """
-        self.name = name
+        self.value = value
+
+    def get_name(self):
+        """
+        Returns the name of the term.
+        :return: the name of the term
+        :rtype: str
+        """
+        return self.value
 
     def is_constant(self):
         """
@@ -95,8 +153,24 @@ class Term:
         """
         return False
 
+    def key(self):
+        """
+        Specifies the keys to be used in the equals and hash functions.
+        :return: the keys
+        :rtype: Any
+        """
+        return self.value
+
+    def __hash__(self):
+        return hash(self.key())
+
+    def __eq__(self, other):
+        if isinstance(other, Term):
+            return self.key() == other.key()
+        return False
+
     def __str__(self):
-        return self.name
+        return self.value
 
     __repr__ = __str__
 
@@ -106,21 +180,21 @@ class Constant(Term):
     Represents a logic constant.
     """
 
-    def __init__(self, name):
+    def __init__(self, value):
         """
         Creates a logic constant.
 
-        :param name: the name of the constant
-        :type name: str
+        :param value: the name of the constant
+        :type value: str
         """
-        super().__init__(name)
+        super().__init__(value)
 
     # noinspection PyMissingOrEmptyDocstring
     def is_constant(self):
         return True
 
     def __str__(self):
-        return self.name
+        return self.value
 
     __repr__ = __str__
 
@@ -130,18 +204,70 @@ class Variable(Term):
     Represents a logic variable.
     """
 
-    def __init__(self, name):
+    def __init__(self, value):
         """
         Creates a logic variable.
 
-        :param name: the name of the variable
-        :type name: str
+        :param value: the name of the variable
+        :type value: str
         """
-        super().__init__(name)
+        super().__init__(value)
 
     # noinspection PyMissingOrEmptyDocstring
     def is_constant(self):
         return False
+
+
+class Quote(Term):
+    """
+    Represents a quoted term, that might contain a template.
+    """
+
+    def __init__(self, value):
+        """
+        Creates a quoted term.
+
+        :param value: the value of the term.
+        :type value: str
+        """
+        super().__init__(value[1:-1])
+        self._is_template = PLACE_HOLDER.search(value) is not None
+        self.quote = value[0]
+
+    # noinspection PyMissingOrEmptyDocstring
+    def is_constant(self):
+        return not self._is_template
+
+    # noinspection PyMissingOrEmptyDocstring
+    def is_template(self):
+        return self._is_template
+
+    def __str__(self):
+        return self.quote + super().__str__() + self.quote
+
+
+class Number(Term):
+    """
+    Represents a number term.
+    """
+
+    def __init__(self, value):
+        super().__init__(value)
+
+    # noinspection PyMissingOrEmptyDocstring
+    def get_name(self):
+        return str(self.value)
+
+    # noinspection PyMissingOrEmptyDocstring
+    def is_constant(self):
+        return True
+
+    # noinspection PyMissingOrEmptyDocstring
+    def is_template(self):
+        return False
+
+    def __str__(self):
+        return str(self.value)
 
 
 class TemplateTerm(Term):
@@ -198,6 +324,31 @@ class Predicate:
     def __str__(self):
         return "{}/{}".format(self.name, self.arity)
 
+    def key(self):
+        """
+        Specifies the keys to be used in the equals and hash functions.
+        :return: the keys
+        :rtype: Any
+        """
+        return self.name, self.arity
+
+    def get_name(self):
+        """
+        Returns the name of the predicate.
+
+        :return: the name of the predicate
+        :rtype: str
+        """
+        return self.name
+
+    def __hash__(self):
+        return hash(self.key())
+
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return self.key() == other.key()
+        return False
+
     __repr__ = __str__
 
 
@@ -236,13 +387,38 @@ class Clause:
         """
         return False
 
+    def is_grounded(self):
+        """
+        Returns true if the clause is grounded. A clause is grounded if all
+        its terms are constants.
+        :return: true if the clause is grounded, false otherwise
+        :rtype: bool
+        """
+        pass
+
+    def key(self):
+        """
+        Specifies the keys to be used in the equals and hash functions.
+        :return: the keys
+        :rtype: Any
+        """
+        pass
+
+    def __hash__(self):
+        return hash(self.key())
+
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return self.key() == other.key()
+        return False
+
 
 class Atom(Clause):
     """
     Represents a logic atom.
     """
 
-    def __init__(self, predicate, weight=1.0, *args) -> None:
+    def __init__(self, predicate, *args, weight=1.0) -> None:
         """
         Creates a logic atom.
 
@@ -270,6 +446,13 @@ class Atom(Clause):
     def __getitem__(self, item):
         return self.terms[item]
 
+    # noinspection PyMissingOrEmptyDocstring
+    def is_grounded(self):
+        for term in self.terms:
+            if isinstance(term, Term) and not term.is_constant():
+                return False
+        return True
+
     def arity(self):
         """
         Returns the arity of the atom.
@@ -279,11 +462,18 @@ class Atom(Clause):
         """
         return self.predicate.arity
 
+    # noinspection PyMissingOrEmptyDocstring
+    def key(self):
+        return self.weight, self.predicate, tuple(self.terms)
+
     def __str__(self):
         if self.terms is None or len(self.terms) == 0:
-            return self.predicate.name
+            if self.weight == 1.0:
+                return self.predicate.name
+            else:
+                return "{}::{}".format(self.weight, self.predicate.name)
 
-        atom = "{}({})".format(self.predicate,
+        atom = "{}({})".format(self.predicate.name,
                                ", ".join(map(lambda x: str(x), self.terms)))
         if self.weight != 1.0:
             return "{}{}{}".format(self.weight, WEIGHT_SEPARATOR, atom)
@@ -309,33 +499,66 @@ class Literal(Atom):
     Represents a logic literal.
     """
 
-    def __init__(self, predicate, weight=1.0,
-                 negated=False, learnable=False, *args) -> None:
+    def __init__(self, atom, negated=False, trainable=False) -> None:
         """
-        Creates a logic literal.
+        Creates a logic literal from an atom.
 
-        :param predicate: the predicate
-        :type predicate: str or Predicate
-        :param weight: the weight of the atom
-        :type weight: float
+        :param atom: the atom
+        :type atom: Atom
         :param negated: if the literal is negated
         :type negated: bool
-        :param learnable: if the literal is to be learned
-        :type learnable: bool
-        :param args: the list of terms, if any
-        :type args: Term or str
+        :param trainable: if the literal is to be trained
+        :type trainable: bool
         :raise AtomMalformedException in case the number of terms differs
         from the arity of the predicate
         """
-        super().__init__(predicate, weight, *args)
+        super().__init__(atom.predicate, *atom.terms, weight=atom.weight)
         self.negated = negated
-        self.learnable = learnable
+        self.trainable = trainable
+
+    # noinspection PyMissingOrEmptyDocstring
+    def key(self):
+        # noinspection PyTypeChecker
+        return (self.negated, self.trainable) + super().key()
 
     def __str__(self):
         atom = super().__str__()
+        if self.trainable:
+            atom = TRAINABLE_KEY + atom
         if self.negated:
             return "{} {}".format(NEGATION_KEY, atom)
         return atom
+
+
+class AtomClause(Clause):
+    """
+    Represents an atom clause, an atom that is also a clause. As such,
+    it is written with a `END_SIGN` at the end.
+    """
+
+    def __init__(self, atom) -> None:
+        """
+        Creates an atom clause
+        :param atom: the atom
+        :type atom: Atom
+        """
+        super().__init__()
+        self.atom = atom
+
+    # noinspection PyMissingOrEmptyDocstring
+    def is_template(self):
+        return self.atom.is_template()
+
+    # noinspection PyMissingOrEmptyDocstring
+    def is_grounded(self):
+        return self.atom.is_grounded()
+
+    # noinspection PyMissingOrEmptyDocstring
+    def key(self):
+        return self.atom.key()
+
+    def __str__(self) -> str:
+        return self.atom.__str__() + END_SIGN
 
 
 class HornClause(Clause):
@@ -358,8 +581,16 @@ class HornClause(Clause):
     def __getitem__(self, item):
         return self.body[item]
 
+    # noinspection PyMissingOrEmptyDocstring
+    def key(self):
+        key_tuple = self.head.key()
+        if self.body is not None and len(self.body) > 0:
+            for literal in self.body:
+                key_tuple += literal.key()
+        return tuple(key_tuple)
+
     def __str__(self):
-        body = Literal("true") if self.body is None else self.body
+        body = Literal(Atom("true")) if self.body is None else self.body
 
         return "{} {} {}{}".format(self.head, IMPLICATION_SIGN,
                                    ", ".join(map(lambda x: str(x), body)),
