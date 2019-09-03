@@ -1,3 +1,0 @@
-"""
-The program package.
-"""

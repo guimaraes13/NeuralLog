@@ -6,7 +6,7 @@
 
 grammar NeuralLog;
 
-//program: (clause)*;
+//language: (clause)*;
 program: (for_loop|clause)+;
 
 for_loop: FOR_LOOP for_variable IN_TOKEN (for_terms|for_range) DO_TOKEN

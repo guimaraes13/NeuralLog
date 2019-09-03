@@ -2,16 +2,7 @@
 Define the classes to represent the knowledge of the system.
 """
 
-import logging
 import re
-from collections import OrderedDict
-from typing import Dict, Set, List, Tuple, MutableMapping, TypeVar, Any
-
-import numpy as np
-from scipy.sparse import csr_matrix
-
-KT = TypeVar('KT')  # Key type.
-VT = TypeVar('VT')  # Value type.
 
 TRAINABLE_KEY = "$"
 
@@ -20,8 +11,6 @@ NEGATION_KEY = "not"
 IMPLICATION_SIGN = ":-"
 END_SIGN = "."
 PLACE_HOLDER = re.compile("({[a-zA-Z0-9_-]+})")
-
-logger = logging.getLogger()
 
 
 def get_term_from_string(string):
@@ -67,6 +56,30 @@ def build_terms(arguments):
             raise TermMalformedException()
 
     return terms
+
+
+class TooManyArguments(Exception):
+    """
+    Represents an exception raised by an atom with too many arguments.
+    """
+
+    MAX_NUMBER_OF_ARGUMENTS = 2
+
+    def __init__(self, atom, found) -> None:
+        """
+        Creates a too many arguments exception.
+
+        :param atom: the atom
+        :type atom: NeuralLogParser.AtomContext
+        :param found: the number of arguments found
+        :type found: int
+        """
+        super().__init__("Too many arguments found for {} at line {}:{}."
+                         " Found {} arguments, the maximum number of "
+                         "arguments allows is {}."
+                         .format(atom.getText(),
+                                 atom.start.line, atom.start.column,
+                                 found, self.MAX_NUMBER_OF_ARGUMENTS))
 
 
 class AtomMalformedException(Exception):
@@ -374,6 +387,22 @@ class Predicate:
             return self.key() == other.key()
         return False
 
+    def equivalent(self, other):
+        """
+        Two predicates are equivalent if they are equal or at least one of
+        then has a negative arity.
+
+        :param other: the other predicate
+        :type other: Predicate
+        :return: True if this predicate is equivalent to `other`,
+            False otherwise.
+        :rtype: bool
+        """
+        if self.arity < 0 or other.arity < 0:
+            return self.name == other.name
+        else:
+            return self == other
+
     __repr__ = __str__
 
 
@@ -443,7 +472,7 @@ class Atom(Clause):
     Represents a logic atom.
     """
 
-    def __init__(self, predicate, *args, weight=1.0) -> None:
+    def __init__(self, predicate, *args, weight=1.0, context=None) -> None:
         """
         Creates a logic atom.
 
@@ -453,6 +482,8 @@ class Atom(Clause):
         :type args: Term or str
         :param weight: the weight of the atom
         :type weight: float
+        :param context: the context of the atom
+        :type context: NeuralLogParser.AtomContext
         :raise AtomMalformedException in case the number of terms differs
         from the arity of the predicate
         """
@@ -467,9 +498,24 @@ class Atom(Clause):
         self.weight = weight
         # noinspection PyTypeChecker
         self.terms = build_terms(args)
+        self.context = context
 
     def __getitem__(self, item):
         return self.terms[item]
+
+    def simple_key(self):
+        """
+        Returns a simplified key of an atom. This key does not include neither
+        the weight of the atom nor the value of the numeric terms.
+
+        It is useful to check if an atom was defined multiple times with
+        different weights and attribute values.
+
+        :return: the simple key of the atom
+        :rtype: tuple[Predicate, tuple[Term]]
+        """
+        return self.predicate, tuple([None if isinstance(x, Number) else
+                                      x for x in self.terms])
 
     # noinspection PyMissingOrEmptyDocstring
     def is_grounded(self):
@@ -715,61 +761,6 @@ class TermType:
                         self.number or other.number)
 
 
-def get_term_type(term):
-    """
-    Returns the type of the term.
-
-    :param term: the term
-    :type term: Term
-    :return: the type of the term
-    :rtype: TermType
-    """
-    if isinstance(term, Number):
-        return TermType(False, True)
-    elif term.is_constant():
-        return TermType(False, False)
-    else:
-        return TermType(True, None)
-
-
-def get_predicate_type(atom):
-    """
-    Creates a tuple containing the type of each term in the atom.
-
-    :param atom: the atom
-    :type atom: Atom
-    :return: a tuple containing the type of each predicate in the atom
-    :rtype: tuple[TermType]
-    """
-    types = []
-    for term in atom.terms:
-        types.append(get_term_type(term))
-    return tuple(types)
-
-
-def get_updated_type(first, second):
-    """
-    Gets the update types from the two collections.
-
-    :param first: the types of the first predicate
-    :type first: list[TermType] or tuple[TermType]
-    :param second: the types of the second predicate
-    :type second: list[TermType] or tuple[TermType]
-    :return: the update types, if possible; otherwise, none
-    :rtype: tuple[TermType]
-    """
-    if len(first) != len(second):
-        return None
-    updated_types = []
-    for i in range(len(first)):
-        updated_type = first[i].update_type(second[i])
-        if updated_type is None:
-            return None
-        updated_types.append(updated_type)
-
-    return updated_types
-
-
 class PredicateTypeError(Exception):
     """
     Represents a predicate type exception.
@@ -779,286 +770,3 @@ class PredicateTypeError(Exception):
         super().__init__("Found atom whose terms types are incompatible with "
                          "previous types: {} and {}".format(previous_atom,
                                                             current_atom))
-
-
-class BiDict(dict, MutableMapping[KT, VT]):
-    """
-    A bi directional dictionary.
-    The inverse dictionary is in the variable inverse.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super(BiDict, self).__init__(*args, **kwargs)
-        self.inverse = {}
-        for key in self.keys():
-            self.inverse[self[key]] = key
-
-    def __setitem__(self, key, value):
-        if key in self:
-            self.inverse[self[key]].remove(key)
-        super(BiDict, self).__setitem__(key, value)
-        self.inverse[value] = key
-
-    def __delitem__(self, key):
-        self.inverse.setdefault(self[key], []).remove(key)
-        if self[key] in self.inverse and not self.inverse[self[key]]:
-            del self.inverse[self[key]]
-        super(BiDict, self).__delitem__(key)
-
-
-class NeuralLogProgram:
-    """
-    Represents a NeuralLog program.
-    """
-
-    facts_by_predicate: Dict[Predicate, Dict[Any, Atom]] = dict()
-    "The facts"
-
-    clauses: List[HornClause] = []
-    "The clauses"
-
-    constants: Set[Term] = set()
-    "All the constants"
-
-    iterable_constants: BiDict[int, Term] = BiDict()
-    "The iterable constants"
-
-    predicates: Dict[Predicate, Tuple[TermType]] = dict()
-    "All the predicates and their types"
-
-    logic_predicates: Set[Predicate] = set()
-    "The logic predicates"
-
-    functional_predicates: Set[Predicate] = set()
-    "The functional predicates"
-
-    _numeric_representation: Dict[Predicate, csr_matrix] = dict()
-    "The matrix representation"
-
-    # Network part
-    # TODO: create the neural network representation
-    # TODO: update the knowledge part with the weights learned by the neural net
-
-    def __init__(self, clauses):
-        """
-        Creates a NeuralLog Program.
-
-        :param clauses: the clauses of the program
-        :type clauses: collections.iterable[Clause]
-        """
-        self._last_atom_for_predicate: Dict[Predicate, Atom] = dict()
-        self._process_clauses(clauses)
-        del self._last_atom_for_predicate
-        self._get_constants()
-
-    def _process_clauses(self, clauses):
-        """
-        Splits the clauses from the facts and create a map of the type of the
-        predicates.
-
-        :param clauses: the clauses
-        :type clauses: collections.iterable[Clause]
-        :raise ClauseMalformedException case the clause is malformed
-        """
-        for clause in clauses:
-            if isinstance(clause, AtomClause) and clause.is_grounded():
-                self._add_predicate(clause.atom)
-                fact_dict = self.facts_by_predicate.setdefault(
-                    clause.atom.predicate, OrderedDict())
-                old_atom = fact_dict.get(clause.simple_key(), None)
-                if old_atom is not None:
-                    logger.warning("Warning: Atom %s replaced by %s",
-                                   old_atom, clause.atom)
-                fact_dict[clause.simple_key()] = clause.atom
-                self.logic_predicates.add(clause.atom.predicate)
-            elif isinstance(clause, HornClause):
-                self._add_predicate(clause.head)
-                self.logic_predicates.add(clause.head.predicate)
-                for atom in clause.body:
-                    self._add_predicate(atom)
-                    if atom.trainable:
-                        self.logic_predicates.add(atom.predicate)
-                self.clauses.append(clause)
-            else:
-                raise ClauseMalformedException()
-        # noinspection PyTypeChecker
-        self.functional_predicates = \
-            self.predicates.keys() - self.logic_predicates
-
-    def _add_predicate(self, atom):
-        """
-        Add the predicate of the atom, and its type, to the map of predicates
-        while creating the types of the terms.
-
-        :param atom: the atom
-        :type atom: Atom
-        :raise PredicateTypeError case a predicate violated the type
-        expressed before by another atom of the same predicate
-        """
-        types = get_predicate_type(atom)
-        atom_predicate = atom.predicate
-        if atom_predicate not in self.predicates:
-            self.predicates[atom_predicate] = types
-        else:
-            updated_types = get_updated_type(types,
-                                             self.predicates[atom_predicate])
-            if updated_types is None:
-                raise PredicateTypeError(atom,
-                                         self._last_atom_for_predicate[
-                                             atom_predicate])
-            self.predicates[atom_predicate] = updated_types
-        self._last_atom_for_predicate[atom_predicate] = atom
-
-    def _get_constants(self):
-        """
-        Gets the constants from the clauses.
-        """
-        _iterable_constants = set()
-        for facts in self.facts_by_predicate.values():
-            for fact in facts.values():
-                self._get_constants_from_atom(fact, _iterable_constants)
-        for clause in self.clauses:
-            self._get_constants_from_atom(clause.head, _iterable_constants)
-            for literal in clause.body:
-                self._get_constants_from_atom(literal, _iterable_constants)
-        self._build_constant_dict(_iterable_constants)
-
-    def _build_constant_dict(self, _iterable_constants):
-        """
-        Builds the dictionary of iterable constants.
-
-        :param _iterable_constants: the iterable constants
-        :type _iterable_constants: collection.Iterable[Term]
-        :return: the dictionary of iterable constants
-        :rtype: BiDict[int, Term]
-        """
-        count = 0
-        for constant in sorted(_iterable_constants, key=lambda x: x.__str__()):
-            self.iterable_constants[count] = constant
-            count += 1
-        self.number_of_entities = count
-
-    def _get_constants_from_atom(self, atom, iterable_constants):
-        """
-        Gets the constants from an atom.
-
-        :param atom: the atom
-        :type atom: Atom
-        :param iterable_constants: the iterable constants
-        :type iterable_constants: set[Term]
-        """
-        types = self.predicates[atom.predicate]
-        for i in range(len(types)):
-            if not atom[i].is_constant() or types[i].number:
-                continue
-            self.constants.add(atom[i])
-            if types[i].variable:
-                iterable_constants.add(atom[i])
-
-    def get_matrix_representation(self, predicate):
-        """
-        Gets the matrix representation for the predicate.
-
-        :param predicate: the predicate
-        :type predicate: Predicate
-        :return: the sparse matrix representation of the data for the given
-        predicate
-        :rtype: csr_matrix or np.matrix or (csr_matrix, csr_matrix)
-        """
-        return self._numeric_representation \
-            .setdefault(predicate, self._build_matrix_representation(predicate))
-
-    def _build_matrix_representation(self, predicate):
-        """
-        Builds the matrix representation for the predicate
-
-        :param predicate: the predicate
-        :type predicate: Predicate
-        :raise UnsupportedMatrixRepresentation in the case the predicate is
-        not convertible to matrix form
-        :return: the matrix representation of the data for the given predicate
-        :rtype: csr_matrix or np.matrix or (csr_matrix, csr_matrix)
-        """
-        arity = self._get_true_arity(predicate)
-        if arity == 0:
-            return self._propositional_matrix_representation(predicate)
-        elif arity == 1:
-            if predicate.arity == 1:
-                return self._relational_matrix_representation(predicate)
-            elif predicate.arity == 2:
-                return self._attribute_matrix_representation(predicate)
-        elif arity == 2:
-            return self._relational_matrix_representation(predicate)
-        raise UnsupportedMatrixRepresentation(predicate)
-
-    def _get_true_arity(self, predicate):
-        """
-        Returns the true arity of the predicate. The number of terms that are
-        not number.
-
-        :param predicate: the predicate
-        :type predicate: Predicate
-        :return: the true arity
-        :rtype: int
-        """
-        return sum(1 for i in self.predicates[predicate] if not i.number)
-
-    def _propositional_matrix_representation(self, predicate):
-        return np.array(list(map(lambda x: x.weight,
-                                 self.facts_by_predicate[predicate].values())))
-
-    def _attribute_matrix_representation(self, predicate):
-        """
-        Builds the attribute matrix representation for the binary predicate.
-
-        :param predicate: the predicate
-        :type predicate: Predicate
-        :return: the matrix representation of the data, the weights of the
-        facts and the attributes of the entities
-        :rtype: (csr_matrix, csr_matrix)
-        """
-        attribute_index = 0 if self.predicates[predicate][0].number else 1
-        entity_index = 1 - attribute_index
-        weight_data = []
-        attribute_data = []
-        entity_indices = []
-        for fact in self.facts_by_predicate.get(predicate, dict()).values():
-            weight_data.append(fact.weight)
-            attribute_data.append(fact.terms[attribute_index].value)
-            entity_indices.append(
-                self.iterable_constants.inverse[fact.terms[entity_index]])
-
-        return (
-            csr_matrix((weight_data,
-                        (entity_indices, [0] * len(weight_data))),
-                       shape=(self.number_of_entities, 1)),
-            csr_matrix((attribute_data,
-                        (entity_indices, [0] * len(attribute_data))),
-                       shape=(self.number_of_entities, 1))
-        )
-
-    def _relational_matrix_representation(self, predicate):
-        """
-        Builds the relational matrix representation for the predicate.
-
-        :param predicate: the predicate
-        :type predicate: Predicate
-        :return: the matrix representation of the data
-        :rtype: csr_matrix
-        """
-        data = []
-        ind = []
-        term_range = list(range(predicate.arity))
-        for _ in term_range:
-            ind.append([])
-        for fact in self.facts_by_predicate.get(predicate, dict()).values():
-            data.append(fact.weight)
-            for i in term_range:
-                ind[i].append(self.iterable_constants.inverse[fact.terms[i]])
-
-        if predicate.arity == 1:
-            return csr_matrix((data, (ind[0], [0] * len(data))),
-                              shape=(self.number_of_entities, 1))
-
-        return csr_matrix((data, tuple(ind)),
-                          shape=(self.number_of_entities,) * predicate.arity)
