@@ -147,8 +147,8 @@ class UnsupportedMatrixRepresentation(Exception):
         """
         Creates an unsupported matrix representation exception.
         """
-        super().__init__("Unsupported matrix representation for "
-                         "predicate: {}.".format(predicate, ))
+        super().__init__("Unsupported matrix representation for: "
+                         " {}.".format(predicate))
 
 
 class Term:
@@ -570,7 +570,7 @@ class Literal(Atom):
     Represents a logic literal.
     """
 
-    def __init__(self, atom, negated=False, trainable=False) -> None:
+    def __init__(self, atom, negated=False) -> None:
         """
         Creates a logic literal from an atom.
 
@@ -578,24 +578,19 @@ class Literal(Atom):
         :type atom: Atom
         :param negated: if the literal is negated
         :type negated: bool
-        :param trainable: if the literal is to be trained
-        :type trainable: bool
         :raise AtomMalformedException in case the number of terms differs
         from the arity of the predicate
         """
         super().__init__(atom.predicate, *atom.terms, weight=atom.weight)
         self.negated = negated
-        self.trainable = trainable
 
     # noinspection PyMissingOrEmptyDocstring
     def key(self):
         # noinspection PyTypeChecker
-        return (self.negated, self.trainable) + super().key()
+        return (self.negated,) + super().key()
 
     def __str__(self):
         atom = super().__str__()
-        if self.trainable:
-            atom = TRAINABLE_KEY + atom
         if self.negated:
             return "{} {}".format(NEGATION_KEY, atom)
         return atom

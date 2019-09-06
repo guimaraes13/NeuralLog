@@ -226,8 +226,7 @@ def solve_literal(literal, key, substitution):
     for term in literal.terms:
         literal_terms.append(solve_place_holder_term(term, key, substitution))
 
-    return Literal(Atom(literal_pred, *literal_terms),
-                   literal.negated, literal.trainable)
+    return Literal(Atom(literal_pred, *literal_terms), literal.negated)
 
 
 def solve_place_holder(clause, key, substitution):
@@ -527,17 +526,13 @@ class NeuralLogTransverse:
         :rtype: Literal
         """
         self.log("Literal Node")
-        trainable = False
         negated = False
         child_count = literal.getChildCount()
         for i in range(0, child_count - 1):
             if literal.getChild(i).getSymbol().type == NeuralLogParser.NEGATION:
                 negated = True
-            elif literal.getChild(i).getSymbol().type == \
-                    NeuralLogParser.TRAINABLE_IDENTIFIER:
-                trainable = True
         atom = self.process_atom(literal.getChild(child_count - 1))
-        return Literal(atom, negated=negated, trainable=trainable)
+        return Literal(atom, negated=negated)
 
     def process_number(self, number):
         """

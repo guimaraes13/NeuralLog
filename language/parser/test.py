@@ -73,6 +73,12 @@ def main(argv):
         else:
             print("FUNCTION", predicate, sep="\t")
 
+    print("\n\nTrainables: ({})".format(
+        len(neural_program.trainable_predicates)))
+    for predicate in sorted(neural_program.trainable_predicates,
+                            key=lambda x: x.__str__()):
+        print(predicate)
+
     print("\n\nIterable Constants: ({})"
           .format(len(neural_program.iterable_constants)))
     iterable_constants = set()
@@ -116,7 +122,7 @@ def main(argv):
 
     print("\n")
     test = Predicate("test")
-    print("{}::{}.".format(neural_program.get_matrix_representation(test)[0],
+    print("{}::{}.".format(neural_program.get_matrix_representation(test),
                            test.name))
 
     print("\n")

@@ -8,49 +8,48 @@ import sys
 
 def serializedATN():
     with StringIO() as buf:
-        buf.write("\3\u608b\ua72a\u8133\ub9ed\u417c\u3be7\u7786\u5964\3\32")
-        buf.write("\u0088\4\2\t\2\4\3\t\3\4\4\t\4\4\5\t\5\4\6\t\6\4\7\t\7")
+        buf.write("\3\u608b\ua72a\u8133\ub9ed\u417c\u3be7\u7786\u5964\3\31")
+        buf.write("\u0085\4\2\t\2\4\3\t\3\4\4\t\4\4\5\t\5\4\6\t\6\4\7\t\7")
         buf.write("\4\b\t\b\4\t\t\t\4\n\t\n\4\13\t\13\4\f\t\f\4\r\t\r\4\16")
         buf.write("\t\16\4\17\t\17\4\20\t\20\4\21\t\21\4\22\t\22\3\2\3\2")
         buf.write("\6\2\'\n\2\r\2\16\2(\3\3\3\3\3\3\3\3\3\3\5\3\60\n\3\3")
         buf.write("\3\3\3\3\3\3\3\3\4\3\4\3\4\5\49\n\4\3\4\3\4\3\5\3\5\5")
         buf.write("\5?\n\5\3\6\6\6B\n\6\r\6\16\6C\3\7\3\7\3\7\3\7\3\7\3\b")
         buf.write("\3\b\3\b\5\bN\n\b\3\t\3\t\3\t\7\tS\n\t\f\t\16\tV\13\t")
-        buf.write("\3\n\5\nY\n\n\3\n\5\n\\\n\n\3\n\3\n\3\13\3\13\3\13\3\13")
-        buf.write("\7\13d\n\13\f\13\16\13g\13\13\3\13\3\13\3\f\3\f\5\fm\n")
-        buf.write("\f\3\r\3\r\6\rq\n\r\r\r\16\rr\5\ru\n\r\3\16\3\16\3\17")
-        buf.write("\6\17z\n\17\r\17\16\17{\3\20\3\20\3\21\3\21\3\21\3\21")
-        buf.write("\3\21\3\21\3\22\3\22\3\22\2\2\23\2\4\6\b\n\f\16\20\22")
-        buf.write("\24\26\30\32\34\36 \"\2\5\3\2\16\17\4\2\13\16\27\27\3")
-        buf.write("\2\13\r\2\u0086\2&\3\2\2\2\4*\3\2\2\2\68\3\2\2\2\b<\3")
-        buf.write("\2\2\2\nA\3\2\2\2\fE\3\2\2\2\16J\3\2\2\2\20O\3\2\2\2\22")
-        buf.write("X\3\2\2\2\24_\3\2\2\2\26l\3\2\2\2\30t\3\2\2\2\32v\3\2")
-        buf.write("\2\2\34y\3\2\2\2\36}\3\2\2\2 \177\3\2\2\2\"\u0085\3\2")
-        buf.write("\2\2$\'\5\4\3\2%\'\5\6\4\2&$\3\2\2\2&%\3\2\2\2\'(\3\2")
-        buf.write("\2\2(&\3\2\2\2()\3\2\2\2)\3\3\2\2\2*+\7\6\2\2+,\5\32\16")
-        buf.write("\2,/\7\7\2\2-\60\5\34\17\2.\60\5 \21\2/-\3\2\2\2/.\3\2")
-        buf.write("\2\2\60\61\3\2\2\2\61\62\7\b\2\2\62\63\5\2\2\2\63\64\7")
-        buf.write("\t\2\2\64\5\3\2\2\2\659\5\b\5\2\669\5\f\7\2\679\5\16\b")
-        buf.write("\28\65\3\2\2\28\66\3\2\2\28\67\3\2\2\29:\3\2\2\2:;\7\23")
-        buf.write("\2\2;\7\3\2\2\2<>\5\n\6\2=?\5\24\13\2>=\3\2\2\2>?\3\2")
-        buf.write("\2\2?\t\3\2\2\2@B\t\2\2\2A@\3\2\2\2BC\3\2\2\2CA\3\2\2")
-        buf.write("\2CD\3\2\2\2D\13\3\2\2\2EF\5\"\22\2FG\7\24\2\2GH\3\2\2")
-        buf.write("\2HI\5\b\5\2I\r\3\2\2\2JK\5\b\5\2KM\7\25\2\2LN\5\20\t")
-        buf.write("\2ML\3\2\2\2MN\3\2\2\2N\17\3\2\2\2OT\5\22\n\2PQ\7\22\2")
-        buf.write("\2QS\5\22\n\2RP\3\2\2\2SV\3\2\2\2TR\3\2\2\2TU\3\2\2\2")
-        buf.write("U\21\3\2\2\2VT\3\2\2\2WY\7\n\2\2XW\3\2\2\2XY\3\2\2\2Y")
-        buf.write("[\3\2\2\2Z\\\7\26\2\2[Z\3\2\2\2[\\\3\2\2\2\\]\3\2\2\2")
-        buf.write("]^\5\b\5\2^\23\3\2\2\2_`\7\20\2\2`e\5\26\f\2ab\7\22\2")
-        buf.write("\2bd\5\26\f\2ca\3\2\2\2dg\3\2\2\2ec\3\2\2\2ef\3\2\2\2")
-        buf.write("fh\3\2\2\2ge\3\2\2\2hi\7\21\2\2i\25\3\2\2\2jm\5\"\22\2")
-        buf.write("km\5\30\r\2lj\3\2\2\2lk\3\2\2\2m\27\3\2\2\2nu\7\27\2\2")
-        buf.write("oq\t\2\2\2po\3\2\2\2qr\3\2\2\2rp\3\2\2\2rs\3\2\2\2su\3")
-        buf.write("\2\2\2tn\3\2\2\2tp\3\2\2\2u\31\3\2\2\2vw\7\16\2\2w\33")
-        buf.write("\3\2\2\2xz\5\36\20\2yx\3\2\2\2z{\3\2\2\2{y\3\2\2\2{|\3")
-        buf.write("\2\2\2|\35\3\2\2\2}~\t\3\2\2~\37\3\2\2\2\177\u0080\7\3")
-        buf.write("\2\2\u0080\u0081\7\r\2\2\u0081\u0082\7\4\2\2\u0082\u0083")
-        buf.write("\7\r\2\2\u0083\u0084\7\5\2\2\u0084!\3\2\2\2\u0085\u0086")
-        buf.write("\t\4\2\2\u0086#\3\2\2\2\21&(/8>CMTX[elrt{")
+        buf.write("\3\n\5\nY\n\n\3\n\3\n\3\13\3\13\3\13\3\13\7\13a\n\13\f")
+        buf.write("\13\16\13d\13\13\3\13\3\13\3\f\3\f\5\fj\n\f\3\r\3\r\6")
+        buf.write("\rn\n\r\r\r\16\ro\5\rr\n\r\3\16\3\16\3\17\6\17w\n\17\r")
+        buf.write("\17\16\17x\3\20\3\20\3\21\3\21\3\21\3\21\3\21\3\21\3\22")
+        buf.write("\3\22\3\22\2\2\23\2\4\6\b\n\f\16\20\22\24\26\30\32\34")
+        buf.write("\36 \"\2\5\3\2\16\17\4\2\13\16\26\26\3\2\13\r\2\u0082")
+        buf.write("\2&\3\2\2\2\4*\3\2\2\2\68\3\2\2\2\b<\3\2\2\2\nA\3\2\2")
+        buf.write("\2\fE\3\2\2\2\16J\3\2\2\2\20O\3\2\2\2\22X\3\2\2\2\24\\")
+        buf.write("\3\2\2\2\26i\3\2\2\2\30q\3\2\2\2\32s\3\2\2\2\34v\3\2\2")
+        buf.write("\2\36z\3\2\2\2 |\3\2\2\2\"\u0082\3\2\2\2$\'\5\4\3\2%\'")
+        buf.write("\5\6\4\2&$\3\2\2\2&%\3\2\2\2\'(\3\2\2\2(&\3\2\2\2()\3")
+        buf.write("\2\2\2)\3\3\2\2\2*+\7\6\2\2+,\5\32\16\2,/\7\7\2\2-\60")
+        buf.write("\5\34\17\2.\60\5 \21\2/-\3\2\2\2/.\3\2\2\2\60\61\3\2\2")
+        buf.write("\2\61\62\7\b\2\2\62\63\5\2\2\2\63\64\7\t\2\2\64\5\3\2")
+        buf.write("\2\2\659\5\b\5\2\669\5\f\7\2\679\5\16\b\28\65\3\2\2\2")
+        buf.write("8\66\3\2\2\28\67\3\2\2\29:\3\2\2\2:;\7\23\2\2;\7\3\2\2")
+        buf.write("\2<>\5\n\6\2=?\5\24\13\2>=\3\2\2\2>?\3\2\2\2?\t\3\2\2")
+        buf.write("\2@B\t\2\2\2A@\3\2\2\2BC\3\2\2\2CA\3\2\2\2CD\3\2\2\2D")
+        buf.write("\13\3\2\2\2EF\5\"\22\2FG\7\24\2\2GH\3\2\2\2HI\5\b\5\2")
+        buf.write("I\r\3\2\2\2JK\5\b\5\2KM\7\25\2\2LN\5\20\t\2ML\3\2\2\2")
+        buf.write("MN\3\2\2\2N\17\3\2\2\2OT\5\22\n\2PQ\7\22\2\2QS\5\22\n")
+        buf.write("\2RP\3\2\2\2SV\3\2\2\2TR\3\2\2\2TU\3\2\2\2U\21\3\2\2\2")
+        buf.write("VT\3\2\2\2WY\7\n\2\2XW\3\2\2\2XY\3\2\2\2YZ\3\2\2\2Z[\5")
+        buf.write("\b\5\2[\23\3\2\2\2\\]\7\20\2\2]b\5\26\f\2^_\7\22\2\2_")
+        buf.write("a\5\26\f\2`^\3\2\2\2ad\3\2\2\2b`\3\2\2\2bc\3\2\2\2ce\3")
+        buf.write("\2\2\2db\3\2\2\2ef\7\21\2\2f\25\3\2\2\2gj\5\"\22\2hj\5")
+        buf.write("\30\r\2ig\3\2\2\2ih\3\2\2\2j\27\3\2\2\2kr\7\26\2\2ln\t")
+        buf.write("\2\2\2ml\3\2\2\2no\3\2\2\2om\3\2\2\2op\3\2\2\2pr\3\2\2")
+        buf.write("\2qk\3\2\2\2qm\3\2\2\2r\31\3\2\2\2st\7\16\2\2t\33\3\2")
+        buf.write("\2\2uw\5\36\20\2vu\3\2\2\2wx\3\2\2\2xv\3\2\2\2xy\3\2\2")
+        buf.write("\2y\35\3\2\2\2z{\t\3\2\2{\37\3\2\2\2|}\7\3\2\2}~\7\r\2")
+        buf.write("\2~\177\7\4\2\2\177\u0080\7\r\2\2\u0080\u0081\7\5\2\2")
+        buf.write("\u0081!\3\2\2\2\u0082\u0083\t\4\2\2\u0083#\3\2\2\2\20")
+        buf.write("&(/8>CMTXbioqx")
         return buf.getvalue()
 
 
@@ -67,15 +66,15 @@ class NeuralLogParser ( Parser ):
     literalNames = [ "<INVALID>", "'{'", "'..'", "'}'", "'for'", "'in'", 
                      "'do'", "'done'", "'not'", "<INVALID>", "<INVALID>", 
                      "<INVALID>", "<INVALID>", "<INVALID>", "'('", "')'", 
-                     "','", "'.'", "'::'", "':-'", "'$'" ]
+                     "','", "'.'", "'::'", "':-'" ]
 
     symbolicNames = [ "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
                       "FOR_LOOP", "IN_TOKEN", "DO_TOKEN", "DONE_TOKEN", 
                       "NEGATION", "SCIENTIFIC_NUMBER", "DECIMAL", "INTEGER", 
                       "TERM", "PLACE_HOLDER", "OPEN_ARGUMENTS", "CLOSE_ARGUMENTS", 
                       "ITEM_SEPARATOR", "END_OF_CLAUSE", "WEIGHT_SEPARATOR", 
-                      "IMPLICATION_SIGN", "TRAINABLE_IDENTIFIER", "QUOTED", 
-                      "WHITESPACE", "COMMENT", "BLOCK_COMMENT" ]
+                      "IMPLICATION_SIGN", "QUOTED", "WHITESPACE", "COMMENT", 
+                      "BLOCK_COMMENT" ]
 
     RULE_program = 0
     RULE_for_loop = 1
@@ -95,7 +94,7 @@ class NeuralLogParser ( Parser ):
     RULE_for_range = 15
     RULE_number = 16
 
-    ruleNames =  [ "language", "for_loop", "clause", "atom", "predicate", 
+    ruleNames =  [ "program", "for_loop", "clause", "atom", "predicate", 
                    "weighted_atom", "horn_clause", "body", "literal", "list_of_arguments", 
                    "argument", "term", "for_variable", "for_terms", "for_term", 
                    "for_range", "number" ]
@@ -120,11 +119,10 @@ class NeuralLogParser ( Parser ):
     END_OF_CLAUSE=17
     WEIGHT_SEPARATOR=18
     IMPLICATION_SIGN=19
-    TRAINABLE_IDENTIFIER=20
-    QUOTED=21
-    WHITESPACE=22
-    COMMENT=23
-    BLOCK_COMMENT=24
+    QUOTED=20
+    WHITESPACE=21
+    COMMENT=22
+    BLOCK_COMMENT=23
 
     def __init__(self, input:TokenStream, output:TextIO = sys.stdout):
         super().__init__(input, output)
@@ -529,7 +527,7 @@ class NeuralLogParser ( Parser ):
             self.state = 75
             self._errHandler.sync(self)
             _la = self._input.LA(1)
-            if (((_la) & ~0x3f) == 0 and ((1 << _la) & ((1 << NeuralLogParser.NEGATION) | (1 << NeuralLogParser.TERM) | (1 << NeuralLogParser.PLACE_HOLDER) | (1 << NeuralLogParser.TRAINABLE_IDENTIFIER))) != 0):
+            if (((_la) & ~0x3f) == 0 and ((1 << _la) & ((1 << NeuralLogParser.NEGATION) | (1 << NeuralLogParser.TERM) | (1 << NeuralLogParser.PLACE_HOLDER))) != 0):
                 self.state = 74
                 self.body()
 
@@ -611,9 +609,6 @@ class NeuralLogParser ( Parser ):
         def NEGATION(self):
             return self.getToken(NeuralLogParser.NEGATION, 0)
 
-        def TRAINABLE_IDENTIFIER(self):
-            return self.getToken(NeuralLogParser.TRAINABLE_IDENTIFIER, 0)
-
         def getRuleIndex(self):
             return NeuralLogParser.RULE_literal
 
@@ -635,15 +630,7 @@ class NeuralLogParser ( Parser ):
                 self.match(NeuralLogParser.NEGATION)
 
 
-            self.state = 89
-            self._errHandler.sync(self)
-            _la = self._input.LA(1)
-            if _la==NeuralLogParser.TRAINABLE_IDENTIFIER:
-                self.state = 88
-                self.match(NeuralLogParser.TRAINABLE_IDENTIFIER)
-
-
-            self.state = 91
+            self.state = 88
             self.atom()
         except RecognitionException as re:
             localctx.exception = re
@@ -692,23 +679,23 @@ class NeuralLogParser ( Parser ):
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 93
+            self.state = 90
             self.match(NeuralLogParser.OPEN_ARGUMENTS)
-            self.state = 94
+            self.state = 91
             self.argument()
-            self.state = 99
+            self.state = 96
             self._errHandler.sync(self)
             _la = self._input.LA(1)
             while _la==NeuralLogParser.ITEM_SEPARATOR:
-                self.state = 95
+                self.state = 92
                 self.match(NeuralLogParser.ITEM_SEPARATOR)
-                self.state = 96
+                self.state = 93
                 self.argument()
-                self.state = 101
+                self.state = 98
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
 
-            self.state = 102
+            self.state = 99
             self.match(NeuralLogParser.CLOSE_ARGUMENTS)
         except RecognitionException as re:
             localctx.exception = re
@@ -744,17 +731,17 @@ class NeuralLogParser ( Parser ):
         localctx = NeuralLogParser.ArgumentContext(self, self._ctx, self.state)
         self.enterRule(localctx, 20, self.RULE_argument)
         try:
-            self.state = 106
+            self.state = 103
             self._errHandler.sync(self)
             token = self._input.LA(1)
             if token in [NeuralLogParser.SCIENTIFIC_NUMBER, NeuralLogParser.DECIMAL, NeuralLogParser.INTEGER]:
                 self.enterOuterAlt(localctx, 1)
-                self.state = 104
+                self.state = 101
                 self.number()
                 pass
             elif token in [NeuralLogParser.TERM, NeuralLogParser.PLACE_HOLDER, NeuralLogParser.QUOTED]:
                 self.enterOuterAlt(localctx, 2)
-                self.state = 105
+                self.state = 102
                 self.term()
                 pass
             else:
@@ -803,26 +790,26 @@ class NeuralLogParser ( Parser ):
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 114
+            self.state = 111
             self._errHandler.sync(self)
             token = self._input.LA(1)
             if token in [NeuralLogParser.QUOTED]:
-                self.state = 108
+                self.state = 105
                 self.match(NeuralLogParser.QUOTED)
                 pass
             elif token in [NeuralLogParser.TERM, NeuralLogParser.PLACE_HOLDER]:
-                self.state = 110 
+                self.state = 107 
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
                 while True:
-                    self.state = 109
+                    self.state = 106
                     _la = self._input.LA(1)
                     if not(_la==NeuralLogParser.TERM or _la==NeuralLogParser.PLACE_HOLDER):
                         self._errHandler.recoverInline(self)
                     else:
                         self._errHandler.reportMatch(self)
                         self.consume()
-                    self.state = 112 
+                    self.state = 109 
                     self._errHandler.sync(self)
                     _la = self._input.LA(1)
                     if not (_la==NeuralLogParser.TERM or _la==NeuralLogParser.PLACE_HOLDER):
@@ -862,7 +849,7 @@ class NeuralLogParser ( Parser ):
         self.enterRule(localctx, 24, self.RULE_for_variable)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 116
+            self.state = 113
             self.match(NeuralLogParser.TERM)
         except RecognitionException as re:
             localctx.exception = re
@@ -899,13 +886,13 @@ class NeuralLogParser ( Parser ):
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 119 
+            self.state = 116 
             self._errHandler.sync(self)
             _la = self._input.LA(1)
             while True:
-                self.state = 118
+                self.state = 115
                 self.for_term()
-                self.state = 121 
+                self.state = 118 
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
                 if not ((((_la) & ~0x3f) == 0 and ((1 << _la) & ((1 << NeuralLogParser.SCIENTIFIC_NUMBER) | (1 << NeuralLogParser.DECIMAL) | (1 << NeuralLogParser.INTEGER) | (1 << NeuralLogParser.TERM) | (1 << NeuralLogParser.QUOTED))) != 0)):
@@ -954,7 +941,7 @@ class NeuralLogParser ( Parser ):
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 123
+            self.state = 120
             _la = self._input.LA(1)
             if not((((_la) & ~0x3f) == 0 and ((1 << _la) & ((1 << NeuralLogParser.SCIENTIFIC_NUMBER) | (1 << NeuralLogParser.DECIMAL) | (1 << NeuralLogParser.INTEGER) | (1 << NeuralLogParser.TERM) | (1 << NeuralLogParser.QUOTED))) != 0)):
                 self._errHandler.recoverInline(self)
@@ -994,15 +981,15 @@ class NeuralLogParser ( Parser ):
         self.enterRule(localctx, 30, self.RULE_for_range)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 125
+            self.state = 122
             self.match(NeuralLogParser.T__0)
-            self.state = 126
+            self.state = 123
             self.match(NeuralLogParser.INTEGER)
-            self.state = 127
+            self.state = 124
             self.match(NeuralLogParser.T__1)
-            self.state = 128
+            self.state = 125
             self.match(NeuralLogParser.INTEGER)
-            self.state = 129
+            self.state = 126
             self.match(NeuralLogParser.T__2)
         except RecognitionException as re:
             localctx.exception = re
@@ -1041,7 +1028,7 @@ class NeuralLogParser ( Parser ):
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 131
+            self.state = 128
             _la = self._input.LA(1)
             if not((((_la) & ~0x3f) == 0 and ((1 << _la) & ((1 << NeuralLogParser.SCIENTIFIC_NUMBER) | (1 << NeuralLogParser.DECIMAL) | (1 << NeuralLogParser.INTEGER))) != 0)):
                 self._errHandler.recoverInline(self)

@@ -24,7 +24,7 @@ horn_clause: atom IMPLICATION_SIGN (body)?;
 
 body: literal (ITEM_SEPARATOR literal)*;
 
-literal: NEGATION? TRAINABLE_IDENTIFIER? atom;
+literal: NEGATION? atom;
 
 list_of_arguments:
     OPEN_ARGUMENTS argument (ITEM_SEPARATOR argument)* CLOSE_ARGUMENTS;
@@ -58,7 +58,6 @@ ITEM_SEPARATOR: ',';
 END_OF_CLAUSE: '.';
 WEIGHT_SEPARATOR: '::';
 IMPLICATION_SIGN: ':-';
-TRAINABLE_IDENTIFIER: '$';
 
 QUOTED:
     	(
