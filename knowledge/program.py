@@ -163,7 +163,9 @@ class NeuralLogProgram:
 
     BUILTIN_PREDICATES = {
         "example": [Predicate("example", -1)],
-        "learn": [Predicate("learn", 1)]
+        "learn": [Predicate("learn", 1)],
+        "set_parameter": [Predicate("set_parameter", -1)],
+        "set_predicate_parameter": [Predicate("set_predicate_parameter", -1)]
     }
 
     builtin = build_builtin_predicate()
@@ -202,6 +204,11 @@ class NeuralLogProgram:
 
     trainable_predicates: Set[Predicate] = set()
     "The trainable predicates"
+
+    parameters: Dict[Any, Any] = {
+        "initial_value": "glorot_uniform"
+    }
+    "A dictionary with the parameters defined in the program"
 
     def __init__(self, clauses):
         """
@@ -518,12 +525,13 @@ class NeuralLogProgram:
         ind = [[], []]
 
         for fact in self.facts_by_predicate.get(predicate, dict()).values():
-            indices = self._check_iterable_terms(fact.terms)
             if fact.terms[constant_index] != atom.terms[constant_index]:
                 continue
-            if indices is None:
+            index = self.iterable_constants.inverse.get(
+                fact.terms[variable_index], None)
+            if index is None:
                 continue
-            ind[0].append(indices[variable_index])
+            ind[0].append(index)
             ind[1].append(0)
             data.append(fact.weight)
 
@@ -571,7 +579,7 @@ class NeuralLogProgram:
     @builtin("example")
     def _handle_example(self, example):
         """
-        Process the builtin example clause.
+        Process the builtin `example` predicate.
 
         :param example: the example clause
         :type example: AtomClause
@@ -597,10 +605,49 @@ class NeuralLogProgram:
     @builtin("learn")
     def _learn_predicate(self, clause):
         """
-        Process the builtin learn predicate.
+        Process the builtin `learn` predicate.
 
-        :param clause: the clause
+        :param clause: the learn clause
         :type clause: AtomClause
         """
         predicate = get_predicate_from_string(clause.atom.terms[0].get_name())
         self.trainable_predicates.add(predicate)
+
+    @builtin("set_parameter")
+    def _set_parameter(self, clause):
+        """
+        Process the builtin `set_parameter` predicate.
+
+        :param clause: the set parameter clause
+        :type clause: AtomClause
+        """
+        # predicate = get_predicate_from_string(clause.atom.terms[0].get_name())
+        atom = clause.atom
+        arity = atom.arity()
+        if arity < 2:
+            return
+
+        parameter_dict = self.parameters
+        for i in range(arity - 2):
+            parameter_dict = parameter_dict.get(atom.terms[i].value, dict())
+        parameter_dict[atom.terms[-2].value] = atom.terms[-1].value
+
+    @builtin("set_predicate_parameter")
+    def _set_predicate_parameter(self, clause):
+        """
+        Process the builtin `set_predicate_parameter` predicate.
+
+        :param clause: the set predicate parameter clause
+        :type clause: AtomClause
+        """
+        atom = clause.atom
+        arity = atom.arity()
+        if arity < 2:
+            return
+
+        parameter_dict = self.parameters
+        predicate = get_predicate_from_string(atom.terms[0].value)
+        parameter_dict = parameter_dict.get(predicate, dict())
+        for i in range(1, arity - 2):
+            parameter_dict = parameter_dict.get(atom.terms[i].value, dict())
+        parameter_dict[atom.terms[-2].value] = atom.terms[-1].value

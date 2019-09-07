@@ -12,7 +12,7 @@ from typing import Dict, Any
 
 from knowledge.program import NeuralLogProgram
 from knowledge.tensor_factory import TensorFactory
-from language.language import Predicate, Atom, Variable, Quote, Constant, Term
+from language.language import Predicate, Atom, Term
 
 # Network part
 # TODO: create the neural network representation
@@ -38,7 +38,7 @@ class NotGroundAtomException(Exception):
         Creates a not ground atom exception.
 
         :param atom: the not ground atom
-        :type Atom: Atom
+        :type atom: Atom
         """
         super().__init__("Atom {} is not ground.".format(atom))
 
@@ -259,7 +259,6 @@ class NeuralLogNetwork(keras.Model):
     def get_matrix_representation_for_atom(self, atom):
         # TODO: get the tensor representation for the literal instead of the
         #  predicate:
-        #  - adjust for literals with constants;
         #  - adjust for literals with numeric attributes;
         #  - adjust for negated literals;
         """
@@ -272,114 +271,6 @@ class NeuralLogNetwork(keras.Model):
         :return: the matrix representation of the data for the given predicate
         :rtype: csr_matrix or np.matrix or (csr_matrix, csr_matrix) or float
         """
-        if atom.arity() == 0:
-            w = self.get_matrix_representation(atom.predicate)
-            if atom.predicate in self.program.trainable_predicates:
-                return self._matrix_to_variable(atom, w)
-            else:
-                return self._matrix_to_constant(atom, w)
-
-        if atom.arity() == 1:
-            if atom.terms[0].is_constant():
-                # Unary atom with constant
-                constant = atom.terms[0]
-                if atom.predicate in self.program.trainable_predicates:
-                    # The predicate is trainable
-                    if constant in self.program.iterable_constants:
-                        # The constant is iterable, get the vector for the
-                        # predicate and multiply by the index of the constant
-                        vector = self.get_matrix_representation(
-                            atom.predicate)
-                        variable_atom = Atom(atom.predicate,
-                                             Variable("X"),
-                                             weight=atom.weight)
-                        tensor = self._matrix_to_variable(
-                            variable_atom, vector.todense(),
-                            [self.constant_size, 1])
-                        index = self._get_one_hot_tensor(constant)
-                        return tf.matmul(index, tensor, a_is_sparse=True)
-                    else:
-                        # The constant is not iterable, get the weight of the
-                        # fact, if it does not exists, create one
-                        initial_value = self._get_initial_value_for_atom(atom)
-                        return self._matrix_to_variable(atom, initial_value)
-                else:
-                    # The predicate is not trainable
-                    # Return the constant of the fact directly, if it does not
-                    # exist, send a warning and assign 0.0 weight to it
-                    fact = self.program.facts_by_predicate.get(
-                        atom.predicate, dict()).get(atom.simple_key(), None)
-                    if fact is None:
-                        weight = 0.0
-                        if atom.context is not None:
-                            logger.warning(
-                                "Warning: there is no fact matching the atom "
-                                "%s at line %d:%d, weight replaced by %d.",
-                                atom, atom.context.start.line,
-                                atom.context.start.column, weight)
-                        else:
-                            logger.warning(
-                                "Warning: there is no fact matching the atom "
-                                "%s, weight replaced by %d.", atom, weight)
-                    else:
-                        weight = fact.weight
-                    return self._matrix_to_constant(atom, weight)
-            else:
-                w = self.get_matrix_representation(atom.predicate)
-                if atom.predicate in self.program.trainable_predicates:
-                    return self._matrix_to_variable(
-                        atom, w.todense(), [self.constant_size, 1])
-                else:
-                    return self._matrix_to_constant(atom, w,
-                                                    [self.constant_size, 1])
-
-        # TODO: make share that all variable weights of a fact point to the
-        #  same tensor variable
-        if atom.arity() == 2:
-            if atom.terms[0].is_constant() and atom.terms[1].is_constant():
-                # Both terms are constants
-                # TODO: implement, binary atom with two constants
-                if atom.predicate in self.program.trainable_predicates:
-                    # Trainable
-                    if atom.terms[0] in self.program.iterable_constants and \
-                            atom.terms[1] in self.program.iterable_constants:
-                        pass
-                    elif atom.terms[0] in self.program.iterable_constants:
-                        pass
-                    elif atom.terms[1] in self.program.iterable_constants:
-                        pass
-                    else:
-                        pass
-                else:
-                    # Not trainable
-                    pass
-            elif atom.terms[0].is_constant():
-                # The first terms is constant and the second is variable
-                # TODO: implement, binary atom with first term constants
-                pass
-            elif atom.terms[1].is_constant():
-                # The first terms is variable and the second is constant
-                # TODO: implement, binary atom with second term constants
-                pass
-            else:
-                # Both terms are variables
-                if atom.predicate in self.program.trainable_predicates:
-                    w = self.get_matrix_representation(atom.predicate)
-                    tensor = self._matrix_to_variable(atom, w.todense())
-                    if atom.terms[0] == atom.terms[1]:
-                        tensor = tf.linalg.tensor_diag_part(tensor)
-                        tensor = tf.reshape(tensor, [-1, 1])
-                    return tensor
-                else:
-                    if atom.terms[0] == atom.terms[1]:
-                        # Both terms are equal variables
-                        w = self.get_diagonal_matrix_representation(
-                            atom.predicate)
-                        return self._matrix_to_constant(atom, w)
-                    else:
-                        w = self.get_matrix_representation(atom.predicate)
-                        return self._matrix_to_constant(atom, w)
-
         return self.tensor_factory.build_atom(atom)
 
     def _build_two_variables_tensor(self, atom, value):
@@ -424,133 +315,6 @@ class NeuralLogNetwork(keras.Model):
             initial_value = initial_value.weight
 
         return initial_value
-
-    def _get_one_hot_tensor(self, constant):
-        """
-        Gets an one-hot row tensor for the iterable constant.
-
-        :param constant: the iterable constant
-        :type constant: Term
-        :return: the one-hot row tensor
-        :rtype: tf.Tensor
-        """
-        tensor = self._tensor_by_constant.get(constant, None)
-        if tensor is None:
-            tensor = tf.one_hot([self.program.index_for_constant(constant)],
-                                depth=self.constant_size, dtype=tf.float32,
-                                name=constant.value)
-            self._tensor_by_constant[constant] = tensor
-
-        return tensor
-
-    def _matrix_to_variable(self, atom, initial_value, shape=None):
-        """
-        Returns a variable representation of the atom.
-
-        :param atom: the atom
-        :type atom: Atom
-        :param initial_value: the initial value
-        :type initial_value: np.array or csr_matrix or float or function
-        :param shape: the shape of the variable
-        :type shape: Any
-        :return: the tensor representation of the atom
-        :rtype: tf.Tensor or tf.SparseTensor
-        """
-        renamed_atom = get_renamed_atom(atom)
-        tensor = self._tensor_by_atom.get(renamed_atom, None)
-        if tensor is None:
-            if shape is None:
-                if hasattr(initial_value, 'shape'):
-                    shape = list(initial_value.shape)
-                else:
-                    shape = []
-            tensor = tf.Variable(initial_value=initial_value, dtype=tf.float32,
-                                 shape=shape, name=renamed_atom.__str__())
-            # noinspection PyTypeChecker
-            self._tensor_by_atom[renamed_atom] = tensor
-
-        return tensor
-
-    def _matrix_to_constant(self, atom, value, shape=None):
-        """
-        Returns a constant representation of the atom.
-
-        :param atom: the atom
-        :type atom: Atom
-        :param value: the value of the constant
-        :type value: np.array or csr_matrix or float
-        :param shape: the shape of the variable
-        :type shape: Any
-        :return: the tensor representation of the atom
-        :rtype: tf.Tensor or tf.SparseTensor
-        """
-        renamed_atom = get_renamed_atom(atom)
-        tensor = self._tensor_by_atom.get(renamed_atom, None)
-        if tensor is None:
-            if shape is None:
-                if hasattr(value, 'shape'):
-                    shape = list(value.shape)
-                else:
-                    shape = []
-            tensor = self._build_constant(renamed_atom, value, shape)
-            # noinspection PyTypeChecker
-            self._tensor_by_atom[renamed_atom] = tensor
-
-        return tensor
-
-    def _build_constant(self, renamed_atom, value, shape):
-        """
-        Builds the constant for the atom.
-
-        :param renamed_atom: the atom
-        :type renamed_atom: Atom
-        :param value: the value of the constant
-        :type value: np.array or csr_matrix or float
-        :param shape: the shape of the variable
-        :type shape: Any
-        :return: the tensor representation of the atom
-        :rtype: tf.Tensor or tf.SparseTensor
-        """
-        if isinstance(value, csr_matrix):
-            sparsity = len(value.data) / np.prod(value.shape, dtype=np.float32)
-            if sparsity < self.SPARSE_THRESHOLD:
-                data = value.data
-                rows, columns = value.nonzero()
-                tensor = tf.SparseTensor(
-                    indices=list(map(lambda x: list(x), zip(rows, columns))),
-                    values=data, dense_shape=value.shape)
-                return tf.sparse.reorder(tensor)
-            else:
-                value = value.todense()
-
-        tensor = tf.constant(value=value, dtype=tf.float32,
-                             shape=shape, name=renamed_atom.__str__())
-        return tensor
-
-
-def get_renamed_atom(atom):
-    """
-    Gets a renamed atom, replacing their variables for a positional name.
-    In this way, atoms with different variable names will have the same key,
-    as long as the number of variables and their positions matches.
-
-    :param atom: the atom
-    :type atom: Atom
-    :return: the renamed atom
-    :rtype: Atom
-    """
-    terms = []
-    index = 0
-    for term in atom.terms:
-        if term.is_constant():
-            if isinstance(term, Quote):
-                terms.append(Constant(term.value))
-            else:
-                terms.append(term)
-        else:
-            terms.append(Variable("X{}".format(index)))
-            index += 1
-    return Atom(atom.predicate, *terms, weight=atom.weight)
 
 
 if __name__ == "__main__":

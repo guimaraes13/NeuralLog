@@ -81,6 +81,33 @@ def get_renamed_atom(atom):
     return Atom(atom.predicate, *terms, weight=atom.weight)
 
 
+def get_variable_atom(atom):
+    """
+    Gets an atom by replacing their constant for unique variables.
+
+    :param atom: the atom
+    :type atom: Atom
+    :return: the renamed atom
+    :rtype: Atom
+    """
+    terms = [Variable("X{}".format(i)) for i in range(atom.arity())]
+    return Atom(atom.predicate, *terms, weight=atom.weight)
+
+
+def get_initial_value_by_name(initializer_name):
+    """
+    Gets the initializer by name.
+
+    :param initializer_name: the initializer name
+    :type initializer_name: str
+    :return: the initial value
+    :rtype: function
+    """
+    initializer = initializers.get(initializer_name)()
+    initial_value = lambda: initializer([], dtype=tf.float32)
+    return initial_value, initializer_name
+
+
 class FactoryTermType(Enum):
     """
     Defines the types of a term.
@@ -134,6 +161,9 @@ class TensorFactory:
 
     _matrix_representation: Dict[Predicate, Any] = dict()
     "Caches the matrices representations."
+
+    _vector_representation: Dict[Atom, Any] = dict()
+    "Caches the vector representations of binary predicates with constant."
 
     _diagonal_matrix_representation: Dict[Predicate, csr_matrix] = dict()
     "Caches the diagonal matrices representations."
@@ -196,6 +226,20 @@ class TensorFactory:
         return self._matrix_representation.setdefault(
             predicate, self.program.get_matrix_representation(predicate))
 
+    def get_vector_representation_with_constant(self, atom):
+        """
+        Gets the vector representation for the binary predicate with constant.
+
+        :param atom: the atom
+        :type atom: Atom
+        :raise UnsupportedMatrixRepresentation in the case the predicate is
+        not convertible to matrix form
+        :return: the vector representation of the data for the given atom
+        :rtype: csr_matrix
+        """
+        return self._vector_representation.setdefault(
+            atom, self.program.get_vector_representation_with_constant(atom))
+
     def get_diagonal_matrix_representation(self, predicate):
         """
         Gets the diagonal matrix representation for a binary predicate.
@@ -209,9 +253,43 @@ class TensorFactory:
             predicate,
             self.program.get_diagonal_matrix_representation(predicate))
 
-    def _matrix_to_variable(self, atom, initial_value, shape=None):
+    def _matrix_to_variable(self, atom, initial_value=None, shape=None):
         """
         Returns a variable representation of the atom.
+
+        :param atom: the atom
+        :type atom: Atom
+        :param initial_value: the initial value
+        :type initial_value: np.array or csr_matrix or float or function
+        :param shape: the shape of the variable
+        :type shape: Any
+        :return: the tensor representation of the atom
+        :rtype: tf.Tensor or tf.SparseTensor
+        """
+        renamed_atom = get_renamed_atom(atom)
+        tensor = self._tensor_by_atom.get(renamed_atom, None)
+        if tensor is None:
+            if initial_value is None:
+                initial_value = self.get_matrix_representation(atom.predicate)
+            if shape is None:
+                if hasattr(initial_value, 'shape'):
+                    shape = list(initial_value.shape)
+                else:
+                    shape = []
+            if isinstance(initial_value, csr_matrix):
+                initial_value = initial_value.todense()
+
+            tensor = tf.Variable(initial_value=initial_value, dtype=tf.float32,
+                                 shape=shape, name=renamed_atom.__str__())
+            # noinspection PyTypeChecker
+            self._tensor_by_atom[renamed_atom] = tensor
+
+        return tensor
+
+    def _matrix_to_variable_with_value(self, atom, initial_value, shape=None):
+        """
+        Returns a variable representation of the atom, initializing the
+        unknown values with initial value.
 
         :param atom: the atom
         :type atom: Atom
@@ -231,7 +309,14 @@ class TensorFactory:
                 else:
                     shape = []
             tensor = tf.Variable(initial_value=initial_value, dtype=tf.float32,
-                                 shape=shape, name=renamed_atom.__str__())
+                                 shape=shape)
+            weights = self.get_matrix_representation(atom.predicate).todense()
+            mask = np.array(weights != 0, dtype=np.float32)
+            # noinspection PyTypeChecker
+            mask = self._build_constant("Const", mask, shape)
+            tensor = tf.multiply(tensor, mask)
+            w = self._matrix_to_constant(atom, weights, shape)
+            tensor = tf.add(tensor, w)
             # noinspection PyTypeChecker
             self._tensor_by_atom[renamed_atom] = tensor
 
@@ -306,19 +391,32 @@ class TensorFactory:
         if not atom.is_grounded():
             raise NotGroundAtomException(atom)
 
-        initial_value = self.program.facts_by_predicate.get(
+        value = self.program.facts_by_predicate.get(
             atom.predicate, dict()).get(atom).get(atom.simple_key(), None)
-        if initial_value is None:
-            initializer_name = "glorot_uniform"
-            initializer = initializers.get(initializer_name)
-            initializer = initializer()
-            initial_value = lambda: initializer([], dtype=tf.float32)
+        if value is None:
+            initializer_name = self._get_initializer_name(atom.predicate)
+            value = get_initial_value_by_name(initializer_name)
             logger.debug("Creating atom %s with initializer %s",
                          atom, initializer_name)
         else:
-            initial_value = initial_value.weight
+            value = value.weight
 
-        return initial_value
+        return value
+
+    def _get_initializer_name(self, predicate):
+        """
+        Gets the name of the initializer for the predicate.
+
+        :param predicate: the predicate
+        :type predicate: Predicate
+        :return: the name of the initializer
+        :rtype: str
+        """
+        predicate_parameter = self.program.parameters.get(
+            predicate, self.program.parameters)
+        initializer_name = predicate_parameter.get("initial_value",
+                                                   "glorot_uniform")
+        return initializer_name
 
     def _get_one_hot_tensor(self, constant):
         """
@@ -347,18 +445,19 @@ class TensorFactory:
     # noinspection PyMissingOrEmptyDocstring
     @tensor_function(TensorFunctionKey(0, 0, True, []))
     def arity_0_trainable(self, atom):
-        w = self.get_matrix_representation(atom.predicate)
-        return self._matrix_to_variable(atom, w)
+        return self._matrix_to_variable(atom)
 
-    # # noinspection PyMissingOrEmptyDocstring
-    # @tensor_function(TensorFunctionKey(1, 0, False, [FactoryTermType.NUMBER]))
-    # def arity_1_0_not_trainable_number(self, atom):
-    #     pass
-    #
-    # # noinspection PyMissingOrEmptyDocstring
-    # @tensor_function(TensorFunctionKey(1, 0, True, [FactoryTermType.NUMBER]))
-    # def arity_1_0_trainable_number(self, atom):
-    #     pass
+    # noinspection PyMissingOrEmptyDocstring
+    @tensor_function(TensorFunctionKey(1, 0, False, [FactoryTermType.NUMBER]))
+    def arity_1_0_not_trainable_number(self, atom):
+        # TODO: Implement
+        pass
+
+    # noinspection PyMissingOrEmptyDocstring
+    @tensor_function(TensorFunctionKey(1, 0, True, [FactoryTermType.NUMBER]))
+    def arity_1_0_trainable_number(self, atom):
+        # TODO: Implement
+        pass
 
     # noinspection PyMissingOrEmptyDocstring
     @tensor_function(TensorFunctionKey(1, 1, False, [FactoryTermType.CONSTANT]))
@@ -407,110 +506,127 @@ class TensorFactory:
     @tensor_function(TensorFunctionKey(1, 1, True,
                                        [FactoryTermType.ITERABLE_CONSTANT]))
     def arity_1_1_trainable_iterable_constant(self, atom):
-        vector = self.get_matrix_representation(atom.predicate)
-        variable_atom = Atom(atom.predicate, Variable("X"), weight=atom.weight)
-        tensor = self._matrix_to_variable(variable_atom, vector.todense(),
-                                          [self.constant_size, 1])
-        index = self._get_one_hot_tensor(atom.terms[0])
-        return tf.matmul(index, tensor, a_is_sparse=True)
+        tensor = self._tensor_by_atom.get(atom, None)
+        if tensor is None:
+            variable_atom = get_variable_atom(atom)
+            tensor = self.build_atom(variable_atom)
+            index = self._get_one_hot_tensor(atom.terms[0])
+            tensor = tf.matmul(index, tensor, a_is_sparse=True)
+            self._tensor_by_atom[atom] = tensor
+        return tensor
 
     # noinspection PyMissingOrEmptyDocstring
     @tensor_function(TensorFunctionKey(1, 1, True, [FactoryTermType.VARIABLE]))
     def arity_1_1_trainable_variable(self, atom):
-        w = self.get_matrix_representation(atom.predicate)
-        return self._matrix_to_variable(atom, w.todense(),
-                                        [self.constant_size, 1])
-
-    # # noinspection PyMissingOrEmptyDocstring
-    # @tensor_function(TensorFunctionKey(2, 0, False, [FactoryTermType.NUMBER,
-    #                                                  FactoryTermType.NUMBER]))
-    # def arity_2_0_not_trainable_number_number(self, atom):
-    #     pass
-    #
-    # # noinspection PyMissingOrEmptyDocstring
-    # @tensor_function(TensorFunctionKey(2, 0, True, [FactoryTermType.NUMBER,
-    #                                                 FactoryTermType.NUMBER]))
-    # def arity_2_0_trainable_number_number(self, atom):
-    #     pass
-    #
-    # # noinspection PyMissingOrEmptyDocstring
-    # @tensor_function(TensorFunctionKey(2, 1, False, [FactoryTermType.CONSTANT,
-    #                                                  FactoryTermType.NUMBER]))
-    # def arity_2_1_not_trainable_constant_number(self, atom):
-    #     pass
-    #
-    # # noinspection PyMissingOrEmptyDocstring
-    # @tensor_function(TensorFunctionKey(2, 1, False,
-    #                                    [FactoryTermType.ITERABLE_CONSTANT,
-    #                                     FactoryTermType.NUMBER]))
-    # def arity_2_1_not_trainable_iterable_constant_number(self, atom):
-    #     pass
-    #
-    # # noinspection PyMissingOrEmptyDocstring
-    # @tensor_function(TensorFunctionKey(2, 1, False, [FactoryTermType.VARIABLE,
-    #                                                  FactoryTermType.NUMBER]))
-    # def arity_2_1_not_trainable_variable_number(self, atom):
-    #     pass
-    #
-    # # noinspection PyMissingOrEmptyDocstring
-    # @tensor_function(TensorFunctionKey(2, 1, True, [FactoryTermType.CONSTANT,
-    #                                                 FactoryTermType.NUMBER]))
-    # def arity_2_1_trainable_constant_number(self, atom):
-    #     pass
-    #
-    # # noinspection PyMissingOrEmptyDocstring
-    # @tensor_function(TensorFunctionKey(2, 1, True,
-    #                                    [FactoryTermType.ITERABLE_CONSTANT,
-    #                                     FactoryTermType.NUMBER]))
-    # def arity_2_1_trainable_iterable_constant_number(self, atom):
-    #     pass
-    #
-    # # noinspection PyMissingOrEmptyDocstring
-    # @tensor_function(TensorFunctionKey(2, 1, True, [FactoryTermType.VARIABLE,
-    #                                                 FactoryTermType.NUMBER]))
-    # def arity_2_1_trainable_variable_number(self, atom):
-    #     pass
-    #
-    # # noinspection PyMissingOrEmptyDocstring
-    # @tensor_function(TensorFunctionKey(2, 1, False, [FactoryTermType.NUMBER,
-    #                                                  FactoryTermType.CONSTANT]))
-    # def arity_2_1_not_trainable_number_constant(self, atom):
-    #     pass
-    #
-    # # noinspection PyMissingOrEmptyDocstring
-    # @tensor_function(TensorFunctionKey(2, 1, False,
-    #                                    [FactoryTermType.NUMBER,
-    #                                     FactoryTermType.ITERABLE_CONSTANT]))
-    # def arity_2_1_not_trainable_number_iterable_constant(self, atom):
-    #     pass
-    #
-    # # noinspection PyMissingOrEmptyDocstring
-    # @tensor_function(TensorFunctionKey(2, 1, False, [FactoryTermType.NUMBER,
-    #                                                  FactoryTermType.VARIABLE]))
-    # def arity_2_1_not_trainable_number_variable(self, atom):
-    #     pass
-    #
-    # # noinspection PyMissingOrEmptyDocstring
-    # @tensor_function(TensorFunctionKey(2, 1, True, [FactoryTermType.NUMBER,
-    #                                                 FactoryTermType.CONSTANT]))
-    # def arity_2_1_trainable_number_constant(self, atom):
-    #     pass
-    #
-    # # noinspection PyMissingOrEmptyDocstring
-    # @tensor_function(TensorFunctionKey(2, 1, True,
-    #                                    [FactoryTermType.NUMBER,
-    #                                     FactoryTermType.ITERABLE_CONSTANT]))
-    # def arity_2_1_trainable_number_iterable_constant(self, atom):
-    #     pass
-    #
-    # # noinspection PyMissingOrEmptyDocstring
-    # @tensor_function(TensorFunctionKey(2, 1, True, [FactoryTermType.NUMBER,
-    #                                                 FactoryTermType.VARIABLE]))
-    # def arity_2_1_trainable_number_variable(self, atom):
-    #     pass
+        initializer_name = self._get_initializer_name(atom.predicate)
+        initial_value = get_initial_value_by_name(initializer_name)
+        tensor = self._matrix_to_variable_with_value(atom, initial_value,
+                                                     [self.constant_size, 1])
+        return tensor
 
     # noinspection PyMissingOrEmptyDocstring
+    @tensor_function(TensorFunctionKey(2, 0, False, [FactoryTermType.NUMBER,
+                                                     FactoryTermType.NUMBER]))
+    def arity_2_0_not_trainable_number_number(self, atom):
+        # TODO: Implement
+        pass
 
+    # noinspection PyMissingOrEmptyDocstring
+    @tensor_function(TensorFunctionKey(2, 0, True, [FactoryTermType.NUMBER,
+                                                    FactoryTermType.NUMBER]))
+    def arity_2_0_trainable_number_number(self, atom):
+        # TODO: Implement
+        pass
+
+    # noinspection PyMissingOrEmptyDocstring
+    @tensor_function(TensorFunctionKey(2, 1, False, [FactoryTermType.CONSTANT,
+                                                     FactoryTermType.NUMBER]))
+    def arity_2_1_not_trainable_constant_number(self, atom):
+        # TODO: Implement
+        pass
+
+    # noinspection PyMissingOrEmptyDocstring
+    @tensor_function(TensorFunctionKey(2, 1, False,
+                                       [FactoryTermType.ITERABLE_CONSTANT,
+                                        FactoryTermType.NUMBER]))
+    def arity_2_1_not_trainable_iterable_constant_number(self, atom):
+        # TODO: Implement
+        pass
+
+    # noinspection PyMissingOrEmptyDocstring
+    @tensor_function(TensorFunctionKey(2, 1, False, [FactoryTermType.VARIABLE,
+                                                     FactoryTermType.NUMBER]))
+    def arity_2_1_not_trainable_variable_number(self, atom):
+        # TODO: Implement
+        pass
+
+    # noinspection PyMissingOrEmptyDocstring
+    @tensor_function(TensorFunctionKey(2, 1, True, [FactoryTermType.CONSTANT,
+                                                    FactoryTermType.NUMBER]))
+    def arity_2_1_trainable_constant_number(self, atom):
+        # TODO: Implement
+        pass
+
+    # noinspection PyMissingOrEmptyDocstring
+    @tensor_function(TensorFunctionKey(2, 1, True,
+                                       [FactoryTermType.ITERABLE_CONSTANT,
+                                        FactoryTermType.NUMBER]))
+    def arity_2_1_trainable_iterable_constant_number(self, atom):
+        # TODO: Implement
+        pass
+
+    # noinspection PyMissingOrEmptyDocstring
+    @tensor_function(TensorFunctionKey(2, 1, True, [FactoryTermType.VARIABLE,
+                                                    FactoryTermType.NUMBER]))
+    def arity_2_1_trainable_variable_number(self, atom):
+        # TODO: Implement
+        pass
+
+    # noinspection PyMissingOrEmptyDocstring
+    @tensor_function(TensorFunctionKey(2, 1, False, [FactoryTermType.NUMBER,
+                                                     FactoryTermType.CONSTANT]))
+    def arity_2_1_not_trainable_number_constant(self, atom):
+        # TODO: Implement
+        pass
+
+    # noinspection PyMissingOrEmptyDocstring
+    @tensor_function(TensorFunctionKey(2, 1, False,
+                                       [FactoryTermType.NUMBER,
+                                        FactoryTermType.ITERABLE_CONSTANT]))
+    def arity_2_1_not_trainable_number_iterable_constant(self, atom):
+        # TODO: Implement
+        pass
+
+    # noinspection PyMissingOrEmptyDocstring
+    @tensor_function(TensorFunctionKey(2, 1, False, [FactoryTermType.NUMBER,
+                                                     FactoryTermType.VARIABLE]))
+    def arity_2_1_not_trainable_number_variable(self, atom):
+        # TODO: Implement
+        pass
+
+    # noinspection PyMissingOrEmptyDocstring
+    @tensor_function(TensorFunctionKey(2, 1, True, [FactoryTermType.NUMBER,
+                                                    FactoryTermType.CONSTANT]))
+    def arity_2_1_trainable_number_constant(self, atom):
+        # TODO: Implement
+        pass
+
+    # noinspection PyMissingOrEmptyDocstring
+    @tensor_function(TensorFunctionKey(2, 1, True,
+                                       [FactoryTermType.NUMBER,
+                                        FactoryTermType.ITERABLE_CONSTANT]))
+    def arity_2_1_trainable_number_iterable_constant(self, atom):
+        # TODO: Implement
+        pass
+
+    # noinspection PyMissingOrEmptyDocstring
+    @tensor_function(TensorFunctionKey(2, 1, True, [FactoryTermType.NUMBER,
+                                                    FactoryTermType.VARIABLE]))
+    def arity_2_1_trainable_number_variable(self, atom):
+        # TODO: Implement
+        pass
+
+    # noinspection PyMissingOrEmptyDocstring
     @tensor_function(TensorFunctionKey(2, 2, False, [FactoryTermType.CONSTANT,
                                                      FactoryTermType.CONSTANT]))
     def arity_2_2_not_trainable_constant_constant(self, atom):
@@ -525,7 +641,7 @@ class TensorFactory:
 
     # noinspection PyMissingOrEmptyDocstring
     def _not_trainable_constant_variable(self, atom):
-        w = self.program.get_vector_representation_with_constant(atom)
+        w = self.get_vector_representation_with_constant(atom)
         return self._matrix_to_constant(atom, w)
 
     # noinspection PyMissingOrEmptyDocstring
@@ -582,72 +698,117 @@ class TensorFactory:
 
     # noinspection PyMissingOrEmptyDocstring
     @tensor_function(TensorFunctionKey(2, 2, True, [FactoryTermType.CONSTANT,
-                                                     FactoryTermType.CONSTANT]))
+                                                    FactoryTermType.CONSTANT]))
     def arity_2_2_trainable_constant_constant(self, atom):
-        # TODO: implement
-        pass
+        initial_value = self._get_initial_value_for_atom(atom)
+        return self._matrix_to_variable(atom, initial_value)
 
     # noinspection PyMissingOrEmptyDocstring
     @tensor_function(TensorFunctionKey(2, 2, True,
                                        [FactoryTermType.CONSTANT,
                                         FactoryTermType.ITERABLE_CONSTANT]))
     def arity_2_2_trainable_constant_iterable_constant(self, atom):
-        # TODO: implement
-        pass
+        tensor = self._tensor_by_atom.get(atom, None)
+        if tensor is None:
+            variable_atom = Atom(atom.predicate, atom.terms[0], Variable("X"),
+                                 weight=atom.weight)
+            tensor = self.build_atom(variable_atom)
+            index = self._get_one_hot_tensor(atom.terms[0])
+            tensor = tf.matmul(index, tensor, a_is_sparse=True)
+            self._tensor_by_atom[atom] = tensor
+
+        return tensor
 
     # noinspection PyMissingOrEmptyDocstring
     @tensor_function(TensorFunctionKey(2, 2, True, [FactoryTermType.CONSTANT,
-                                                     FactoryTermType.VARIABLE]))
+                                                    FactoryTermType.VARIABLE]))
     def arity_2_2_trainable_constant_variable(self, atom):
-        # TODO: implement
-        pass
+        weights = self.get_vector_representation_with_constant(atom)
+        return self._matrix_to_variable(atom, weights)
 
     # noinspection PyMissingOrEmptyDocstring
     @tensor_function(TensorFunctionKey(2, 2, True,
                                        [FactoryTermType.ITERABLE_CONSTANT,
                                         FactoryTermType.CONSTANT]))
     def arity_2_2_trainable_iterable_constant_constant(self, atom):
-        # TODO: implement
-        pass
+        tensor = self._tensor_by_atom.get(atom, None)
+        if tensor is None:
+            variable_atom = Atom(atom.predicate, Variable("X"), atom.terms[1],
+                                 weight=atom.weight)
+            tensor = self.build_atom(variable_atom)
+            index = self._get_one_hot_tensor(atom.terms[1])
+            tensor = tf.matmul(tensor, index, b_is_sparse=True,
+                               transpose_a=True, transpose_b=True)
+            self._tensor_by_atom[atom] = tensor
 
-    # noinspection PyMissingOrEmptyDocstring
+        return tensor
+
+    # noinspection PyMissingOrEmptyDocstring, DuplicatedCode
     @tensor_function(TensorFunctionKey(2, 2, True,
                                        [FactoryTermType.ITERABLE_CONSTANT,
                                         FactoryTermType.ITERABLE_CONSTANT]))
     def arity_2_2_trainable_iterable_constant_iterable_constant(self, atom):
-        # TODO: implement
-        pass
+        tensor = self._tensor_by_atom.get(atom, None)
+        if tensor is None:
+            variable_atom = get_variable_atom(atom)
+            tensor = self.build_atom(variable_atom)
+            index_0 = self._get_one_hot_tensor(atom.terms[0])
+            index_1 = self._get_one_hot_tensor(atom.terms[1])
+            index_1 = tf.reshape(index_1, [-1, 1])
+            tensor = tf.matmul(index_0, tensor, a_is_sparse=True)
+            tensor = tf.matmul(tensor, index_1, b_is_sparse=True)
+            self._tensor_by_atom[atom] = tensor
+        return tensor
 
     # noinspection PyMissingOrEmptyDocstring
     @tensor_function(TensorFunctionKey(2, 2, True,
                                        [FactoryTermType.ITERABLE_CONSTANT,
                                         FactoryTermType.VARIABLE]))
     def arity_2_2_trainable_iterable_constant_variable(self, atom):
-        # TODO: implement
-        pass
+        tensor = self._tensor_by_atom.get(atom, None)
+        if tensor is None:
+            variable_atom = get_variable_atom(atom)
+            tensor = self.build_atom(variable_atom)
+            index = self._get_one_hot_tensor(atom.terms[0])
+            tensor = tf.matmul(index, tensor, a_is_sparse=True)
+            tensor = tf.reshape(tensor, [-1, 1])
+            self._tensor_by_atom[atom] = tensor
+        return tensor
 
     # noinspection PyMissingOrEmptyDocstring
     @tensor_function(TensorFunctionKey(2, 2, True, [FactoryTermType.VARIABLE,
-                                                     FactoryTermType.CONSTANT]))
+                                                    FactoryTermType.CONSTANT]))
     def arity_2_2_variable_constant(self, atom):
-        # TODO: implement
-        pass
+        weights = self.get_vector_representation_with_constant(atom)
+        return self._matrix_to_variable(atom, weights)
 
     # noinspection PyMissingOrEmptyDocstring
     @tensor_function(TensorFunctionKey(2, 2, True,
                                        [FactoryTermType.VARIABLE,
                                         FactoryTermType.ITERABLE_CONSTANT]))
     def arity_2_2_variable_iterable_constant(self, atom):
-        # TODO: implement
-        pass
+        tensor = self._tensor_by_atom.get(atom, None)
+        if tensor is None:
+            variable_atom = get_variable_atom(atom)
+            tensor = self.build_atom(variable_atom)
+            index = self._get_one_hot_tensor(atom.terms[1])
+            index = tf.reshape(index, [-1, 1])
+            tensor = tf.matmul(tensor, index, b_is_sparse=True)
+            self._tensor_by_atom[atom] = tensor
+        return tensor
 
     # noinspection PyMissingOrEmptyDocstring
     @tensor_function(TensorFunctionKey(2, 2, True, [FactoryTermType.VARIABLE,
-                                                     FactoryTermType.VARIABLE]))
+                                                    FactoryTermType.VARIABLE]))
     def arity_2_2_variable_variable(self, atom):
-        w = self.get_matrix_representation(atom.predicate)
-        tensor = self._matrix_to_variable(atom, w.todense())
+        tensor = self._matrix_to_variable(atom)
         if atom.terms[0] == atom.terms[1]:
-            tensor = tf.linalg.tensor_diag_part(tensor)
-            tensor = tf.reshape(tensor, [-1, 1])
+            same_variables = self._tensor_by_atom.get(atom, None)
+            if same_variables is None:
+                tensor = tf.linalg.tensor_diag_part(tensor)
+                tensor = tf.reshape(tensor, [-1, 1])
+                self._tensor_by_atom[atom] = tensor
+            else:
+                tensor = same_variables
+
         return tensor
