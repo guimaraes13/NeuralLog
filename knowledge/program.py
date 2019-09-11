@@ -373,7 +373,10 @@ class NeuralLogProgram:
         """
         true_arity = self.get_true_arity(predicate)
         if true_arity == 0:
-            return self._propositional_matrix_representation(predicate)
+            if predicate.arity == 0:
+                return self._propositional_matrix_representation(predicate)
+            else:
+                return self._attribute_numeric_representation(predicate)
         elif true_arity == 1:
             if predicate.arity == 1:
                 return self._relational_matrix_representation(predicate)
@@ -396,8 +399,28 @@ class NeuralLogProgram:
         return sum(1 for i in self.predicates[predicate] if not i.number)
 
     def _propositional_matrix_representation(self, predicate):
-        return list(map(lambda x: x.weight,
-                        self.facts_by_predicate[predicate].values()))[0]
+        facts = self.facts_by_predicate.get(predicate, None)
+        if facts is None or len(facts) == 0:
+            return 0.0
+        else:
+            return list(facts.values())[0].weight
+
+    def _attribute_numeric_representation(self, predicate):
+        """
+        Builds the attribute numeric representation for the predicate.
+
+        :param predicate: the predicate
+        :type predicate: Predicate
+        :return: the float representation of the data, the weight of the
+        fact and the attribute
+        :rtype: (float, float)
+        """
+        facts = self.facts_by_predicate.get(predicate, None)
+        if facts is None or len(facts) == 0:
+            return 0.0, 0.0
+        else:
+            fact = list(facts.values())[0]
+            return fact.weight, [x.value for x in fact.terms]
 
     def _attribute_matrix_representation(self, predicate):
         """

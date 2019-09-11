@@ -7,12 +7,12 @@ import numpy as np
 import tensorflow as tf
 from scipy.sparse import csr_matrix
 from tensorflow import keras
-from tensorflow.python.keras import initializers
-from typing import Dict, Any
+from typing import Dict
 
 from knowledge.program import NeuralLogProgram
+# from knowledge.tensor_factory import TensorFactory
 from knowledge.tensor_factory import TensorFactory
-from language.language import Predicate, Atom, Term
+from language.language import Predicate, Atom
 
 # Network part
 # TODO: create the neural network representation
@@ -26,21 +26,6 @@ from language.language import Predicate, Atom, Term
 # TODO: treaty the binary atom with equal variables
 
 logger = logging.getLogger()
-
-
-class NotGroundAtomException(Exception):
-    """
-    Represents an atom malformed exception.
-    """
-
-    def __init__(self, atom) -> None:
-        """
-        Creates a not ground atom exception.
-
-        :param atom: the not ground atom
-        :type atom: Atom
-        """
-        super().__init__("Atom {} is not ground.".format(atom))
 
 
 class PredicateLayer(keras.layers.Layer):
@@ -150,22 +135,8 @@ class NeuralLogNetwork(keras.Model):
     The NeuralLog Network.
     """
 
-    SPARSE_THRESHOLD = 0.3
-
     _layer_by_predicate: Dict[Predicate, PredicateLayer] = dict()
     "The layer by predicate"
-
-    _tensor_by_atom: Dict[Atom, tf.Tensor] = dict()
-    "The tensors for the atoms"
-
-    _tensor_by_constant: Dict[Term, tf.Tensor] = dict()
-    "The one-hot tensors for the iterable constants"
-
-    _matrix_representation: Dict[Predicate, Any] = dict()
-    "Caches the matrices representations."
-
-    _diagonal_matrix_representation: Dict[Predicate, csr_matrix] = dict()
-    "Caches the diagonal matrices representations."
 
     def __init__(self, program, predicate_combining=tf.math.accumulate_n):
         """
@@ -229,33 +200,6 @@ class NeuralLogNetwork(keras.Model):
     def _build_rule(self, clause):
         return None
 
-    def get_matrix_representation(self, predicate):
-        """
-        Gets the matrix representation for the predicate.
-
-        :param predicate: the predicate
-        :type predicate: Predicate
-        :raise UnsupportedMatrixRepresentation in the case the predicate is
-        not convertible to matrix form
-        :return: the matrix representation of the data for the given predicate
-        :rtype: csr_matrix or np.matrix or (csr_matrix, csr_matrix) or float
-        """
-        return self._matrix_representation.setdefault(
-            predicate, self.program.get_matrix_representation(predicate))
-
-    def get_diagonal_matrix_representation(self, predicate):
-        """
-        Gets the diagonal matrix representation for a binary predicate.
-
-        :param predicate: the binary predicate
-        :type predicate: Predicate
-        :return: the matrix representation of the data
-        :rtype: csr_matrix
-        """
-        return self._diagonal_matrix_representation.setdefault(
-            predicate,
-            self.program.get_diagonal_matrix_representation(predicate))
-
     def get_matrix_representation_for_atom(self, atom):
         # TODO: get the tensor representation for the literal instead of the
         #  predicate:
@@ -272,49 +216,6 @@ class NeuralLogNetwork(keras.Model):
         :rtype: csr_matrix or np.matrix or (csr_matrix, csr_matrix) or float
         """
         return self.tensor_factory.build_atom(atom)
-
-    def _build_two_variables_tensor(self, atom, value):
-        """
-        Builds a tensor for the atom with two variables.
-
-        :param atom: the atom with two variables
-        :type atom: Atom
-        :param value: the initial value
-        :type value: csr_matrix, np.matrix
-        :return: the tensor for the atom
-        :rtype: tf.Tensor or tf.SparseTensor
-        """
-        if atom.predicate in self.program.trainable_predicates:
-            return self._matrix_to_variable(atom, value)
-        else:
-            return self._matrix_to_constant(atom, value)
-
-    def _get_initial_value_for_atom(self, atom):
-        """
-        Gets the initial value for the atom, the atom must be grounded.
-
-        :param atom: the atom, must be grounded
-        :type atom: Atom
-        :raise NotGroundAtomException if the atom is not ground
-        :return: the initial value of the atom
-        :rtype: function or float
-        """
-        if not atom.is_grounded():
-            raise NotGroundAtomException(atom)
-
-        initial_value = self.program.facts_by_predicate.get(
-            atom.predicate, dict()).get(atom).get(atom.simple_key(), None)
-        if initial_value is None:
-            initializer_name = "glorot_uniform"
-            initializer = initializers.get(initializer_name)
-            initializer = initializer()
-            initial_value = lambda: initializer([], dtype=tf.float32)
-            logger.debug("Creating atom %s with initializer %s",
-                         atom, initializer_name)
-        else:
-            initial_value = initial_value.weight
-
-        return initial_value
 
 
 if __name__ == "__main__":
