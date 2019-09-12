@@ -11,8 +11,8 @@ from scipy.sparse import csr_matrix
 from tensorflow.python.keras import initializers
 from typing import Dict, Any
 
-from knowledge.program import NeuralLogProgram
-from language.language import Predicate, Atom, Quote, Constant, Variable, Term
+from src.language.language import Predicate, Atom, Quote, Constant, Variable, \
+    Term
 
 logger = logging.getLogger()
 

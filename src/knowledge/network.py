@@ -9,10 +9,9 @@ from scipy.sparse import csr_matrix
 from tensorflow import keras
 from typing import Dict
 
-from knowledge.program import NeuralLogProgram
 # from knowledge.tensor_factory import TensorFactory
-from knowledge.tensor_factory import TensorFactory
-from language.language import Predicate, Atom
+from src.knowledge.tensor_factory import TensorFactory
+from src.language.language import Predicate, Atom
 
 # Network part
 # TODO: create the neural network representation

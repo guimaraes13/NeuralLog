@@ -8,8 +8,8 @@ import numpy as np
 from scipy.sparse import csr_matrix
 from typing import TypeVar, MutableMapping, Dict, Any, List, Set, Tuple
 
-from language.language import Number, TermType, Predicate, Atom, HornClause, \
-    Term, AtomClause, ClauseMalformedException, TooManyArguments, \
+from src.language.language import Number, TermType, Predicate, Atom, \
+    HornClause, Term, AtomClause, ClauseMalformedException, TooManyArguments, \
     PredicateTypeError, UnsupportedMatrixRepresentation
 
 KT = TypeVar('KT')  # Key type.
@@ -131,6 +131,7 @@ def get_predicate_from_string(string):
     return Predicate(string, -1)
 
 
+# noinspection DuplicatedCode
 class BiDict(dict, MutableMapping[KT, VT]):
     """
     A bidirectional dictionary.
