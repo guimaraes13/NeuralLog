@@ -284,8 +284,6 @@ class NeuralLogProgram:
         :raise TooManyArguments if the atom has more than 2 arguments
         """
         atom_predicate = atom.predicate
-        # QUESTION: Move the arity check to the parser?
-        # QUESTION: Create the built predicates in the parser?
         if atom_predicate.arity > 2:
             raise TooManyArguments(atom.context, atom_predicate.arity)
         # atom.context = None
@@ -358,7 +356,6 @@ class NeuralLogProgram:
 
     # TODO: get the matrix representation for the literal instead of the
     #  predicate:
-    #  - adjust for literals with constants;
     #  - adjust for negated literals;
     def get_matrix_representation(self, predicate):
         """
