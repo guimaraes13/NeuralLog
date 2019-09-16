@@ -207,7 +207,10 @@ class NeuralLogProgram:
     "The trainable predicates"
 
     parameters: Dict[Any, Any] = {
-        "initial_value": "glorot_uniform"
+        "initial_value": {
+            "class_name": "random_normal",
+            "config": {"mean": 0.5, "stddev": 0.125}
+        }
     }
     "A dictionary with the parameters defined in the program"
 
@@ -358,12 +361,16 @@ class NeuralLogProgram:
     # TODO: get the matrix representation for the literal instead of the
     #  predicate:
     #  - adjust for negated literals;
-    def get_matrix_representation(self, predicate):
+    def get_matrix_representation(self, predicate, mask=False):
         """
         Builds the matrix representation for the predicate.
 
         :param predicate: the predicate
         :type predicate: Predicate
+        :param mask: if True, instead of the weights, returns 1.0 if for the
+        facts that appears in the knowledge base, even if its weight is 0.0;
+        or 0.0 otherwise
+        :type mask: bool
         :raise UnsupportedMatrixRepresentation in the case the predicate is
         not convertible to matrix form
         :return: the matrix representation of the data for the given predicate
@@ -372,16 +379,17 @@ class NeuralLogProgram:
         true_arity = self.get_true_arity(predicate)
         if true_arity == 0:
             if predicate.arity == 0:
-                return self._propositional_matrix_representation(predicate)
+                return self._propositional_matrix_representation(predicate,
+                                                                 mask)
             else:
-                return self._attribute_numeric_representation(predicate)
+                return self._attribute_numeric_representation(predicate, mask)
         elif true_arity == 1:
             if predicate.arity == 1:
-                return self._relational_matrix_representation(predicate)
+                return self._relational_matrix_representation(predicate, mask)
             elif predicate.arity == 2:
-                return self._attribute_matrix_representation(predicate)
+                return self._attribute_matrix_representation(predicate, mask)
         elif true_arity == 2:
-            return self._relational_matrix_representation(predicate)
+            return self._relational_matrix_representation(predicate, mask)
         raise UnsupportedMatrixRepresentation(predicate)
 
     def get_true_arity(self, predicate):
@@ -396,36 +404,61 @@ class NeuralLogProgram:
         """
         return sum(1 for i in self.predicates[predicate] if not i.number)
 
-    def _propositional_matrix_representation(self, predicate):
-        facts = self.facts_by_predicate.get(predicate, None)
-        if facts is None or len(facts) == 0:
-            return 0.0
-        else:
-            return list(facts.values())[0].weight
-
-    def _attribute_numeric_representation(self, predicate):
+    def _propositional_matrix_representation(self, predicate, mask=False):
         """
-        Builds the attribute numeric representation for the predicate.
+        Builds the numeric representation for the predicate.
 
         :param predicate: the predicate
         :type predicate: Predicate
+        :param mask: if True, instead of the weights, returns 1.0 if for the
+        facts that appears in the knowledge base, even if its weight is 0.0;
+        or 0.0 otherwise
+        :type mask: bool
         :return: the float representation of the data, the weight of the
         fact and the attribute
         :rtype: (float, float)
         """
         facts = self.facts_by_predicate.get(predicate, None)
         if facts is None or len(facts) == 0:
-            return 0.0, 0.0
+            return 0.0
         else:
+            return 1.0 if mask else list(facts.values())[0].weight
+
+    def _attribute_numeric_representation(self, predicate, mask=False):
+        """
+        Builds the attribute numeric representation for the predicate.
+
+        :param predicate: the predicate
+        :type predicate: Predicate
+        :param mask: if True, instead of the weights, returns 1.0 if for the
+        facts that appears in the knowledge base, even if its weight is 0.0;
+        or 0.0 otherwise
+        :type mask: bool
+        :return: the float representation of the data, the weight of the
+        fact and the attribute
+        :rtype: (float, float)
+        """
+        facts = self.facts_by_predicate.get(predicate, None)
+        if facts is None or len(facts) == 0:
+            if mask:
+                return 0.0
+            return 0.0, [0.0] * predicate.arity
+        else:
+            if mask:
+                return 1.0
             fact = list(facts.values())[0]
             return fact.weight, [x.value for x in fact.terms]
 
-    def _attribute_matrix_representation(self, predicate):
+    def _attribute_matrix_representation(self, predicate, mask=False):
         """
         Builds the attribute matrix representation for the binary predicate.
 
         :param predicate: the predicate
         :type predicate: Predicate
+        :param mask: if True, instead of the weights, returns 1.0 if for the
+        facts that appears in the knowledge base, even if its weight is 0.0;
+        or 0.0 otherwise
+        :type mask: bool
         :return: the matrix representation of the data, the weights of the
         facts and the attributes of the entities
         :rtype: (csr_matrix, csr_matrix)
@@ -436,26 +469,36 @@ class NeuralLogProgram:
         attribute_data = []
         entity_indices = []
         for fact in self.facts_by_predicate.get(predicate, dict()).values():
-            weight_data.append(fact.weight)
+            index = self._check_iterable_terms(fact.terms)
+            if index is None:
+                continue
+            weight_data.append(1.0 if mask else fact.weight)
             attribute_data.append(fact.terms[attribute_index].value)
-            entity_indices.append(
-                self.iterable_constants.inverse[fact.terms[entity_index]])
+            entity_indices.append(index[0])
+
+        weights = csr_matrix((weight_data,
+                              (entity_indices, [0] * len(weight_data))),
+                             shape=(self.number_of_entities, 1))
+        if mask:
+            return weights
 
         return (
-            csr_matrix((weight_data,
-                        (entity_indices, [0] * len(weight_data))),
-                       shape=(self.number_of_entities, 1)),
+            weights,
             csr_matrix((attribute_data,
                         (entity_indices, [0] * len(attribute_data))),
                        shape=(self.number_of_entities, 1))
         )
 
-    def _relational_matrix_representation(self, predicate):
+    def _relational_matrix_representation(self, predicate, mask=False):
         """
         Builds the relational matrix representation for the predicate.
 
         :param predicate: the predicate
         :type predicate: Predicate
+        :param mask: if True, instead of the weights, returns 1.0 if for the
+        facts that appears in the knowledge base, even if its weight is 0.0;
+        or 0.0 otherwise
+        :type mask: bool
         :return: the matrix representation of the data
         :rtype: csr_matrix
         """
@@ -470,7 +513,7 @@ class NeuralLogProgram:
                 continue
             for i in term_range:
                 ind[i].append(indices[i])
-            data.append(fact.weight)
+            data.append(1.0 if mask else fact.weight)
 
         if predicate.arity == 1:
             return csr_matrix((data, (ind[0], [0] * len(data))),
@@ -479,12 +522,16 @@ class NeuralLogProgram:
         return csr_matrix((data, tuple(ind)),
                           shape=(self.number_of_entities,) * predicate.arity)
 
-    def get_diagonal_matrix_representation(self, predicate):
+    def get_diagonal_matrix_representation(self, predicate, mask=False):
         """
         Builds the diagonal matrix representation for a binary predicate.
 
         :param predicate: the binary predicate
         :type predicate: Predicate
+        :param mask: if True, instead of the weights, returns 1.0 if for the
+        facts that appears in the knowledge base, even if its weight is 0.0;
+        or 0.0 otherwise
+        :type mask: bool
         :return: the matrix representation of the data
         :rtype: csr_matrix
         """
@@ -499,7 +546,7 @@ class NeuralLogProgram:
                 continue
             ind[0].append(indices[0])
             ind[1].append(0)
-            data.append(fact.weight)
+            data.append(1.0 if mask else fact.weight)
 
         return csr_matrix((data, tuple(ind)),
                           shape=(self.number_of_entities, 1))
@@ -517,6 +564,8 @@ class NeuralLogProgram:
         """
         indices = []
         for term in terms:
+            if isinstance(term, Number):
+                continue
             index = self.iterable_constants.inverse.get(term, None)
             if index is None:
                 return None
@@ -650,7 +699,8 @@ class NeuralLogProgram:
 
         parameter_dict = self.parameters
         for i in range(arity - 2):
-            parameter_dict = parameter_dict.get(atom.terms[i].value, dict())
+            parameter_dict = parameter_dict.setdefault(
+                atom.terms[i].value, dict())
         parameter_dict[atom.terms[-2].value] = atom.terms[-1].value
 
     @builtin("set_predicate_parameter")

@@ -6,6 +6,7 @@ import logging
 from enum import Enum
 
 import numpy as np
+import re
 import tensorflow as tf
 from scipy.sparse import csr_matrix
 from tensorflow.python.keras import initializers
@@ -15,6 +16,10 @@ from src.language.language import Predicate, Atom, Quote, Constant, Variable, \
     Term
 
 logger = logging.getLogger()
+
+SPACE_REGEX = re.compile(r"\s")
+ALLOW_REGEX = re.compile(r'[^a-zA-Z0-9\-_]')
+FIRST_CHARACTER = re.compile(r"[A-Za-z0-9.]")
 
 
 def decorate_factory_function():
@@ -77,7 +82,7 @@ def get_renamed_atom(atom):
         else:
             terms.append(Variable("X{}".format(index)))
             index += 1
-    return Atom(atom.predicate, *terms, weight=atom.weight)
+    return Atom(atom.predicate, *terms)
 
 
 def get_variable_atom(atom):
@@ -93,18 +98,20 @@ def get_variable_atom(atom):
     return Atom(atom.predicate, *terms, weight=atom.weight)
 
 
-def get_initial_value_by_name(initializer_name):
+def get_initial_value_by_name(initializer, shape, **kwargs):
     """
-    Gets the initializer by name.
+    Gets the initializer by name or config.
 
-    :param initializer_name: the initializer name
-    :type initializer_name: str
+    :param initializer: the initializer name or config
+    :type initializer: str, dict
+    :param shape: the shape of the initial value
+    :type shape: int or collections.Iterable[int]
     :return: the initial value
     :rtype: function
     """
-    initializer = initializers.get(initializer_name)()
-    initial_value = lambda: initializer([], dtype=tf.float32)
-    return initial_value, initializer_name
+    initializer = initializers.get(initializer)
+    initial_value = lambda: initializer(shape)
+    return initial_value
 
 
 class NotGroundAtomException(Exception):
@@ -163,6 +170,25 @@ class TensorFunctionKey:
         return False
 
 
+def get_standardised_name(string):
+    """
+    Gets a standardised name, from the string, that can be used as a variable
+    name in TensorFlow. The standardised name containing only the values that
+    matches: `[A-Za-z0-9.][A-Za-z0-9_.\\-/]*`
+
+    :param string: the name
+    :type string: str
+    :return: The standardised name.
+    :rtype: str
+    """
+    standard = SPACE_REGEX.sub("_", string)
+    standard = ALLOW_REGEX.sub("-", standard)
+    if FIRST_CHARACTER.search(standard[0]) is not None:
+        return "." + standard
+
+    return standard
+
+
 class TensorFactory:
     """
     A factory of TensorFlow Tensors.
@@ -215,24 +241,35 @@ class TensorFactory:
         :return: the matrix representation of the data for the given predicate
         :rtype: csr_matrix or np.matrix or (csr_matrix, csr_matrix) or float
         """
+        key = self.get_atom_key(atom)
+        return self.function[key](self, atom)
+
+    def get_atom_key(self, atom):
+        """
+        Gets the key of the atom, used to get the correct function to handle it.
+
+        :param atom: the atom
+        :type atom: Atom
+        :return: the key of the atom
+        :rtype: TensorFunctionKey
+        """
         term_types = []
         types = self.program.predicates[atom.predicate]
         for i in range(atom.arity()):
             if types[i].number:
                 term_types.append(FactoryTermType.NUMBER)
             elif atom.terms[i].is_constant():
-                if atom.terms[i] in self.program.iterable_constants:
+                if atom.terms[i] in self.program.iterable_constants.inverse:
                     term_types.append(FactoryTermType.ITERABLE_CONSTANT)
                 else:
                     term_types.append(FactoryTermType.CONSTANT)
             else:
                 term_types.append(FactoryTermType.VARIABLE)
-
         trainable = atom.predicate in self.program.trainable_predicates
         key = TensorFunctionKey(atom.arity(),
                                 self.program.get_true_arity(atom.predicate),
                                 trainable, *term_types)
-        return self.function[key](atom)
+        return key
 
     def get_matrix_representation(self, predicate):
         """
@@ -279,14 +316,14 @@ class TensorFactory:
         tensor = self._tensor_by_name.get(name, None)
         if tensor is None:
             tensor = tf.Variable(initial_value=value, dtype=dtype,
-                                 shape=shape, name=name)
+                                 shape=shape, name=get_standardised_name(name))
         return tensor
 
     def _get_constant(self, name, value, shape, dtype=tf.float32):
         tensor = self._tensor_by_name.get(name, None)
         if tensor is None:
             tensor = tf.constant(value=value, dtype=dtype,
-                                 shape=shape, name=name)
+                                 shape=shape, name=get_standardised_name(name))
         return tensor
 
     def _matrix_to_variable(self, atom, initial_value=None, shape=None):
@@ -345,12 +382,18 @@ class TensorFactory:
                 else:
                     shape = []
             tensor = self._get_variable(
-                "init:{}".format(renamed_atom.__str__()), initial_value, shape)
+                "init-{}".format(renamed_atom.__str__()), initial_value, shape)
             weights = self.get_matrix_representation(atom.predicate).todense()
-            mask = np.array(weights != 0, dtype=np.float32)
+            # IMPROVE: create a function to get a mask with 1 where the fact
+            #  is defined or 0 otherwise.
+            mask = self.program.get_matrix_representation(
+                atom.predicate, mask=True)
+            if isinstance(mask, csr_matrix):
+                mask = mask.todense()
+            mask = 1 - mask
             # noinspection PyTypeChecker
             mask = self._build_constant(
-                mask, shape, "mask:{}".format(renamed_atom.__str__()))
+                mask, shape, "mask-{}".format(renamed_atom.__str__()))
             tensor = tf.multiply(tensor, mask)
             w = self._matrix_to_constant(atom, weights, shape)
             tensor = tf.add(tensor, w)
@@ -417,8 +460,7 @@ class TensorFactory:
             else:
                 value = value.todense()
 
-        tensor = self._build_constant(name, value, shape)
-        return tensor
+        return self._get_constant(name, value, shape)
 
     def _get_initial_value_for_atom(self, atom):
         """
@@ -434,10 +476,10 @@ class TensorFactory:
             raise NotGroundAtomException(atom)
 
         value = self.program.facts_by_predicate.get(
-            atom.predicate, dict()).get(atom).get(atom.simple_key(), None)
+            atom.predicate, dict()).get(atom.simple_key(), None)
         if value is None:
             initializer_name = self._get_initializer_name(atom.predicate)
-            value = get_initial_value_by_name(initializer_name)
+            value = get_initial_value_by_name(initializer_name, [])
             logger.debug("Creating atom %s with initializer %s",
                          atom, initializer_name)
         else:
@@ -456,8 +498,8 @@ class TensorFactory:
         """
         predicate_parameter = self.program.parameters.get(
             predicate, self.program.parameters)
-        initializer_name = predicate_parameter.get("initial_value",
-                                                   "glorot_uniform")
+        initializer_name = predicate_parameter["initial_value"]
+
         return initializer_name
 
     def _get_one_hot_tensor(self, constant):
@@ -473,7 +515,7 @@ class TensorFactory:
         if tensor is None:
             tensor = tf.one_hot([self.program.index_for_constant(constant)],
                                 depth=self.constant_size, dtype=tf.float32,
-                                name=constant.value)
+                                name=get_standardised_name(constant.value))
             self._tensor_by_constant[constant] = tensor
 
         return tensor
@@ -506,22 +548,24 @@ class TensorFactory:
                 if atom.terms[i].is_constant():
                     if value[i] != atom.terms[i].value:
                         weight = 0.0
+            renamed_atom = get_renamed_atom(atom)
             if trainable:
-                w_tensor = self._get_variable("w:{}".format(atom.__str__()),
-                                              weight, [])
+                w_tensor = self._get_variable("w-{}".format(
+                    renamed_atom.__str__()), weight, [])
             else:
-                w_tensor = self._get_constant("w:{}".format(atom.__str__()),
-                                              weight, [])
-            v_tensor = self._get_constant("v:{}:0".format(atom.__str__()),
-                                          atom.terms[0].value, [])
+                w_tensor = self._get_constant("w-{}".format(
+                    renamed_atom.__str__()), weight, [])
+            v_tensor = self._get_constant("v-{}-0".format(
+                renamed_atom.__str__()), atom.terms[0].value, [])
             for i in range(1, atom.arity()):
                 v_tensor_i = self._get_constant(
-                    "v:{}:{}".format(atom.__str__(), i),
+                    "v-{}-{}".format(renamed_atom.__str__(), i),
                     atom.terms[i].value, [])
                 v_tensor = self.attribute_attribute_combining_function(
                     v_tensor, v_tensor_i)
             tensor = self.weight_attribute_combining_function(
-                w_tensor, v_tensor, name=atom.__str__())
+                w_tensor, v_tensor,
+                name=get_standardised_name(renamed_atom.__str__()))
             self._tensor_by_atom[atom] = tensor
         return tensor
 
@@ -546,15 +590,16 @@ class TensorFactory:
                 value = atom.terms[attribute_index].value
             renamed_atom = get_renamed_atom(atom)
             if trainable:
-                w_tensor = self._get_variable("w:{}".format(
+                w_tensor = self._get_variable("w-{}".format(
                     renamed_atom.__str__()), weight, [])
             else:
                 w_tensor = self._get_constant(
-                    "w:{}".format(renamed_atom.__str__()), weight, [])
+                    "w-{}".format(renamed_atom.__str__()), weight, [])
             v_tensor = self._get_constant(
-                "v:{}".format(renamed_atom.__str__()), value, [])
+                "v-{}".format(renamed_atom.__str__()), value, [])
             tensor = self.weight_attribute_combining_function(
-                w_tensor, v_tensor, name=renamed_atom.__str__())
+                w_tensor, v_tensor,
+                name=get_standardised_name(renamed_atom.__str__()))
 
             self._tensor_by_atom[atom] = tensor
         return tensor
@@ -564,32 +609,34 @@ class TensorFactory:
                                 constant_value=None):
         weight, value = self.get_matrix_representation(atom.predicate)
         if constant_value is not None:
+            weight = weight.copy()
             for i in range(len(weight.data)):
                 if value.data[i] != constant_value:
                     weight.data[i] = 0.0
         renamed_atom = get_renamed_atom(atom)
         w_tensor = self._get_constant("w:{}".format(renamed_atom.__str__()),
-                                      weight, [self.constant_size, 1])
+                                      weight.todense(), [self.constant_size, 1])
         if trainable:
-            v_tensor = self._get_variable("v:{}".format(renamed_atom.__str__()),
-                                          value, [self.constant_size, 1])
+            v_tensor = self._get_variable("v-{}".format(renamed_atom.__str__()),
+                                          value.todense(),
+                                          [self.constant_size, 1])
         else:
             v_tensor = self._get_constant("v:{}".format(renamed_atom.__str__()),
-                                          value, [self.constant_size, 1])
+                                          value.todense(),
+                                          [self.constant_size, 1])
         return v_tensor, w_tensor
 
     def _get_arity_2_1_iterable_constant_number(self, atom, constant_index,
                                                 trainable=False):
         tensor = self._tensor_by_atom.get(atom, None)
         if tensor is None:
-            v_tensor, w_tensor = self._get_weights_and_values(atom, trainable)
-            if atom.terms[1].is_constant():
-                weight = self._get_constant("zero_weight_scalar", 0.0, [])
-            else:
-                index = self._get_one_hot_tensor(atom.terms[constant_index])
-                weight = tf.matmul(index, w_tensor, a_is_sparse=True)
-            tensor = self.weight_attribute_combining_function(weight, v_tensor)
-
+            v_tensor, w_tensor = self._get_weights_and_values(
+                atom, trainable, atom.terms[1 - constant_index].value)
+            index = self._get_one_hot_tensor(atom.terms[constant_index])
+            weight = tf.linalg.matmul(index, w_tensor, a_is_sparse=True)
+            value = tf.linalg.matmul(index, v_tensor, a_is_sparse=True)
+            tensor = self.weight_attribute_combining_function(weight, value)
+            tensor = tf.reshape(tensor, [])
             self._tensor_by_atom[atom] = tensor
         return tensor
 
@@ -608,6 +655,11 @@ class TensorFactory:
             self._tensor_by_atom[atom] = tensor
 
         return tensor
+
+    # noinspection PyMissingOrEmptyDocstring
+    def _not_trainable_constant_variable(self, atom):
+        w = self.get_vector_representation_with_constant(atom)
+        return self._matrix_to_constant(atom, w)
 
     # noinspection PyMissingOrEmptyDocstring
     @tensor_function(TensorFunctionKey(0, 0, False))
@@ -662,7 +714,8 @@ class TensorFactory:
             variable_atom = get_variable_atom(atom)
             tensor = self.build_atom(variable_atom)
             index = self._get_one_hot_tensor(atom.terms[0])
-            tensor = tf.matmul(index, tensor, a_is_sparse=True)
+            tensor = tf.linalg.matmul(index, tensor, a_is_sparse=True)
+            tensor = tf.reshape(tensor, [])
             self._tensor_by_atom[atom] = tensor
         return tensor
 
@@ -670,9 +723,9 @@ class TensorFactory:
     @tensor_function(TensorFunctionKey(1, 1, True, FactoryTermType.VARIABLE))
     def arity_1_1_trainable_variable(self, atom):
         initializer_name = self._get_initializer_name(atom.predicate)
-        initial_value = get_initial_value_by_name(initializer_name)
-        tensor = self._matrix_to_variable_with_value(atom, initial_value,
-                                                     [self.constant_size, 1])
+        shape = [self.constant_size, 1]
+        initial_value = get_initial_value_by_name(initializer_name, shape)
+        tensor = self._matrix_to_variable_with_value(atom, initial_value, shape)
         return tensor
 
     # noinspection PyMissingOrEmptyDocstring
@@ -779,11 +832,6 @@ class TensorFactory:
         return self._not_trainable_constants(atom)
 
     # noinspection PyMissingOrEmptyDocstring
-    def _not_trainable_constant_variable(self, atom):
-        w = self.get_vector_representation_with_constant(atom)
-        return self._matrix_to_constant(atom, w)
-
-    # noinspection PyMissingOrEmptyDocstring
     @tensor_function(TensorFunctionKey(2, 2, False, FactoryTermType.CONSTANT,
                                        FactoryTermType.VARIABLE))
     def arity_2_2_not_trainable_constant_variable(self, atom):
@@ -853,7 +901,7 @@ class TensorFactory:
                                  weight=atom.weight)
             tensor = self.build_atom(variable_atom)
             index = self._get_one_hot_tensor(atom.terms[0])
-            tensor = tf.matmul(index, tensor, a_is_sparse=True)
+            tensor = tf.linalg.matmul(index, tensor, a_is_sparse=True)
             self._tensor_by_atom[atom] = tensor
 
         return tensor
@@ -876,8 +924,8 @@ class TensorFactory:
                                  weight=atom.weight)
             tensor = self.build_atom(variable_atom)
             index = self._get_one_hot_tensor(atom.terms[1])
-            tensor = tf.matmul(tensor, index, b_is_sparse=True,
-                               transpose_a=True, transpose_b=True)
+            tensor = tf.linalg.matmul(tensor, index, b_is_sparse=True,
+                                      transpose_a=True, transpose_b=True)
             self._tensor_by_atom[atom] = tensor
 
         return tensor
@@ -894,8 +942,8 @@ class TensorFactory:
             index_0 = self._get_one_hot_tensor(atom.terms[0])
             index_1 = self._get_one_hot_tensor(atom.terms[1])
             index_1 = tf.reshape(index_1, [-1, 1])
-            tensor = tf.matmul(index_0, tensor, a_is_sparse=True)
-            tensor = tf.matmul(tensor, index_1, b_is_sparse=True)
+            tensor = tf.linalg.matmul(index_0, tensor, a_is_sparse=True)
+            tensor = tf.linalg.matmul(tensor, index_1, b_is_sparse=True)
             self._tensor_by_atom[atom] = tensor
         return tensor
 
@@ -909,7 +957,7 @@ class TensorFactory:
             variable_atom = get_variable_atom(atom)
             tensor = self.build_atom(variable_atom)
             index = self._get_one_hot_tensor(atom.terms[0])
-            tensor = tf.matmul(index, tensor, a_is_sparse=True)
+            tensor = tf.linalg.matmul(index, tensor, a_is_sparse=True)
             tensor = tf.reshape(tensor, [-1, 1])
             self._tensor_by_atom[atom] = tensor
         return tensor
@@ -932,7 +980,7 @@ class TensorFactory:
             tensor = self.build_atom(variable_atom)
             index = self._get_one_hot_tensor(atom.terms[1])
             index = tf.reshape(index, [-1, 1])
-            tensor = tf.matmul(tensor, index, b_is_sparse=True)
+            tensor = tf.linalg.matmul(tensor, index, b_is_sparse=True)
             self._tensor_by_atom[atom] = tensor
         return tensor
 

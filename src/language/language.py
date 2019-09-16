@@ -479,7 +479,7 @@ class Atom(Clause):
         :param predicate: the predicate
         :type predicate: str or Predicate
         :param args: the list of terms, if any
-        :type args: Term or str
+        :type args: Term or str, int, float
         :param weight: the weight of the atom
         :type weight: float
         :param context: the context of the atom
