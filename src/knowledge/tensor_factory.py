@@ -900,8 +900,9 @@ class TensorFactory:
             variable_atom = Atom(atom.predicate, atom.terms[0], Variable("X"),
                                  weight=atom.weight)
             tensor = self.build_atom(variable_atom)
-            index = self._get_one_hot_tensor(atom.terms[0])
+            index = self._get_one_hot_tensor(atom.terms[1])
             tensor = tf.linalg.matmul(index, tensor, a_is_sparse=True)
+            tensor = tf.reshape(tensor, [])
             self._tensor_by_atom[atom] = tensor
 
         return tensor
@@ -923,9 +924,10 @@ class TensorFactory:
             variable_atom = Atom(atom.predicate, Variable("X"), atom.terms[1],
                                  weight=atom.weight)
             tensor = self.build_atom(variable_atom)
-            index = self._get_one_hot_tensor(atom.terms[1])
+            index = self._get_one_hot_tensor(atom.terms[0])
             tensor = tf.linalg.matmul(tensor, index, b_is_sparse=True,
                                       transpose_a=True, transpose_b=True)
+            tensor = tf.reshape(tensor, [])
             self._tensor_by_atom[atom] = tensor
 
         return tensor
@@ -944,6 +946,7 @@ class TensorFactory:
             index_1 = tf.reshape(index_1, [-1, 1])
             tensor = tf.linalg.matmul(index_0, tensor, a_is_sparse=True)
             tensor = tf.linalg.matmul(tensor, index_1, b_is_sparse=True)
+            tensor = tf.reshape(tensor, [])
             self._tensor_by_atom[atom] = tensor
         return tensor
 
@@ -965,7 +968,7 @@ class TensorFactory:
     # noinspection PyMissingOrEmptyDocstring
     @tensor_function(TensorFunctionKey(2, 2, True, FactoryTermType.VARIABLE,
                                        FactoryTermType.CONSTANT))
-    def arity_2_2_variable_constant(self, atom):
+    def arity_2_2_trainable_variable_constant(self, atom):
         weights = self.get_vector_representation_with_constant(atom)
         return self._matrix_to_variable(atom, weights)
 
@@ -973,7 +976,7 @@ class TensorFactory:
     @tensor_function(TensorFunctionKey(2, 2, True,
                                        FactoryTermType.VARIABLE,
                                        FactoryTermType.ITERABLE_CONSTANT))
-    def arity_2_2_variable_iterable_constant(self, atom):
+    def arity_2_2_trainable_variable_iterable_constant(self, atom):
         tensor = self._tensor_by_atom.get(atom, None)
         if tensor is None:
             variable_atom = get_variable_atom(atom)
@@ -987,7 +990,7 @@ class TensorFactory:
     # noinspection PyMissingOrEmptyDocstring
     @tensor_function(TensorFunctionKey(2, 2, True, FactoryTermType.VARIABLE,
                                        FactoryTermType.VARIABLE))
-    def arity_2_2_variable_variable(self, atom):
+    def arity_2_2_trainable_variable_variable(self, atom):
         tensor = self._matrix_to_variable(atom)
         if atom.terms[0] == atom.terms[1]:
             same_variables = self._tensor_by_atom.get(atom, None)
