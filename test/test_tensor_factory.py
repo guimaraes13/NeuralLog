@@ -40,15 +40,6 @@ class TestTensorFactory(unittest.TestCase):
         # Create the TensorFactory
         cls.tensor_factory = TensorFactory(neural_program)
 
-    # def test_general(self):
-    # tensor_factory = self.tensor_factory  # type: TensorFactory
-    # program = tensor_factory.program  # type: NeuralLogProgram
-    # self.assertEqual(len(program.constants), 45,
-    #                  "Wrong number of constants!")
-    # self.assertEqual(len(program.iterable_constants), 27,
-    #                  "Wrong number of constants!")
-    # pass
-
     def test_arity_0_not_trainable(self):
         tensor_factory = self.tensor_factory  # type: TensorFactory
         atom = Atom("predicate_0_not_trainable", weight=0.3)
@@ -99,6 +90,26 @@ class TestTensorFactory(unittest.TestCase):
         self.assertAlmostEqual(atom.weight * value, evaluated,
                                places=EQUAL_DELTA)
 
+    def test_arity_1_0_not_trainable_number_variable(self):
+        tensor_factory = self.tensor_factory  # type: TensorFactory
+        value = "X"
+        expected = 2019
+        atom = Atom("year", value, weight=0.7)
+        # atom = Atom("multiply", "X", "Y", weight=0.5)
+        key = tensor_factory.get_atom_key(atom)
+        self.assertEqual(
+            tensor_factory.arity_1_0_not_trainable_number.__func__,
+            tensor_factory.function[key])
+        tensor = tensor_factory.build_atom(atom)
+
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
+        sess.run(init)
+        evaluated = sess.run(tensor)
+        self.assertEqual((), evaluated.shape)
+        self.assertAlmostEqual(atom.weight * expected, evaluated,
+                               places=EQUAL_DELTA)
+
     def test_arity_1_0_trainable_number(self):
         tensor_factory = self.tensor_factory  # type: TensorFactory
         value = 21
@@ -115,6 +126,25 @@ class TestTensorFactory(unittest.TestCase):
         evaluated = sess.run(tensor)
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * value, evaluated,
+                               places=EQUAL_DELTA)
+
+    def test_arity_1_0_trainable_number_variable(self):
+        tensor_factory = self.tensor_factory  # type: TensorFactory
+        value = "X"
+        expected = 21
+        atom = Atom("century", value, weight=0.9)
+        key = tensor_factory.get_atom_key(atom)
+        self.assertEqual(
+            tensor_factory.arity_1_0_trainable_number.__func__,
+            tensor_factory.function[key])
+        tensor = tensor_factory.build_atom(atom)
+
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
+        sess.run(init)
+        evaluated = sess.run(tensor)
+        self.assertEqual((), evaluated.shape)
+        self.assertAlmostEqual(atom.weight * expected, evaluated,
                                places=EQUAL_DELTA)
 
     def test_arity_1_1_not_trainable_constant(self):
@@ -258,6 +288,67 @@ class TestTensorFactory(unittest.TestCase):
         self.assertAlmostEqual(atom.weight * value1 * value2, evaluated,
                                places=EQUAL_DELTA)
 
+    def test_arity_2_0_not_trainable_number_number_variable(self):
+        tensor_factory = self.tensor_factory  # type: TensorFactory
+        value1 = 2.0
+        value2 = "X"
+        expected2 = 3.0
+        atom = Atom("multiply", value1, value2, weight=0.5)
+        key = tensor_factory.get_atom_key(atom)
+        self.assertEqual(
+            tensor_factory.arity_2_0_not_trainable_number_number.__func__,
+            tensor_factory.function[key])
+        tensor = tensor_factory.build_atom(atom)
+
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
+        sess.run(init)
+        evaluated = sess.run(tensor)
+        self.assertEqual((), evaluated.shape)
+        self.assertAlmostEqual(atom.weight * value1 * expected2, evaluated,
+                               places=EQUAL_DELTA)
+
+    def test_arity_2_0_not_trainable_number_variable_number(self):
+        tensor_factory = self.tensor_factory  # type: TensorFactory
+        value1 = "X"
+        expected1 = 2.0
+        value2 = 3.0
+        atom = Atom("multiply", value1, value2, weight=0.5)
+        key = tensor_factory.get_atom_key(atom)
+        self.assertEqual(
+            tensor_factory.arity_2_0_not_trainable_number_number.__func__,
+            tensor_factory.function[key])
+        tensor = tensor_factory.build_atom(atom)
+
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
+        sess.run(init)
+        evaluated = sess.run(tensor)
+        self.assertEqual((), evaluated.shape)
+        self.assertAlmostEqual(atom.weight * expected1 * value2, evaluated,
+                               places=EQUAL_DELTA)
+
+    def test_arity_2_0_not_trainable_number_variable_number_variable(self):
+        tensor_factory = self.tensor_factory  # type: TensorFactory
+        value1 = "X"
+        expected1 = 2.0
+        value2 = "Y"
+        expected2 = 3.0
+        atom = Atom("multiply", value1, value2, weight=0.5)
+        key = tensor_factory.get_atom_key(atom)
+        self.assertEqual(
+            tensor_factory.arity_2_0_not_trainable_number_number.__func__,
+            tensor_factory.function[key])
+        tensor = tensor_factory.build_atom(atom)
+
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
+        sess.run(init)
+        evaluated = sess.run(tensor)
+        self.assertEqual((), evaluated.shape)
+        self.assertAlmostEqual(atom.weight * expected1 * expected2, evaluated,
+                               places=EQUAL_DELTA)
+
     def test_arity_2_0_trainable_number_number(self):
         tensor_factory = self.tensor_factory  # type: TensorFactory
         value1 = 4.0
@@ -277,6 +368,67 @@ class TestTensorFactory(unittest.TestCase):
         self.assertAlmostEqual(atom.weight * value1 * value2, evaluated,
                                places=EQUAL_DELTA)
 
+    def test_arity_2_0_trainable_number_number_variable(self):
+        tensor_factory = self.tensor_factory  # type: TensorFactory
+        value1 = 4.0
+        value2 = "X"
+        expected2 = 3.0
+        atom = Atom("multiply_2", value1, value2, weight=0.25)
+        key = tensor_factory.get_atom_key(atom)
+        self.assertEqual(
+            tensor_factory.arity_2_0_trainable_number_number.__func__,
+            tensor_factory.function[key])
+        tensor = tensor_factory.build_atom(atom)
+
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
+        sess.run(init)
+        evaluated = sess.run(tensor)
+        self.assertEqual((), evaluated.shape)
+        self.assertAlmostEqual(atom.weight * value1 * expected2, evaluated,
+                               places=EQUAL_DELTA)
+
+    def test_arity_2_0_trainable_number_variable_number(self):
+        tensor_factory = self.tensor_factory  # type: TensorFactory
+        value1 = "X"
+        expected1 = 4.0
+        value2 = 3.0
+        atom = Atom("multiply_2", value1, value2, weight=0.25)
+        key = tensor_factory.get_atom_key(atom)
+        self.assertEqual(
+            tensor_factory.arity_2_0_trainable_number_number.__func__,
+            tensor_factory.function[key])
+        tensor = tensor_factory.build_atom(atom)
+
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
+        sess.run(init)
+        evaluated = sess.run(tensor)
+        self.assertEqual((), evaluated.shape)
+        self.assertAlmostEqual(atom.weight * expected1 * value2, evaluated,
+                               places=EQUAL_DELTA)
+
+    def test_arity_2_0_trainable_number_variable_number_variable(self):
+        tensor_factory = self.tensor_factory  # type: TensorFactory
+        value1 = "X"
+        expected1 = 4.0
+        value2 = "Y"
+        expected2 = 3.0
+        atom = Atom("multiply_2", value1, value2, weight=0.25)
+        key = tensor_factory.get_atom_key(atom)
+        self.assertEqual(
+            tensor_factory.arity_2_0_trainable_number_number.__func__,
+            tensor_factory.function[key])
+        tensor = tensor_factory.build_atom(atom)
+
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
+        sess.run(init)
+        evaluated = sess.run(tensor)
+        self.assertEqual((), evaluated.shape)
+        self.assertAlmostEqual(atom.weight * expected1 * expected2, evaluated,
+                               places=EQUAL_DELTA)
+
     def test_arity_2_1_not_trainable_constant_number(self):
         tensor_factory = self.tensor_factory  # type: TensorFactory
         value = 30
@@ -293,6 +445,25 @@ class TestTensorFactory(unittest.TestCase):
         evaluated = sess.run(tensor)
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * value, evaluated,
+                               places=EQUAL_DELTA)
+
+    def test_arity_2_1_not_trainable_constant_number_variable(self):
+        tensor_factory = self.tensor_factory  # type: TensorFactory
+        value = "X"
+        expected = 30
+        atom = Atom("age", "some_male", value, weight=0.211)
+        key = tensor_factory.get_atom_key(atom)
+        self.assertEqual(
+            tensor_factory.arity_2_1_not_trainable_constant_number.__func__,
+            tensor_factory.function[key])
+        tensor = tensor_factory.build_atom(atom)
+
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
+        sess.run(init)
+        evaluated = sess.run(tensor)
+        self.assertEqual((), evaluated.shape)
+        self.assertAlmostEqual(atom.weight * expected, evaluated,
                                places=EQUAL_DELTA)
 
     def test_arity_2_1_not_trainable_iterable_constant_number(self):
@@ -314,12 +485,60 @@ class TestTensorFactory(unittest.TestCase):
         self.assertAlmostEqual(atom.weight * value, evaluated,
                                places=EQUAL_DELTA)
 
+    def test_arity_2_1_not_trainable_iterable_constant_number_variable(self):
+        tensor_factory = self.tensor_factory  # type: TensorFactory
+        value = "X"
+        expected = 41
+        atom = Atom("age", "colin", value, weight=0.223)
+        key = tensor_factory.get_atom_key(atom)
+        self.assertEqual(
+            tensor_factory.
+                arity_2_1_not_trainable_iterable_constant_number.__func__,
+            tensor_factory.function[key])
+        tensor = tensor_factory.build_atom(atom)
+
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
+        sess.run(init)
+        evaluated = sess.run(tensor)
+        self.assertEqual((), evaluated.shape)
+        self.assertAlmostEqual(atom.weight * expected, evaluated,
+                               places=EQUAL_DELTA)
+
     def test_arity_2_1_not_trainable_variable_number(self):
         tensor_factory = self.tensor_factory  # type: TensorFactory
         value = 27
         atom = Atom("age", "X", value)
         weight = np.array([[0.0], [0.0], [0.0], [0.0], [0.0], [0.0], [0.0],
                            [0.0], [0.227], [0.241], [0.0], [0.0], [0.0],
+                           [0.0], [0.0], [0.0], [0.0], [0.0], [0.0], [0.0]])
+        values = np.array([[0], [0], [0], [0], [0], [0], [0],
+                           [41], [27], [27], [0], [0], [0], [0],
+                           [0], [0], [0], [0], [0], [0]])
+        correct = weight * values
+        key = tensor_factory.get_atom_key(atom)
+        self.assertEqual(
+            tensor_factory.arity_2_1_not_trainable_variable_number.__func__,
+            tensor_factory.function[key])
+        tensor = tensor_factory.build_atom(atom)
+
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
+        sess.run(init)
+        evaluated = sess.run(tensor)
+        self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
+        for i in range(tensor_factory.constant_size):
+            self.assertAlmostEqual(
+                correct[i, 0], evaluated[i, 0], places=EQUAL_DELTA,
+                msg="Incorrect value for constant {}: {}".format(
+                    i, tensor_factory.program.iterable_constants[i]))
+
+    def test_arity_2_1_not_trainable_variable_number_variable(self):
+        tensor_factory = self.tensor_factory  # type: TensorFactory
+        value = "Y"
+        atom = Atom("age", "X", value)
+        weight = np.array([[0.0], [0.0], [0.0], [0.0], [0.0], [0.0], [0.0],
+                           [0.223], [0.227], [0.241], [0.0], [0.0], [0.0],
                            [0.0], [0.0], [0.0], [0.0], [0.0], [0.0], [0.0]])
         values = np.array([[0], [0], [0], [0], [0], [0], [0],
                            [41], [27], [27], [0], [0], [0], [0],
@@ -360,6 +579,25 @@ class TestTensorFactory(unittest.TestCase):
         self.assertAlmostEqual(atom.weight * value, evaluated,
                                places=EQUAL_DELTA)
 
+    def test_arity_2_1_not_trainable_number_variable_constant(self):
+        tensor_factory = self.tensor_factory  # type: TensorFactory
+        value = "X"
+        expected = 1.72
+        atom = Atom("inv_height", value, "some_female", weight=0.337)
+        key = tensor_factory.get_atom_key(atom)
+        self.assertEqual(
+            tensor_factory.arity_2_1_not_trainable_number_constant.__func__,
+            tensor_factory.function[key])
+        tensor = tensor_factory.build_atom(atom)
+
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
+        sess.run(init)
+        evaluated = sess.run(tensor)
+        self.assertEqual((), evaluated.shape)
+        self.assertAlmostEqual(atom.weight * expected, evaluated,
+                               places=EQUAL_DELTA)
+
     def test_arity_2_1_not_trainable_number_iterable_constant(self):
         tensor_factory = self.tensor_factory  # type: TensorFactory
         value = 1.73
@@ -379,6 +617,26 @@ class TestTensorFactory(unittest.TestCase):
         self.assertAlmostEqual(atom.weight * value, evaluated,
                                places=EQUAL_DELTA)
 
+    def test_arity_2_1_not_trainable_number_variable_iterable_constant(self):
+        tensor_factory = self.tensor_factory  # type: TensorFactory
+        value = "X"
+        expected = 1.73
+        atom = Atom("inv_height", value, "jennifer", weight=0.353)
+        key = tensor_factory.get_atom_key(atom)
+        self.assertEqual(
+            tensor_factory.
+                arity_2_1_not_trainable_number_iterable_constant.__func__,
+            tensor_factory.function[key])
+        tensor = tensor_factory.build_atom(atom)
+
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
+        sess.run(init)
+        evaluated = sess.run(tensor)
+        self.assertEqual((), evaluated.shape)
+        self.assertAlmostEqual(atom.weight * expected, evaluated,
+                               places=EQUAL_DELTA)
+
     def test_arity_2_1_not_trainable_number_variable(self):
         tensor_factory = self.tensor_factory  # type: TensorFactory
         value = 1.65
@@ -391,6 +649,36 @@ class TestTensorFactory(unittest.TestCase):
             [[0.0], [0.0], [0.0], [0.0], [1.81], [0.0], [0.0], [1.57],
              [2.06], [1.7], [1.9], [1.73], [1.65], [1.65], [0.0], [0.0],
              [1.65], [0.0], [0.0], [0.0]])
+        correct = weight * values
+        key = tensor_factory.get_atom_key(atom)
+        self.assertEqual(
+            tensor_factory.arity_2_1_not_trainable_number_variable.__func__,
+            tensor_factory.function[key])
+        tensor = tensor_factory.build_atom(atom)
+
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
+        sess.run(init)
+        evaluated = sess.run(tensor)
+        self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
+        for i in range(tensor_factory.constant_size):
+            self.assertAlmostEqual(
+                correct[i, 0], evaluated[i, 0], places=EQUAL_DELTA,
+                msg="Incorrect value for constant {}: {}".format(
+                    i, tensor_factory.program.iterable_constants[i]))
+
+    def test_arity_2_1_not_trainable_number_variable_variable(self):
+        tensor_factory = self.tensor_factory  # type: TensorFactory
+        value = "Y"
+        atom = Atom("inv_height", value, "X")
+        weight = np.array([[0.0], [0.0], [0.0], [0.0], [0.373], [0.0], [0.0],
+                           [0.311], [0.313], [0.347], [0.317], [0.353],
+                           [0.359], [0.331], [0.0], [0.0], [0.367], [0.0],
+                           [0.0], [0.0]])
+        values = np.array([[0.0], [0.0], [0.0], [0.0], [1.81], [0.0], [0.0],
+                           [1.57], [2.06], [1.7], [1.7], [1.73],
+                           [1.65], [1.65], [0.0], [0.0], [1.65], [0.0],
+                           [0.0], [0.0]])
         correct = weight * values
         key = tensor_factory.get_atom_key(atom)
         self.assertEqual(
@@ -427,6 +715,26 @@ class TestTensorFactory(unittest.TestCase):
         self.assertAlmostEqual(atom.weight * value, evaluated,
                                places=EQUAL_DELTA)
 
+    # TODO: The trainable part
+    def test_arity_2_1_trainable_constant_number_variable(self):
+        tensor_factory = self.tensor_factory  # type: TensorFactory
+        value = "X"
+        expected = 1.73
+        atom = Atom("height", "some_male", value, weight=0.307)
+        key = tensor_factory.get_atom_key(atom)
+        self.assertEqual(
+            tensor_factory.arity_2_1_trainable_constant_number.__func__,
+            tensor_factory.function[key])
+        tensor = tensor_factory.build_atom(atom)
+
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
+        sess.run(init)
+        evaluated = sess.run(tensor)
+        self.assertEqual((), evaluated.shape)
+        self.assertAlmostEqual(atom.weight * expected, evaluated,
+                               places=EQUAL_DELTA)
+
     def test_arity_2_1_trainable_iterable_constant_number(self):
         tensor_factory = self.tensor_factory  # type: TensorFactory
         value = 1.7
@@ -446,6 +754,26 @@ class TestTensorFactory(unittest.TestCase):
         self.assertAlmostEqual(atom.weight * value, evaluated,
                                places=EQUAL_DELTA)
 
+    def test_arity_2_1_trainable_iterable_constant_number_variable(self):
+        tensor_factory = self.tensor_factory  # type: TensorFactory
+        value = "X"
+        expected = 1.7
+        atom = Atom("height", "james", value, weight=0.317)
+        key = tensor_factory.get_atom_key(atom)
+        self.assertEqual(
+            tensor_factory.
+                arity_2_1_trainable_iterable_constant_number.__func__,
+            tensor_factory.function[key])
+        tensor = tensor_factory.build_atom(atom)
+
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
+        sess.run(init)
+        evaluated = sess.run(tensor)
+        self.assertEqual((), evaluated.shape)
+        self.assertAlmostEqual(atom.weight * expected, evaluated,
+                               places=EQUAL_DELTA)
+
     def test_arity_2_1_trainable_variable_number(self):
         tensor_factory = self.tensor_factory  # type: TensorFactory
         value = 1.7
@@ -454,6 +782,36 @@ class TestTensorFactory(unittest.TestCase):
             [[0.0], [0.0], [0.0], [0.0], [0.0], [0.0], [0.0], [0.0],
              [0.0], [0.347], [0.317], [0.0], [0.0], [0.0], [0.0], [0.0],
              [0.0], [0.0], [0.0], [0.0]])
+        values = np.array(
+            [[0.0], [0.0], [0.0], [0.0], [1.81], [0.0], [0.0], [1.57],
+             [2.06], [1.7], [1.7], [1.73], [1.59], [1.65], [0.0], [0.0],
+             [1.82], [0.0], [0.0], [0.0]])
+        correct = weight * values
+        key = tensor_factory.get_atom_key(atom)
+        self.assertEqual(
+            tensor_factory.arity_2_1_trainable_variable_number.__func__,
+            tensor_factory.function[key])
+        tensor = tensor_factory.build_atom(atom)
+
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
+        sess.run(init)
+        evaluated = sess.run(tensor)
+        self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
+        for i in range(tensor_factory.constant_size):
+            self.assertAlmostEqual(
+                correct[i, 0], evaluated[i, 0], places=EQUAL_DELTA,
+                msg="Incorrect value for constant {}: {}".format(
+                    i, tensor_factory.program.iterable_constants[i]))
+
+    def test_arity_2_1_trainable_variable_number_variable(self):
+        tensor_factory = self.tensor_factory  # type: TensorFactory
+        value = "Y"
+        atom = Atom("height", "X", value)
+        weight = np.array(
+            [[0.0], [0.0], [0.0], [0.0], [0.373], [0.0], [0.0], [0.311],
+             [0.313], [0.347], [0.317], [0.353], [0.359], [0.331], [0.0], [0.0],
+             [0.367], [0.0], [0.0], [0.0]])
         values = np.array(
             [[0.0], [0.0], [0.0], [0.0], [1.81], [0.0], [0.0], [1.57],
              [2.06], [1.7], [1.7], [1.73], [1.59], [1.65], [0.0], [0.0],
@@ -494,6 +852,25 @@ class TestTensorFactory(unittest.TestCase):
         self.assertAlmostEqual(atom.weight * value, evaluated,
                                places=EQUAL_DELTA)
 
+    def test_arity_2_1_trainable_number_variable_constant(self):
+        tensor_factory = self.tensor_factory  # type: TensorFactory
+        value = "X"
+        expected = 30
+        atom = Atom("inv_age", value, "some_male", weight=0.211)
+        key = tensor_factory.get_atom_key(atom)
+        self.assertEqual(
+            tensor_factory.arity_2_1_trainable_number_constant.__func__,
+            tensor_factory.function[key])
+        tensor = tensor_factory.build_atom(atom)
+
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
+        sess.run(init)
+        evaluated = sess.run(tensor)
+        self.assertEqual((), evaluated.shape)
+        self.assertAlmostEqual(atom.weight * expected, evaluated,
+                               places=EQUAL_DELTA)
+
     def test_arity_2_1_trainable_number_iterable_constant(self):
         tensor_factory = self.tensor_factory  # type: TensorFactory
         value = 27
@@ -513,6 +890,26 @@ class TestTensorFactory(unittest.TestCase):
         self.assertAlmostEqual(atom.weight * value, evaluated,
                                places=EQUAL_DELTA)
 
+    def test_arity_2_1_trainable_number_variable_iterable_constant(self):
+        tensor_factory = self.tensor_factory  # type: TensorFactory
+        value = "X"
+        expected = 27
+        atom = Atom("inv_age", value, "francesca", weight=0.241)
+        key = tensor_factory.get_atom_key(atom)
+        self.assertEqual(
+            tensor_factory.
+                arity_2_1_trainable_number_iterable_constant.__func__,
+            tensor_factory.function[key])
+        tensor = tensor_factory.build_atom(atom)
+
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
+        sess.run(init)
+        evaluated = sess.run(tensor)
+        self.assertEqual((), evaluated.shape)
+        self.assertAlmostEqual(atom.weight * expected, evaluated,
+                               places=EQUAL_DELTA)
+
     def test_arity_2_1_trainable_number_variable(self):
         tensor_factory = self.tensor_factory  # type: TensorFactory
         value = 27
@@ -524,6 +921,36 @@ class TestTensorFactory(unittest.TestCase):
         values = np.array(
             [[0.0], [0.0], [0.0], [0.0], [0.0], [0.0], [0.0], [0.223],
              [0.227], [0.241], [0.0], [0.0], [0.0], [0.0], [0.0], [0.0],
+             [0.0], [0.0], [0.0], [0.0]])
+        correct = weight * values
+        key = tensor_factory.get_atom_key(atom)
+        self.assertEqual(
+            tensor_factory.arity_2_1_trainable_number_variable.__func__,
+            tensor_factory.function[key])
+        tensor = tensor_factory.build_atom(atom)
+
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
+        sess.run(init)
+        evaluated = sess.run(tensor)
+        self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
+        for i in range(tensor_factory.constant_size):
+            self.assertAlmostEqual(
+                correct[i, 0], evaluated[i, 0], places=EQUAL_DELTA,
+                msg="Incorrect value for constant {}: {}".format(
+                    i, tensor_factory.program.iterable_constants[i]))
+
+    def test_arity_2_1_trainable_number_variable_variable(self):
+        tensor_factory = self.tensor_factory  # type: TensorFactory
+        value = "Y"
+        atom = Atom("inv_age", value, "X")
+        weight = np.array(
+            [[0.0], [0.0], [0.0], [0.0], [0.0], [0.0], [0.0], [0.223],
+             [0.227], [0.241], [0.0], [0.0], [0.0], [0.0], [0.0], [0.0],
+             [0.0], [0.0], [0.0], [0.0]])
+        values = np.array(
+            [[0.0], [0.0], [0.0], [0.0], [0.0], [0.0], [0.0], [41],
+             [27], [27], [0.0], [0.0], [0.0], [0.0], [0.0], [0.0],
              [0.0], [0.0], [0.0], [0.0]])
         correct = weight * values
         key = tensor_factory.get_atom_key(atom)
@@ -721,7 +1148,7 @@ class TestTensorFactory(unittest.TestCase):
         correct = np.array([
             [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
              0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.701, 0.709,
+            [0.0, 0.006, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.701, 0.709,
              0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
             [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
              0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
@@ -746,7 +1173,7 @@ class TestTensorFactory(unittest.TestCase):
             [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
              0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
             [0.743, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-             0.0, 0.0, 0.0, 0.0, 0.0, 0.751, 0.0],
+             0.003, 0.0, 0.0, 0.0, 0.0, 0.751, 0.0],
             [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
              0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
             [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
@@ -782,7 +1209,34 @@ class TestTensorFactory(unittest.TestCase):
                         i, j, tensor_factory.program.iterable_constants[i],
                         tensor_factory.program.iterable_constants[j]))
 
-    # TODO: The trainables
+    def test_arity_2_2_not_trainable_same_variables(self):
+        tensor_factory = self.tensor_factory  # type: TensorFactory
+        value = ["X", "X"]
+        atom = Atom("father", *value)
+        correct = np.array([
+            [0.0], [0.006], [0.0], [0.0], [0.0], [0.0], [0.0], [0.0], [0.0],
+            [0.0], [0.0], [0.0], [0.0], [0.003], [0.0], [0.0], [0.0], [0.0],
+            [0.0], [0.0]
+        ])
+        key = tensor_factory.get_atom_key(atom)
+        self.assertEqual(
+            tensor_factory.arity_2_2_not_trainable_variable_variable.
+                __func__,
+            tensor_factory.function[key])
+        tensor = tensor_factory.build_atom(atom)
+
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
+        sess.run(init)
+        evaluated = sess.run(tf.sparse.to_dense(tensor))
+        self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
+        for i in range(tensor_factory.constant_size):
+            self.assertAlmostEqual(
+                correct[i, 0], evaluated[i, 0], places=EQUAL_DELTA,
+                msg="Incorrect value for constants {}: {}".format(
+                    i, tensor_factory.program.iterable_constants[i],
+                ))
+
     def test_arity_2_2_trainable_constant_constant(self):
         tensor_factory = self.tensor_factory  # type: TensorFactory
         value = ["some_male", "some_female"]
@@ -904,7 +1358,7 @@ class TestTensorFactory(unittest.TestCase):
                 msg="Incorrect value for constant {}: {}".format(
                     i, tensor_factory.program.iterable_constants[i]))
 
-    def test_arity_2_2_variable_constant(self):
+    def test_arity_2_2_trainable_variable_constant(self):
         tensor_factory = self.tensor_factory  # type: TensorFactory
         value = ["X", "some_female"]
         atom = Atom("niece", *value)
@@ -929,7 +1383,7 @@ class TestTensorFactory(unittest.TestCase):
                 msg="Incorrect value for constant {}: {}".format(
                     i, tensor_factory.program.iterable_constants[i]))
 
-    def test_arity_2_2_variable_iterable_constant(self):
+    def test_arity_2_2_trainable_variable_iterable_constant(self):
         tensor_factory = self.tensor_factory  # type: TensorFactory
         value = ["X", "jennifer"]
         atom = Atom("niece", *value)
@@ -954,7 +1408,7 @@ class TestTensorFactory(unittest.TestCase):
                 msg="Incorrect value for constant {}: {}".format(
                     i, tensor_factory.program.iterable_constants[i]))
 
-    def test_arity_2_2_variable_variable(self):
+    def test_arity_2_2_trainable_variable_variable(self):
         tensor_factory = self.tensor_factory  # type: TensorFactory
         value = ["X", "Y"]
         atom = Atom("nephew", *value)
@@ -1022,13 +1476,42 @@ class TestTensorFactory(unittest.TestCase):
                         i, j, tensor_factory.program.iterable_constants[i],
                         tensor_factory.program.iterable_constants[j]))
 
-    # TODO: Put the test.py into test methods here.
+    def test_arity_2_2_trainable_same_variables(self):
+        tensor_factory = self.tensor_factory  # type: TensorFactory
+        value = ["X", "X"]
+        atom = Atom("uncle", *value)
+        correct = np.array([
+            [0.0], [0.0], [0.0], [0.029], [0.0], [0.0], [0.0], [0.0], [0.013],
+            [0.0], [0.0], [0.0], [0.0], [0.0], [0.0], [0.0], [0.0], [0.0],
+            [0.0], [0.0]
+        ])
+        key = tensor_factory.get_atom_key(atom)
+        self.assertEqual(
+            tensor_factory.arity_2_2_trainable_variable_variable.
+                __func__,
+            tensor_factory.function[key])
+        tensor = tensor_factory.build_atom(atom)
+
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
+        sess.run(init)
+        evaluated = sess.run(tensor)
+        self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
+        for i in range(tensor_factory.constant_size):
+            self.assertAlmostEqual(
+                correct[i, 0], evaluated[i, 0], places=EQUAL_DELTA,
+                msg="Incorrect value for constants {}: {}".format(
+                    i, tensor_factory.program.iterable_constants[i],
+                ))
+
+    # TODO: fix the case p(X, X) for variable and variable number,
+    #  this should only return the weights where the variables' values match
     # TODO: for each test involving constants (or numbers), create new tests
     #  for constants (or numbers) not in the knowledge base.
-    # TODO: test if the values of trainable iterable constants and trainable
+
+    # IMPROVE: test if the values of trainable iterable constants and trainable
     #  variables are pointing to the same variable.
-    # TODO: for each test involving numbers, test with number constant and
-    #  number variable.
+    #  Skip this to the network test.
 
 
 if __name__ == '__main__':

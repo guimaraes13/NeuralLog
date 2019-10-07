@@ -514,8 +514,9 @@ class Atom(Clause):
         :return: the simple key of the atom
         :rtype: tuple[Predicate, tuple[Term]]
         """
-        return self.predicate, tuple([None if isinstance(x, Number) else
-                                      x for x in self.terms])
+        return self.predicate, tuple(
+            [None if isinstance(x, Number) or not x.is_constant() else
+             x for x in self.terms])
 
     # noinspection PyMissingOrEmptyDocstring
     def is_grounded(self):
@@ -637,8 +638,7 @@ class AtomClause(Clause):
         :return: the simple key of the atom
         :rtype: tuple[Predicate, tuple[Term]]
         """
-        return self.atom.predicate, tuple([None if isinstance(x, Number) else
-                                           x for x in self.atom.terms])
+        return self.atom.simple_key()
 
 
 class HornClause(Clause):
