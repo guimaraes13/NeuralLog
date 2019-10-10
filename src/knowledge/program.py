@@ -206,12 +206,7 @@ class NeuralLogProgram:
     trainable_predicates: Set[Predicate] = set()
     "The trainable predicates"
 
-    parameters: Dict[Any, Any] = {
-        "initial_value": {
-            "class_name": "random_normal",
-            "config": {"mean": 0.5, "stddev": 0.125}
-        }
-    }
+    parameters: Dict[Any, Any] = dict()
     "A dictionary with the parameters defined in the program"
 
     def __init__(self, clauses):
@@ -225,6 +220,7 @@ class NeuralLogProgram:
         self._process_clauses(clauses)
         del self._last_atom_for_predicate
         self._get_constants()
+        self._add_default_parameters()
 
     def _process_clauses(self, clauses):
         """
@@ -573,13 +569,17 @@ class NeuralLogProgram:
 
         return indices
 
-    def get_vector_representation_with_constant(self, atom):
+    def get_vector_representation_with_constant(self, atom, mask=False):
         """
         Gets the vector representation for a binary atom with a constant and
         a variable.
 
         :param atom: the binary atom
         :type atom: Atom
+        :param mask: if True, instead of the weights, returns 1.0 if for the
+        facts that appears in the knowledge base, even if its weight is 0.0;
+        or 0.0 otherwise
+        :type mask: bool
         :raise UnsupportedMatrixRepresentation in the case the predicate is
         not convertible to matrix form
         :return: the vector representation
@@ -603,7 +603,7 @@ class NeuralLogProgram:
                 continue
             ind[0].append(index)
             ind[1].append(0)
-            data.append(fact.weight)
+            data.append(1.0 if mask else fact.weight)
 
         return csr_matrix((data, tuple(ind)),
                           shape=(self.number_of_entities, 1))
@@ -722,3 +722,10 @@ class NeuralLogProgram:
         for i in range(1, arity - 2):
             parameter_dict = parameter_dict.get(atom.terms[i].value, dict())
         parameter_dict[atom.terms[-2].value] = atom.terms[-1].value
+
+    def _add_default_parameters(self):
+        if "initial_value" not in self.parameters:
+            self.parameters["initial_value"] = {
+                "class_name": "random_normal",
+                "config": {"mean": 0.5, "stddev": 0.125}
+            }
