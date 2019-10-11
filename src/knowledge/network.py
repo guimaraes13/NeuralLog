@@ -9,8 +9,7 @@ from scipy.sparse import csr_matrix
 from tensorflow import keras
 from typing import Dict
 
-# from knowledge.tensor_factory import TensorFactory
-from src.knowledge.tensor_factory import TensorFactory
+from src.knowledge.tensor_factory import TensorFactory, get_standardised_name
 from src.language.language import Predicate, Atom
 
 # Network part
@@ -23,6 +22,11 @@ from src.language.language import Predicate, Atom
 # TODO: create a function to transform the examples from logic to numeric
 # TODO: create a function to extracted the weights learned by the network
 # TODO: treaty the binary atom with equal variables
+
+# IMPROVE: test if the values of trainable iterable constants and trainable
+#  variables are pointing to the same variable.
+#  Skip this to the network test.
+
 
 logger = logging.getLogger()
 
@@ -40,16 +44,16 @@ class PredicateLayer(keras.layers.Layer):
         """
         Creates a PredicateLayer.
 
-        :param predicate: the predicate of the layer
-        :type predicate: Predicate
+        :param name: the name of the layer
+        :type name: str
         :param combining_function: the combining function.
         :type combining_function: function
         :param kwargs: additional arguments
         :type kwargs: dict
         """
-        self.combining_function = combining_function
         kwargs["name"] = name
         super(PredicateLayer, self).__init__(**kwargs)
+        self.combining_function = combining_function
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
@@ -62,6 +66,51 @@ class PredicateLayer(keras.layers.Layer):
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):
         return super(PredicateLayer, self).get_config()
+
+    # noinspection PyMissingOrEmptyDocstring
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
+
+
+class FactLayer(keras.layers.Layer):
+    """
+    A Layer to represent the logic facts from a predicate.
+    """
+
+    def __init__(self, name, kernel, combining_function, **kwargs):
+        """
+        Creates a PredicateLayer.
+
+        :param name: the name of the layer
+        :type name: str
+        :param kernel: the data of the layer.
+        :type kernel: tf.Tensor
+        :param combining_function: the combining function.
+        :type combining_function: function
+        :param kwargs: additional arguments
+        :type kwargs: dict[str, Any]
+        """
+        kwargs["name"] = name
+        super(FactLayer, self).__init__(**kwargs)
+        self.kernel = kernel
+        self.combining_function = combining_function
+
+    # noinspection PyMissingOrEmptyDocstring
+    def build(self, input_shape):
+        return tf.TensorShape(input_shape)
+
+    # noinspection PyMissingOrEmptyDocstring
+    def call(self, inputs, **kwargs):
+        return self.combining_function(inputs, self.kernel)
+
+    # noinspection PyMissingOrEmptyDocstring
+    def compute_output_shape(self, input_shape):
+        return tf.TensorShape(input_shape)
+
+    # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
+    def get_config(self):
+        return super(FactLayer, self).get_config()
 
     # noinspection PyMissingOrEmptyDocstring
     @classmethod
@@ -99,36 +148,6 @@ class RuleLayer(keras.layers.Layer):
         return cls(**config)
 
 
-class FactLayer(keras.layers.Layer):
-    """
-    A Layer to represent the logic facts from a predicate.
-    """
-
-    def __init__(self, **kwargs):
-        super(FactLayer, self).__init__(**kwargs)
-
-    # noinspection PyMissingOrEmptyDocstring
-    def build(self, input_shape):
-        pass
-
-    # noinspection PyMissingOrEmptyDocstring
-    def call(self, inputs, **kwargs):
-        pass
-
-    # noinspection PyMissingOrEmptyDocstring
-    def compute_output_shape(self, input_shape):
-        pass
-
-    # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
-    def get_config(self):
-        pass
-
-    # noinspection PyMissingOrEmptyDocstring
-    @classmethod
-    def from_config(cls, config):
-        return cls(**config)
-
-
 class NeuralLogNetwork(keras.Model):
     """
     The NeuralLog Network.
@@ -137,22 +156,26 @@ class NeuralLogNetwork(keras.Model):
     _layer_by_predicate: Dict[Predicate, PredicateLayer] = dict()
     "The layer by predicate"
 
-    def __init__(self, program, predicate_combining=tf.math.accumulate_n):
+    # TODO: Create a way to define the functions in the program
+    def __init__(self, program,
+                 predicate_combining_function=tf.math.accumulate_n,
+                 path_combining_function=tf.math.multiply,
+                 edge_combining_function=tf.tensordot):
         """
         Creates a NeuralLogNetwork.
 
         :param program: the neural language
         :type program: NeuralLogProgram
-        :param predicate_combining: the combining function. The default
+        :param predicate_combining_function: the combining function. The default
         combining function is `sum`, implemented by `tf.accumulate_n`
-        :type predicate_combining: function
+        :type predicate_combining_function: function
         """
         super(NeuralLogNetwork, self).__init__(name="NeuralLogNetwork")
         self.program = program
         self.constant_size = len(self.program.iterable_constants)
-        self.predicate_combining = predicate_combining
-        self.path_combining = None
-        self.edge_combining = None
+        self.predicate_combining_function = predicate_combining_function
+        self.path_combining_function = path_combining_function
+        self.edge_combining_function = edge_combining_function
         self.tensor_factory = TensorFactory(self.program)
 
     # TODO: For each target predicate, start a queue with the predicate
@@ -174,15 +197,17 @@ class NeuralLogNetwork(keras.Model):
         :param atom: the atom
         :type atom: Atom
         :return: the predicate layer
-        :rtype: Predicate
+        :rtype: PredicateLayer
         """
         inputs = [self._build_fact(atom)]
         for clause in self.program.clauses_by_predicate.get(atom.predicate, []):
             rule = self._build_rule(clause)
             if rule is not None:
                 inputs.append(rule)
-        predicate_layer = PredicateLayer(atom, self.predicate_combining)
-        # return predicate_layer(inputs)
+        predicate_layer = PredicateLayer(
+            "pred_layer_{}".format(get_standardised_name(atom.__str__())),
+            self.predicate_combining_function)
+        return predicate_layer(inputs)
 
     def _build_fact(self, atom):
         """
@@ -194,7 +219,9 @@ class NeuralLogNetwork(keras.Model):
         :rtype: FactLayer
         """
 
-        return None
+        return FactLayer(
+            "fact_layer_{}".format(get_standardised_name(atom.__str__())),
+            self.tensor_factory.build_atom(atom), self.edge_combining_function)
 
     def _build_rule(self, clause):
         return None
@@ -202,7 +229,6 @@ class NeuralLogNetwork(keras.Model):
     def get_matrix_representation_for_atom(self, atom):
         # TODO: get the tensor representation for the literal instead of the
         #  predicate:
-        #  - adjust for literals with numeric attributes;
         #  - adjust for negated literals;
         """
         Builds the matrix representation for the atom.

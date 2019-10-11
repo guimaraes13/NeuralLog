@@ -101,7 +101,7 @@ def get_variable_atom(atom):
     return Atom(atom.predicate, *terms, weight=atom.weight)
 
 
-def get_initial_value_by_name(initializer, shape, **kwargs):
+def get_initial_value_by_name(initializer, shape):
     """
     Gets the initializer by name or config.
 
@@ -242,7 +242,7 @@ class TensorFactory:
         :raise UnsupportedMatrixRepresentation in the case the predicate is
         not convertible to matrix form
         :return: the matrix representation of the data for the given predicate
-        :rtype: csr_matrix or np.matrix or (csr_matrix, csr_matrix) or float
+        :rtype: tf.Tensor
         """
         key = self.get_atom_key(atom)
         return self.function[key](self, atom)
@@ -536,11 +536,12 @@ class TensorFactory:
         :return: the name of the initializer
         :rtype: str
         """
-        predicate_parameter = self.program.parameters.get(
-            predicate, self.program.parameters)
-        initializer_name = predicate_parameter["initial_value"]
-
-        return initializer_name
+        # predicate_parameter = self.program.parameters.get(
+        #     predicate, self.program.parameters)
+        # initializer_name = predicate_parameter["initial_value"]
+        #
+        # return initializer_name
+        return self.program.get_parameter_value("initial_value", predicate)
 
     def _get_one_hot_tensor(self, constant):
         """
@@ -667,7 +668,7 @@ class TensorFactory:
     def _get_weights_and_values_for_attribute_predicate(
             self, atom, trainable=False, constant_value=None):
         weight, value = self.get_matrix_representation(atom.predicate)
-        renamed_atom = get_renamed_atom(atom)
+        shape = [self.constant_size, 1]
         if atom.arity() == 2 and atom.terms[0] == atom.terms[1]:
             # This case, we have an attribute fact with the same variable in
             # both position, since one of the variables must be an entity and
@@ -689,18 +690,15 @@ class TensorFactory:
                     atom, atom.context.start.line, atom.context.start.column)
             weight = csr_matrix((self.constant_size, 1), dtype=np.float32)
             w_tensor = self._matrix_to_constant(atom, weight.todense(),
-                                                shape=[self.constant_size, 1],
+                                                shape=shape,
                                                 name_format="w:{}")
         elif trainable:
             initializer_name = self._get_initializer_name(atom.predicate)
-            initial_value = get_initial_value_by_name(initializer_name,
-                                                      [self.constant_size, 1])
+            initial_value = get_initial_value_by_name(initializer_name, shape)
             w_tensor = self._matrix_to_variable_with_value(
-                atom, initial_value,
-                shape=[self.constant_size, 1], constant=constant_value)
+                atom, initial_value, shape=shape, constant=constant_value)
             if constant_value is not None:
-                value = np.ones([self.constant_size, 1],
-                                np.float32) * constant_value
+                value = np.ones(shape, np.float32) * constant_value
         elif constant_value is not None:
             weight = weight.copy()
             value = value.copy()
@@ -708,22 +706,20 @@ class TensorFactory:
                 if value.data[i] != constant_value:
                     weight.data[i] = 0.0
                     value.data[i] = constant_value
-            w_tensor = self._matrix_to_variable(
-                atom, weight.todense(), shape=[self.constant_size, 1],
-                name_format="w-{}")
+            w_tensor = self._matrix_to_constant(
+                atom, weight.todense(), shape=shape, name_format="w-{}")
         else:
-            w_tensor = self._matrix_to_variable(
-                atom, weight.todense(), shape=[self.constant_size, 1],
-                name_format="w-{}")
+            w_tensor = self._matrix_to_constant(
+                atom, weight.todense(), shape=shape, name_format="w-{}")
 
         if isinstance(value, csr_matrix):
             value = value.todense()
 
-        v_tensor = self._matrix_to_constant(atom, value,
-                                            shape=[self.constant_size, 1],
+        v_tensor = self._matrix_to_constant(atom, value, shape=shape,
                                             name_format="v:{}")
         return w_tensor, v_tensor
 
+    # noinspection DuplicatedCode
     def _get_arity_2_1_iterable_constant_number(self, atom, constant_index,
                                                 trainable=False):
         renamed_atom = get_renamed_atom(atom)
@@ -762,11 +758,11 @@ class TensorFactory:
         tensor = self._tensor_by_atom.get(renamed_atom, None)
         if tensor is None:
             initializer_name = self._get_initializer_name(atom.predicate)
+            shape = [self.constant_size, 1]
             initial_value = get_initial_value_by_name(initializer_name,
-                                                      [self.constant_size, 1])
+                                                      shape)
             tensor = self._matrix_to_variable_with_value(
-                atom, initial_value,
-                shape=[self.constant_size, 1], constant=atom.terms[0])
+                atom, initial_value, shape=shape, constant=atom.terms[0])
             self._tensor_by_atom[renamed_atom] = tensor
         return tensor
 
@@ -1109,15 +1105,26 @@ class TensorFactory:
     @tensor_function(TensorFunctionKey(2, 2, True, FactoryTermType.VARIABLE,
                                        FactoryTermType.VARIABLE))
     def arity_2_2_trainable_variable_variable(self, atom):
-        if atom.terms[0] == atom.terms[1]:
-            renamed_atom = get_renamed_atom(atom)
-            tensor = self._tensor_by_atom.get(renamed_atom, None)
-            if tensor is None:
-                tensor = self._matrix_to_variable(
-                    Atom(atom.predicate, "X0", "X1"))
-                tensor = tf.linalg.tensor_diag_part(tensor)
-                tensor = tf.reshape(tensor, [-1, 1])
-                self._tensor_by_atom[renamed_atom] = tensor
-            return tensor
+        renamed_atom = get_renamed_atom(atom)
+        tensor = self._tensor_by_atom.get(renamed_atom, None)
+        if tensor is None:
+            if atom.terms[0] == atom.terms[1]:
+                renamed_atom = get_renamed_atom(atom)
+                tensor = self._tensor_by_atom.get(renamed_atom, None)
+                if tensor is None:
+                    variable_atom = get_variable_atom(atom)
+                    tensor = self.build_atom(variable_atom)
+                    tensor = tf.linalg.tensor_diag_part(tensor)
+                    tensor = tf.reshape(tensor, [-1, 1])
+                    self._tensor_by_atom[renamed_atom] = tensor
+                return tensor
+            else:
+                initializer_name = self._get_initializer_name(atom.predicate)
+                shape = [self.constant_size, self.constant_size]
+                initial_value = get_initial_value_by_name(initializer_name,
+                                                          shape)
+                tensor = self._matrix_to_variable_with_value(
+                    atom, initial_value, shape=shape)
+            self._tensor_by_atom[renamed_atom] = tensor
 
-        return self._matrix_to_variable(atom)
+        return tensor

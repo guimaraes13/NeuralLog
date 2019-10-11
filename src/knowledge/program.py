@@ -1,6 +1,7 @@
 """
 Defines a NeuralLog Program.
 """
+import collections
 import logging
 from collections import OrderedDict
 
@@ -354,9 +355,6 @@ class NeuralLogProgram:
             if types[i].variable:
                 iterable_constants.add(atom[i])
 
-    # TODO: get the matrix representation for the literal instead of the
-    #  predicate:
-    #  - adjust for negated literals;
     def get_matrix_representation(self, predicate, mask=False):
         """
         Builds the matrix representation for the predicate.
@@ -460,7 +458,7 @@ class NeuralLogProgram:
         :rtype: (csr_matrix, csr_matrix)
         """
         attribute_index = 0 if self.predicates[predicate][0].number else 1
-        entity_index = 1 - attribute_index
+        # entity_index = 1 - attribute_index
         weight_data = []
         attribute_data = []
         entity_indices = []
@@ -645,6 +643,33 @@ class NeuralLogProgram:
         predicate = clause.atom.predicate
         # noinspection PyUnresolvedReferences
         self.builtin.functions[predicate.name](self, clause)
+
+    def get_parameter_value(self, name, predicate=None):
+        """
+        Gets the name of the initializer for the predicate.
+
+        :param name: the parameter's name
+        :type name: collections.Iterable[str] or str
+        :param predicate: the predicate, or `None` for default parameters
+        :type predicate: Predicate
+        :return: the value of the parameter
+        """
+
+        if name is None:
+            parameters = self.parameters
+        else:
+            parameters = self.parameters.get(predicate, self.parameters)
+
+        if isinstance(name, str):
+            name = [name]
+
+        value = None
+        for key in name:
+            value = parameters.get(key, None)
+            if not isinstance(value, dict):
+                break
+
+        return value
 
     @builtin("example")
     def _handle_example(self, example):
