@@ -9,7 +9,7 @@ import numpy as np
 import re
 import tensorflow as tf
 from scipy.sparse import csr_matrix
-from tensorflow.python.keras import initializers
+from tensorflow.keras import initializers
 from typing import Dict, Any
 
 from src.language.language import Predicate, Atom, Quote, Constant, Variable, \

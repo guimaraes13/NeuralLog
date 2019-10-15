@@ -52,11 +52,8 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.arity_0_not_trainable.__func__,
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
-
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
+        
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight, evaluated, places=EQUAL_DELTA)
 
@@ -69,10 +66,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight, evaluated, places=EQUAL_DELTA)
 
@@ -86,10 +80,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * value, evaluated,
                                places=EQUAL_DELTA)
@@ -104,10 +95,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(0.0, evaluated, places=EQUAL_DELTA)
 
@@ -123,10 +111,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * expected, evaluated,
                                places=EQUAL_DELTA)
@@ -141,10 +126,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * value, evaluated,
                                places=EQUAL_DELTA)
@@ -159,10 +141,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertLessEqual(evaluated, WEIGHT_MAX_VALUE * value)
         self.assertGreaterEqual(evaluated, WEIGHT_MIN_VALUE * value)
@@ -178,10 +157,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * expected, evaluated,
                                places=EQUAL_DELTA)
@@ -196,10 +172,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight, evaluated, places=EQUAL_DELTA)
 
@@ -213,10 +186,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight, evaluated, places=EQUAL_DELTA)
 
@@ -230,10 +200,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight, evaluated, places=EQUAL_DELTA)
 
@@ -250,10 +217,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             self.assertAlmostEqual(
@@ -271,10 +235,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight, evaluated, places=EQUAL_DELTA)
 
@@ -288,10 +249,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertLessEqual(evaluated, atom.weight)
         self.assertGreaterEqual(evaluated, WEIGHT_MIN_VALUE)
@@ -306,10 +264,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight, evaluated, places=EQUAL_DELTA)
 
@@ -327,10 +282,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             error_message = "Incorrect value for constant {}: {}".format(
@@ -356,10 +308,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * value1 * value2, evaluated,
                                places=EQUAL_DELTA)
@@ -375,10 +324,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(0.0, evaluated, places=EQUAL_DELTA)
 
@@ -393,10 +339,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(0.0, evaluated, places=EQUAL_DELTA)
 
@@ -411,10 +354,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(0.0, evaluated, places=EQUAL_DELTA)
 
@@ -430,10 +370,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * value1 * expected2, evaluated,
                                places=EQUAL_DELTA)
@@ -450,10 +387,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * expected1 * value2, evaluated,
                                places=EQUAL_DELTA)
@@ -471,10 +405,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * expected1 * expected2, evaluated,
                                places=EQUAL_DELTA)
@@ -490,10 +421,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(0.0, evaluated, places=EQUAL_DELTA)
 
@@ -508,10 +436,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * value1 * value2, evaluated,
                                places=EQUAL_DELTA)
@@ -527,10 +452,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertLessEqual(evaluated, atom.weight * value1 * value2)
         self.assertGreaterEqual(evaluated, WEIGHT_MIN_VALUE)
@@ -546,10 +468,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertLessEqual(evaluated, atom.weight * value1 * value2)
         self.assertGreaterEqual(evaluated, WEIGHT_MIN_VALUE)
@@ -565,10 +484,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertLessEqual(evaluated, atom.weight * value1 * value2)
         self.assertGreaterEqual(evaluated, WEIGHT_MIN_VALUE)
@@ -585,10 +501,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * value1 * expected2, evaluated,
                                places=EQUAL_DELTA)
@@ -605,10 +518,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * expected1 * value2, evaluated,
                                places=EQUAL_DELTA)
@@ -626,10 +536,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * expected1 * expected2, evaluated,
                                places=EQUAL_DELTA)
@@ -645,10 +552,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(0.0, evaluated, places=EQUAL_DELTA)
 
@@ -662,10 +566,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * value, evaluated,
                                places=EQUAL_DELTA)
@@ -680,10 +581,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(0.0, evaluated, places=EQUAL_DELTA)
 
@@ -697,10 +595,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(0.0, evaluated, places=EQUAL_DELTA)
 
@@ -714,10 +609,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(0.0, evaluated, places=EQUAL_DELTA)
 
@@ -732,10 +624,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * expected, evaluated,
                                places=EQUAL_DELTA)
@@ -751,10 +640,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * value, evaluated,
                                places=EQUAL_DELTA)
@@ -771,10 +657,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * expected, evaluated,
                                places=EQUAL_DELTA)
@@ -796,10 +679,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             self.assertAlmostEqual(
@@ -820,10 +700,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             self.assertAlmostEqual(
@@ -848,10 +725,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             self.assertAlmostEqual(
@@ -872,10 +746,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             self.assertAlmostEqual(
@@ -893,10 +764,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * value, evaluated,
                                places=EQUAL_DELTA)
@@ -911,10 +779,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(0.0, evaluated, places=EQUAL_DELTA)
 
@@ -928,10 +793,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(0.0, evaluated, places=EQUAL_DELTA)
 
@@ -945,10 +807,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(0.0, evaluated, places=EQUAL_DELTA)
 
@@ -963,10 +822,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * expected, evaluated,
                                places=EQUAL_DELTA)
@@ -982,10 +838,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * value, evaluated,
                                places=EQUAL_DELTA)
@@ -1002,10 +855,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * expected, evaluated,
                                places=EQUAL_DELTA)
@@ -1029,10 +879,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             self.assertAlmostEqual(
@@ -1054,10 +901,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             self.assertAlmostEqual(
@@ -1084,10 +928,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             self.assertAlmostEqual(
@@ -1108,10 +949,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             self.assertAlmostEqual(
@@ -1129,10 +967,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * value, evaluated,
                                places=EQUAL_DELTA)
@@ -1147,10 +982,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertLessEqual(evaluated, atom.weight * value)
         self.assertGreaterEqual(evaluated, WEIGHT_MIN_VALUE * value)
@@ -1165,10 +997,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertLessEqual(evaluated, atom.weight * value)
         self.assertGreaterEqual(evaluated, WEIGHT_MIN_VALUE * value)
@@ -1183,10 +1012,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertLessEqual(evaluated, atom.weight * value)
         self.assertGreaterEqual(evaluated, WEIGHT_MIN_VALUE * value)
@@ -1202,10 +1028,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * expected, evaluated,
                                places=EQUAL_DELTA)
@@ -1221,10 +1044,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * value, evaluated,
                                places=EQUAL_DELTA)
@@ -1241,10 +1061,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * expected, evaluated,
                                places=EQUAL_DELTA)
@@ -1263,10 +1080,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             error_message = "Incorrect value for constant {}: {}".format(
@@ -1292,10 +1106,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             self.assertGreaterEqual(evaluated[i, 0], value * WEIGHT_MIN_VALUE)
@@ -1320,10 +1131,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             self.assertAlmostEqual(
@@ -1341,10 +1149,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             self.assertAlmostEqual(
@@ -1362,10 +1167,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * value, evaluated,
                                places=EQUAL_DELTA)
@@ -1380,10 +1182,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertLessEqual(evaluated, atom.weight * value)
         self.assertGreaterEqual(evaluated, WEIGHT_MIN_VALUE * value)
@@ -1398,10 +1197,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertLessEqual(evaluated, atom.weight * value)
         self.assertGreaterEqual(evaluated, WEIGHT_MIN_VALUE * value)
@@ -1416,10 +1212,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertLessEqual(evaluated, atom.weight * value)
         self.assertGreaterEqual(evaluated, WEIGHT_MIN_VALUE * value)
@@ -1435,10 +1228,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * expected, evaluated,
                                places=EQUAL_DELTA)
@@ -1454,10 +1244,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * value, evaluated,
                                places=EQUAL_DELTA)
@@ -1474,10 +1261,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight * expected, evaluated,
                                places=EQUAL_DELTA)
@@ -1496,10 +1280,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             error_message = "Incorrect value for constant {}: {}".format(
@@ -1525,10 +1306,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             error_message = "Incorrect value for constant {}: {}".format(
@@ -1558,10 +1336,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             self.assertAlmostEqual(
@@ -1579,10 +1354,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             self.assertAlmostEqual(
@@ -1600,10 +1372,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight, evaluated, places=EQUAL_DELTA)
 
@@ -1617,10 +1386,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(0.0, evaluated, places=EQUAL_DELTA)
 
@@ -1634,10 +1400,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(0.0, evaluated, places=EQUAL_DELTA)
 
@@ -1651,10 +1414,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(0.0, evaluated, places=EQUAL_DELTA)
 
@@ -1669,10 +1429,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight, evaluated, places=EQUAL_DELTA)
 
@@ -1690,10 +1447,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tf.sparse.to_dense(tensor))
+        evaluated = tf.sparse.to_dense(tensor).numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             self.assertAlmostEqual(
@@ -1711,10 +1465,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tf.sparse.to_dense(tensor))
+        evaluated = tf.sparse.to_dense(tensor).numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             self.assertAlmostEqual(
@@ -1733,10 +1484,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight, evaluated, places=EQUAL_DELTA)
 
@@ -1752,10 +1500,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight, evaluated, places=EQUAL_DELTA)
 
@@ -1773,10 +1518,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tf.sparse.to_dense(tensor))
+        evaluated = tf.sparse.to_dense(tensor).numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             self.assertAlmostEqual(
@@ -1797,10 +1539,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tf.sparse.to_dense(tensor))
+        evaluated = tf.sparse.to_dense(tensor).numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             self.assertAlmostEqual(
@@ -1818,10 +1557,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tf.sparse.to_dense(tensor))
+        evaluated = tf.sparse.to_dense(tensor).numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             self.assertAlmostEqual(
@@ -1843,10 +1579,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tf.sparse.to_dense(tensor))
+        evaluated = tf.sparse.to_dense(tensor).numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             self.assertAlmostEqual(
@@ -1907,10 +1640,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tf.sparse.to_dense(tensor))
+        evaluated = tf.sparse.to_dense(tensor).numpy()
         self.assertEqual(
             (tensor_factory.constant_size, tensor_factory.constant_size),
             evaluated.shape)
@@ -1938,10 +1668,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tf.sparse.to_dense(tensor))
+        evaluated = tf.sparse.to_dense(tensor).numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             self.assertAlmostEqual(
@@ -1960,10 +1687,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight, evaluated, places=EQUAL_DELTA)
 
@@ -1977,10 +1701,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertLessEqual(evaluated, atom.weight)
         self.assertGreaterEqual(evaluated, WEIGHT_MIN_VALUE)
@@ -1995,10 +1716,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertLessEqual(evaluated, atom.weight)
         self.assertGreaterEqual(evaluated, WEIGHT_MIN_VALUE)
@@ -2013,10 +1731,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertLessEqual(evaluated, atom.weight)
         self.assertGreaterEqual(evaluated, WEIGHT_MIN_VALUE)
@@ -2032,10 +1747,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight, evaluated, places=EQUAL_DELTA)
 
@@ -2052,10 +1764,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             error_message = "Incorrect value for constant {}: {}".format(
@@ -2080,10 +1789,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             error_message = "Incorrect value for constant {}: {}".format(
@@ -2104,10 +1810,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight, evaluated, places=EQUAL_DELTA)
 
@@ -2123,10 +1826,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((), evaluated.shape)
         self.assertAlmostEqual(atom.weight, evaluated, places=EQUAL_DELTA)
 
@@ -2144,10 +1844,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             error_message = "Incorrect value for constant {}: {}".format(
@@ -2176,10 +1873,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             error_message = "Incorrect value for constant {}: {}".format(
@@ -2207,10 +1901,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             error_message = "Incorrect value for constant {}: {}".format(
@@ -2239,10 +1930,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             error_message = "Incorrect value for constant {}: {}".format(
@@ -2310,10 +1998,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual(
             (tensor_factory.constant_size, tensor_factory.constant_size),
             evaluated.shape)
@@ -2349,10 +2034,7 @@ class TestTensorFactory(unittest.TestCase):
             tensor_factory.function[key])
         tensor = tensor_factory.build_atom(atom)
 
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-        evaluated = sess.run(tensor)
+        evaluated = tensor.numpy()
         self.assertEqual((tensor_factory.constant_size, 1), evaluated.shape)
         for i in range(tensor_factory.constant_size):
             error_message = "Incorrect value for constants {}: {}".format(
