@@ -11,7 +11,7 @@ from typing import TypeVar, MutableMapping, Dict, Any, List, Set, Tuple
 
 from src.language.language import Number, TermType, Predicate, Atom, \
     HornClause, Term, AtomClause, ClauseMalformedException, TooManyArguments, \
-    PredicateTypeError, UnsupportedMatrixRepresentation
+    PredicateTypeError, UnsupportedMatrixRepresentation, Clause
 
 KT = TypeVar('KT')  # Key type.
 VT = TypeVar('VT')  # Value type.
