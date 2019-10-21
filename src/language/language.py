@@ -58,6 +58,95 @@ def build_terms(arguments):
     return terms
 
 
+def get_variable_atom(atom):
+    """
+    Gets an atom by replacing their constant for unique variables.
+
+    :param atom: the atom
+    :type atom: Atom
+    :return: the renamed atom
+    :rtype: Atom
+    """
+    terms = [Variable("X{}".format(i)) for i in range(atom.arity())]
+    return Atom(atom.predicate, *terms, weight=atom.weight)
+
+
+def get_renamed_atom(atom):
+    """
+    Gets a renamed atom, replacing their variables for a positional name.
+    In this way, atoms with different variable names will have the same key,
+    as long as the number of variables and their positions matches.
+
+    :param atom: the atom
+    :type atom: Atom
+    :return: the renamed atom
+    :rtype: Atom
+    """
+    terms = []
+    index = 0
+    term_map = dict()
+    for term in atom.terms:
+        if term.is_constant():
+            if isinstance(term, Quote):
+                terms.append(Constant(term.value))
+            else:
+                terms.append(term)
+        else:
+            if term not in term_map:
+                term_map[term] = "X{}".format(index)
+                index += 1
+            terms.append(term_map[term])
+    return Atom(atom.predicate, *terms)
+
+
+def get_renamed_literal(literal):
+    """
+    Gets a renamed literal from `literal`.
+
+    :param literal: the literal
+    :type literal: Atom or Literal
+    :return: the renamed literal
+    :rtype: Literal
+    """
+    renamed_atom = get_renamed_atom(literal)
+    negated = False
+    if isinstance(literal, Literal):
+        negated = literal.negated
+    return Literal(renamed_atom, negated=negated)
+
+
+def get_substitution(generic_atom, specific_atom):
+    """
+    If `generic_atom` can be unified with the `specific_atom`, returns the
+    substitution of the terms of `generic_atom` that unifies it with
+    `specific_atom`; otherwise, returns `None`.
+
+    :param generic_atom: the generic atom
+    :type generic_atom: Atom
+    :param specific_atom: the specific atom
+    :type specific_atom: Atom
+    :return: the substitution of the `generic_atom` terms
+    :rtype: Dict[Term, Term]
+    """
+    if generic_atom.predicate != specific_atom.predicate:
+        return None
+
+    substitutions = dict()
+    for i in range(generic_atom.arity()):
+        generic_term = generic_atom.terms[i]
+        specific_term = specific_atom.terms[i]
+
+        if generic_term.is_constant() and generic_term != specific_term:
+            return None
+        else:
+            substitution = substitutions.get(generic_term, None)
+            if substitution in None:
+                substitutions[generic_term] = specific_term
+            elif substitution != specific_term:
+                return None
+
+    return substitutions
+
 class TooManyArguments(Exception):
     """
     Represents an exception raised by an atom with too many arguments.
@@ -533,6 +622,15 @@ class Atom(Clause):
         :rtype: int
         """
         return self.predicate.arity
+
+    def get_number_of_variables(self):
+        """
+        Returns the number of variables in the atom.
+
+        :return: the number of variables in the atom
+        :rtype: int
+        """
+        return sum(1 for i in self.terms if not i.is_constant())
 
     # noinspection PyMissingOrEmptyDocstring
     def key(self):

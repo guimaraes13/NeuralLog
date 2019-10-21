@@ -3,31 +3,30 @@ Compiles the language into a neural network.
 """
 import logging
 from collections import deque
-from typing import Dict, Set, List
+from typing import Dict, Set, List, Tuple
 
 import numpy as np
 import tensorflow as tf
 from scipy.sparse import csr_matrix
 from tensorflow.python import keras
 
-from src.knowledge.tensor_factory import TensorFactory, get_standardised_name
-from src.language.language import HornClause, Literal
-from src.language.language import Predicate, Atom, Term
+from src.knowledge.tensor_factory import TensorFactory, \
+    get_standardised_name
+from src.language.language import Atom, Term, HornClause, Literal, \
+    get_renamed_literal, get_substitution
 
 # Network part
 # TODO: create the neural network representation
-# TODO: build the rule layer and its computation, based on the path
-# TODO: find the paths in the target rule
-# TODO: build the predicates presented in the body of the target rules
-# TODO: recursively build the predicates needed
-# TODO: connect the rule layers to create the network
 # TODO: create a function to transform the examples from logic to numeric
 # TODO: create a function to extracted the weights learned by the network
-# TODO: treaty the binary atom with equal variables
+# TODO: test everything
 
 # IMPROVE: test if the values of trainable iterable constants and trainable
 #  variables are pointing to the same variable.
 #  Skip this to the network test.
+
+# WARNING: Do not support literals with same variable in the head of rules.
+# WARNING: Do not support literals with constant numbers in the rules.
 ANY_PREDICATE = "any"
 
 logger = logging.getLogger()
@@ -51,7 +50,8 @@ def is_cyclic(atom, previous_atoms):
 
     for previous_atom in previous_atoms:
         if atom.predicate == previous_atom.predicate:
-            return True
+            if get_substitution(previous_atom, atom) is not None:
+                return True
 
     return False
 
@@ -332,27 +332,35 @@ def find_all_backward_paths(source, destination,
         reverse_path=True)
 
 
-def find_clause_paths(clause):
+def find_clause_paths(clause, inverted=False):
     """
     Finds the paths in the clause.
+    :param inverted: if `True`, creates the paths for the inverted rule;
+    this is, the rule in the format (output, input). If `False`,
+    creates the path for the standard (input, output) rule format.
+    :type inverted: bool
     :param clause: the clause
     :type clause: HornClause
+    :return: the completed paths between the terms of the clause and the
+    remaining grounded literals
+    :rtype: (List[RulePath], List[Literal])
     """
     # Defining variables
+    source = clause.head.terms[0]
+    destination = clause.head.terms[-1]
+    if inverted:
+        source, destination = destination, source
     binary_literals_by_term, loop_literals_by_term = \
         build_literal_dictionaries(clause)
     visited_literals = set()
 
     # Finding forward paths
-    source = clause.head.terms[0]
-    destination = clause.head.terms[-1]
     forward_paths = find_all_forward_paths(
         source, destination, loop_literals_by_term,
         binary_literals_by_term, visited_literals)
 
     # Finding backward paths
-    source = clause.head.terms[-1]
-    destination = clause.head.terms[0]
+    source, destination = destination, source
     backward_paths = find_all_backward_paths(
         source, destination, loop_literals_by_term,
         binary_literals_by_term, visited_literals)
@@ -363,34 +371,58 @@ def find_clause_paths(clause):
     return forward_paths + backward_paths, ground_literals
 
 
-class PredicateLayer(keras.layers.Layer):
+class CyclicProgramException(Exception):
     """
-    A Layer to combine the inputs of a predicate. The inputs of a predicate
-    are the facts of this predicate and the result of rules with this
-    predicate in their heads.
-
-    The default combining function for these inputs is the sum.
+    Represents a cyclic program exception.
     """
 
-    def __init__(self, name, combining_function, **kwargs):
+    def __init__(self, atom) -> None:
         """
-        Creates a PredicateLayer.
+        Creates an term malformed exception.
+
+        :param atom: the atom
+        :type atom: Atom
+        """
+        super().__init__("Cyclic program, cannot create the Predicate Node for "
+                         "{}".format(atom))
+
+
+class LiteralLayer(keras.layers.Layer):
+    """
+    A Layer to combine the inputs of a literal. The inputs of a literal are
+    the facts of the literal and the result of rules with the literal in
+    their heads.
+    """
+
+    def __init__(self, name, input_layers, literal_combining_function,
+                 **kwargs):
+        """
+        Creates a LiteralLayer.
 
         :param name: the name of the layer
         :type name: str
-        :param combining_function: the combining function.
-        :type combining_function: function
+        :param input_layers: the input layers.
+        :type input_layers: List[FactLayer or RuleLayer]
+        :param literal_combining_function: the literal combining function
+        :type literal_combining_function: function
         :param kwargs: additional arguments
         :type kwargs: dict
         """
         # noinspection PyTypeChecker
         kwargs["name"] = name
-        super(PredicateLayer, self).__init__(**kwargs)
-        self.combining_function = combining_function
+        super(LiteralLayer, self).__init__(**kwargs)
+        self.input_layers = input_layers
+        self.literal_combining_function = literal_combining_function
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
-        return self.combining_function(inputs)
+        if len(self.input_layers) == 1:
+            return self.input_layers[0](inputs)
+
+        results = []
+        for input_layer in self.input_layers:
+            results.append(input_layer(inputs))
+        return self.literal_combining_function(results)
 
     # noinspection PyMissingOrEmptyDocstring
     def compute_output_shape(self, input_shape):
@@ -398,7 +430,7 @@ class PredicateLayer(keras.layers.Layer):
 
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):
-        return super(PredicateLayer, self).get_config()
+        return super(LiteralLayer, self).get_config()
 
     # noinspection PyMissingOrEmptyDocstring
     @classmethod
@@ -411,7 +443,7 @@ class FactLayer(keras.layers.Layer):
     A Layer to represent the logic facts from a predicate.
     """
 
-    def __init__(self, name, kernel, combining_function, **kwargs):
+    def __init__(self, name, kernel, fact_combining_function, **kwargs):
         """
         Creates a PredicateLayer.
 
@@ -419,8 +451,8 @@ class FactLayer(keras.layers.Layer):
         :type name: str
         :param kernel: the data of the layer.
         :type kernel: tf.Tensor
-        :param combining_function: the combining function.
-        :type combining_function: function
+        :param fact_combining_function: the fact combining function
+        :type fact_combining_function: function
         :param kwargs: additional arguments
         :type kwargs: dict[str, Any]
         """
@@ -428,15 +460,11 @@ class FactLayer(keras.layers.Layer):
         kwargs["name"] = name
         super(FactLayer, self).__init__(**kwargs)
         self.kernel = kernel
-        self.combining_function = combining_function
-
-    # noinspection PyMissingOrEmptyDocstring
-    def build(self, input_shape):
-        return tf.TensorShape(input_shape)
+        self.fact_combining_function = fact_combining_function
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
-        return self.combining_function(inputs, self.kernel)
+        return self.fact_combining_function(inputs, self.kernel)
 
     # noinspection PyMissingOrEmptyDocstring
     def compute_output_shape(self, input_shape):
@@ -452,29 +480,118 @@ class FactLayer(keras.layers.Layer):
         return cls(**config)
 
 
+def compute_path_tensor(inputs, path):
+    """
+    Computes the `path` for the `inputs`.
+    :param inputs: the inputs
+    :param path: the path
+    :type path: collections.Iterable[LiteralLayer]
+    :return: the computed path
+    :rtype: tf.Tensor
+    """
+    tensor = inputs
+    for literal_layer in path:
+        tensor = literal_layer(tensor)
+    return tensor
+
+
 class RuleLayer(keras.layers.Layer):
     """
     A Layer to represent a logic rule.
     """
 
-    def __init__(self, **kwargs):
-        super(RuleLayer, self).__init__(**kwargs)
+    def __init__(self, name, paths, grounds, path_combining_function, **kwargs):
+        """
+        Creates a RuleLayer.
 
-    # noinspection PyMissingOrEmptyDocstring
-    def build(self, input_shape):
-        pass
+        :param name: the name of the layer
+        :type name: str
+        :param paths: the paths of the layer
+        :type paths: List[collections.Iterable[LiteralLayer]]
+        :param grounds: the grounded literals
+        :type grounds: List[tf.Tensor]
+        :param path_combining_function: the path combining function
+        :type path_combining_function: function
+        :param kwargs: additional arguments
+        :type kwargs: dict[str, Any]
+        """
+        # noinspection PyTypeChecker
+        kwargs["name"] = name
+        super(RuleLayer, self).__init__(**kwargs)
+        self.paths = paths
+        self.grounds = grounds
+        self.path_combining_function = path_combining_function
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
-        pass
+        path_result = compute_path_tensor(inputs, self.paths[0])
+        for i in range(1, len(self.paths)):
+            tensor = compute_path_tensor(inputs, self.paths[i])
+            path_result = self.path_combining_function(path_result, tensor)
+        for grounded in self.grounds:
+            path_result = self.path_combining_function(path_result, grounded)
+        return path_result
 
     # noinspection PyMissingOrEmptyDocstring
     def compute_output_shape(self, input_shape):
-        pass
+        return tf.TensorShape(input_shape)
 
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):
-        pass
+        return super(RuleLayer, self).get_config()
+
+    # noinspection PyMissingOrEmptyDocstring
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
+
+
+class SpecificRuleLayer(keras.layers.Layer):
+    """
+    A Layer to represent a rule with constants applied to it.
+
+    It is used to extract a more specific literal from a rule inference,
+    for instance the literal l(X, a), from a rule with head l(X, Y).
+    """
+
+    def __init__(self, name, rule_layer, input_constant, output_constant=None,
+                 **kwargs):
+        """
+        Creates a SpecificRuleLayer.
+
+        :param name: the name of the layer
+        :type name: str
+        :param rule_layer: the more general rule layer
+        :type rule_layer: RuleLayer
+        :param input_constant: the input constant
+        :type input_constant: tf.Tensor
+        :param output_constant: the output constant, if any
+        :type output_constant: tf.Tensor
+        :param kwargs: additional arguments
+        :type kwargs: dict[str, Any]
+        """
+        # noinspection PyTypeChecker
+        kwargs["name"] = name
+        super(SpecificRuleLayer, self).__init__(**kwargs)
+        self.rule_layer = rule_layer
+        self.input_constant = input_constant
+        self.output_constant = output_constant
+
+    # noinspection PyMissingOrEmptyDocstring
+    def call(self, inputs, **kwargs):
+        result = self.rule_layer(self.input_constant)
+        if self.output_constant is not None:
+            result = tf.matmul(result, self.output_constant)
+            result = tf.reshape(result, [-1])
+        return result
+
+    # noinspection PyMissingOrEmptyDocstring
+    def compute_output_shape(self, input_shape):
+        return tf.TensorShape(input_shape)
+
+    # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
+    def get_config(self):
+        return super(SpecificRuleLayer, self).get_config()
 
     # noinspection PyMissingOrEmptyDocstring
     @classmethod
@@ -531,9 +648,6 @@ class RulePath:
 
         return list(reversed(inverted))
 
-    def __getitem__(self, item):
-        return self.path.__getitem__(item)
-
     def append(self, item):
         """
         Appends the item to the end of the path, if it is not in the path yet.
@@ -589,6 +703,23 @@ class RulePath:
         """
         return self.path[-1].terms[0 if self.inverted[-1] else -1]
 
+    def reverse(self):
+        """
+        Gets a reverse path.
+
+        :return: the reverse path
+        :rtype: RulePath
+        """
+        not_inverted = self.path[0].arity() != 1 and not self.inverted[0]
+        path = RulePath(reversed(self.path), not_inverted)
+        return path
+
+    def __getitem__(self, item):
+        return self.path.__getitem__(item)
+
+    def __len__(self):
+        return self.path.__len__()
+
     def __str__(self):
         message = ""
         for i in reversed(range(0, len(self.path))):
@@ -608,17 +739,6 @@ class RulePath:
 
         return message
 
-    def reverse(self):
-        """
-        Gets a reverse path.
-
-        :return: the reverse path
-        :rtype: RulePath
-        """
-        not_inverted = self.path[0].arity() != 1 and not self.inverted[0]
-        path = RulePath(reversed(self.path), not_inverted)
-        return path
-
     __repr__ = __str__
 
 
@@ -627,95 +747,88 @@ class NeuralLogNetwork(keras.Model):
     The NeuralLog Network.
     """
 
-    _layer_by_predicate: Dict[Predicate, PredicateLayer] = dict()
-    "The layer by predicate"
+    _literal_layers: Dict[Tuple[Literal, bool], LiteralLayer] = dict()
+    "The literal layer by literal"
+
+    _fact_layers: Dict[Tuple[Literal, bool], FactLayer] = dict()
+    "The fact layer by literal"
+
+    _rule_layers: Dict[Tuple[HornClause, bool], RuleLayer] = dict()
+    "The rule layer by clause"
 
     # TODO: Create a way to define the functions in the program
     def __init__(self, program,
-                 predicate_combining_function=tf.math.accumulate_n,
+                 literal_combining_function=tf.math.add_n,
                  path_combining_function=tf.math.multiply,
-                 edge_combining_function=tf.tensordot):
+                 edge_combining_function=tf.math.multiply,
+                 edge_combining_function_2d=tf.matmul,
+                 invert_fact_function=tf.transpose,
+                 attribute_combine_function=tf.math.multiply):
         """
         Creates a NeuralLogNetwork.
 
         :param program: the neural language
         :type program: NeuralLogProgram
-        :param predicate_combining_function: the combining function. The default
-        combining function is `sum`, implemented by `tf.accumulate_n`
-        :type predicate_combining_function: function
+        :param literal_combining_function: function to combine the different
+        proves of a literal (FactLayers and RuleLayers). The default is to
+        sum all the proves, element-wise, by applying the `tf.math.add_n`
+        function
+        :type literal_combining_function: function
+        :param path_combining_function: function to combine different path
+        from a RuleLayer. The default is to multiply all the paths,
+        element-wise, by applying the `tf.math.multiply` function
+        :type path_combining_function: function
+        :param edge_combining_function: function to extract the value of the
+        fact based on the input. The default is the element-wise
+        multiplication implemented by the `tf.math.multiply` function
+        :type edge_combining_function: function
+        :param edge_combining_function_2d: function to extract the value of the
+        fact based on the input, for 2d facts. The default is the dot
+        multiplication implemented by the `tf.matmul` function
+        :type edge_combining_function_2d: function
+        :param invert_fact_function: function to extract inverse of a facts.
+        The default is the transpose function implemented by `tf.transpose`
+        :type invert_fact_function: function
+        :param attribute_combine_function: function to combine the weights
+        and values of the attribute facts. The default function is the
+        `tf.matmul`
+        :type attribute_combine_function: function
         """
         super(NeuralLogNetwork, self).__init__(name="NeuralLogNetwork")
         self.program = program
         self.constant_size = len(self.program.iterable_constants)
-        self.predicate_combining_function = predicate_combining_function
+        self.literal_combining_function = literal_combining_function
         self.path_combining_function = path_combining_function
         self.edge_combining_function = edge_combining_function
+        self.edge_combining_function_2d = edge_combining_function_2d
+        self.invert_fact_function = invert_fact_function
+        self.attribute_combine_function = attribute_combine_function
         self.tensor_factory = TensorFactory(self.program)
-        self.queue = deque()
+        self.predicates = []
 
-    # TODO: For each target predicate, start a queue with the predicate
-    # TODO: For each predicate in the queue, find the rules for the predicate
-    # TODO:
-    def build_network(self):
-        """
-        Builds the neural network based on the language and the set of examples.
-        """
+    # noinspection PyMissingOrEmptyDocstring
+    def build(self, input_shape):
         for predicate in self.program.examples:
-            self._build_predicate(Atom(predicate,
-                                       *list(map(lambda x: "X{}".format(x),
-                                                 range(predicate.arity)))))
+            predicate = self._build_literal(
+                Literal(
+                    Atom(predicate, *list(map(lambda x: "X{}".format(x),
+                                              range(predicate.arity))))))
+            self.predicates.append(predicate)
 
-    # noinspection PyDefaultArgument
-    def _build_predicate(self, atom, previous_atoms=[]):
-        """
-        Builds the layer for the atom.
+    # noinspection PyMissingOrEmptyDocstring
+    def call(self, inputs, training=None, mask=None):
+        results = []
+        for predicate in self.predicates:
+            results.append(predicate(inputs))
+        return tuple(results)
 
-        :param atom: the atom
-        :type atom: Atom
-        :return: the predicate layer
-        :rtype: PredicateLayer
-        """
-        if is_cyclic(atom, previous_atoms):
-            logger.error("Error: cannot create the Predicate Node for %s", atom)
-            raise Exception()
-        inputs = [self._build_fact(atom)]
-        for clause in self.program.clauses_by_predicate.get(atom.predicate, []):
-            rule = self._build_rule(clause, previous_atoms)
-            if rule is not None:
-                inputs.append(rule)
-        predicate_layer = PredicateLayer(
-            "pred_layer_{}".format(get_standardised_name(atom.__str__())),
-            self.predicate_combining_function)
-        return predicate_layer(inputs)
+    # noinspection PyMissingOrEmptyDocstring
+    def compute_output_shape(self, input_shape):
+        shape = tf.TensorShape(input_shape).as_list()
+        return tf.TensorShape(shape)
 
-    def _build_rule(self, clause, previous_atoms=[]):
-        """
-        Builds the Rule Node.
-        :param clause: the clause
-        :type clause: HornClause
-        """
-        current_atoms = previous_atoms + [clause.head]
-        predicate_nodes = []
-        for literal in clause.body:
-            predicate_nodes.append(self._build_predicate(literal,
-                                                         current_atoms))
-            # TODO: Create the paths and join them
-        return None
-
-    def _build_fact(self, atom):
-        """
-        Builds the fact layer for the atom.
-
-        :param atom: the atom
-        :type atom: Atom
-        :return: the fact layer
-        :rtype: FactLayer
-        """
-        return FactLayer(
-            "fact_layer_{}".format(get_standardised_name(atom.__str__())),
-            self.tensor_factory.build_atom(atom), self.edge_combining_function)
-
-    def get_matrix_representation_for_atom(self, atom):
+    # noinspection PyMissingOrEmptyDocstring
+    def get_matrix_representation(self, atom):
         # TODO: get the tensor representation for the literal instead of the
         #  predicate:
         #  - adjust for negated literals;
@@ -727,11 +840,146 @@ class NeuralLogNetwork(keras.Model):
         :raise UnsupportedMatrixRepresentation in the case the predicate is
         not convertible to matrix form
         :return: the matrix representation of the data for the given predicate
-        :rtype: csr_matrix or np.matrix or (csr_matrix, csr_matrix) or float
+        :rtype: tf.Tensor
         """
         return self.tensor_factory.build_atom(atom)
 
-# if __name__ == "__main__":
+    # noinspection PyMissingOrEmptyDocstring
+    def _build_literal(self, atom, previous_atoms=None, inverted=False):
+        """
+        Builds the layer for the literal.
+
+        :param atom: the atom
+        :type atom: Atom
+        :param previous_atoms: the previous literals
+        :type previous_atoms: Set[Atom] or None
+        :param inverted: if `True`, creates the inverted literal; this is,
+            a literal in the format (output, input). If `False`, creates the
+            standard (input, output) literal format.
+        :type inverted: bool
+        :return: the predicate layer
+        :rtype: LiteralLayer
+        """
+        # TODO: check if the literal is a function symbol
+        renamed_literal = get_renamed_literal(atom)
+        key = (renamed_literal, inverted)
+        literal_layer = self._literal_layers.get(key, None)
+        if literal_layer is None:
+            if is_cyclic(renamed_literal, previous_atoms):
+                raise CyclicProgramException(atom)
+            inputs = [self._build_fact(renamed_literal, inverted=inverted)]
+            for clause in self.program.clauses_by_predicate.get(
+                    renamed_literal.predicate, []):
+                substitution = get_substitution(clause.head, renamed_literal)
+                if substitution is None:
+                    continue
+                rule = self._build_rule(clause, previous_atoms, inverted)
+                if rule is None:
+                    continue
+                if atom.get_number_of_variables() < atom.arity():
+                    layer_name = "rule_layer_{}".format(
+                        get_standardised_name(clause.__str__()))
+                    source = renamed_literal.terms[0 if inverted else -1]
+                    destination = renamed_literal.terms[-1 if inverted else 0]
+                    input_tensor = self.tensor_factory.get_one_hot_tensor(
+                        source)
+                    output_tensor = None
+                    if destination.is_constant() and atom.arity() == 2:
+                        output_tensor = self.tensor_factory.get_one_hot_tensor(
+                            destination)
+                        output_tensor = tf.transpose(output_tensor)
+                    rule = SpecificRuleLayer(
+                        layer_name, rule, input_tensor, output_tensor)
+                inputs.append(rule)
+
+            literal_layer = LiteralLayer(
+                "literal_layer_{}".format(
+                    get_standardised_name(renamed_literal.__str__())),
+                inputs, self.literal_combining_function)
+            self._literal_layers[key] = literal_layer
+        return literal_layer
+
+    def _build_rule(self, clause, previous_atoms=None, inverted=False):
+        """
+        Builds the Rule Node.
+
+        :param clause: the clause
+        :type clause: HornClause
+        :param previous_atoms: the previous atoms
+        :type previous_atoms: Set[Atom] or None
+        :param inverted: if `True`, creates the layer for the inverted rule;
+            this is, the rule in the format (output, input). If `False`,
+            creates the layer for standard (input, output) rule format.
+        :type inverted: bool
+        :return: the rule layer
+        :rtype: RuleLayer
+        """
+        key = (clause, inverted)
+        rule_layer = self._rule_layers.get(key, None)
+        if rule_layer is None:
+            current_atoms = \
+                set() if previous_atoms is None else set(previous_atoms)
+            current_atoms.add(clause.head)
+            paths, grounds = find_clause_paths(clause, inverted=inverted)
+
+            layer_paths = []
+            for path in paths:
+                layer_path = []
+                for i in range(len(path)):
+                    literal_layer = self._build_literal(
+                        path[i], previous_atoms, path.inverted[i])
+                    layer_path.append(literal_layer)
+                layer_paths.append(layer_path)
+
+            grounded_literals = []
+            for grounded in grounds:
+                literal_layer = self._build_literal(grounded, previous_atoms)
+                grounded_literals.append(literal_layer(None))
+            layer_name = "rule_layer_{}".format(
+                get_standardised_name(clause.__str__()))
+            rule_layer = RuleLayer(layer_name, layer_paths, grounded_literals,
+                                   self.path_combining_function)
+            self._rule_layers[key] = rule_layer
+
+        return rule_layer
+
+    def _build_fact(self, atom, inverted=False):
+        """
+        Builds the fact layer for the atom.
+
+        :param atom: the atom
+        :type atom: Atom
+        :param inverted: if `True`, creates the inverted fact; this is,
+        a fact in the format (output, input). If `False`, creates the
+        standard (input, output) fact format.
+        :type inverted: bool
+        :return: the fact layer
+        :rtype: FactLayer
+        """
+        renamed_atom = get_renamed_literal(atom)
+        key = (renamed_atom, inverted)
+        fact_layer = self._fact_layers.get(key, None)
+        if fact_layer is None:
+            layer_name = "fact_layer_{}".format(
+                get_standardised_name(renamed_atom.__str__()))
+            tensor = self.get_matrix_representation(renamed_atom)
+            edge_function = self.edge_combining_function
+            if isinstance(tensor, tuple):
+                tensor = self.attribute_combine_function(tensor[0], tensor[1])
+            elif atom.get_number_of_variables() == 2:
+                edge_function = self.edge_combining_function_2d
+                if inverted:
+                    tensor = self.invert_fact_function(tensor)
+
+            shape = tensor.shape.as_list()
+            if len(shape) == 2 and shape[0] > shape[-1]:
+                tensor = tf.transpose(tensor)
+            fact_layer = FactLayer(layer_name, tensor, edge_function)
+            self._fact_layers[key] = fact_layer
+
+        return fact_layer
+
+    # if __name__ == "__main__":
 #     # x = tf.constant([[1], [2], [3], [4]], dtype=tf.float32)
 #     # y_true = tf.constant([[0], [-1], [-2], [-3]], dtype=tf.float32)
 #     #

@@ -12,8 +12,8 @@ from scipy.sparse import csr_matrix
 from tensorflow.keras import initializers
 from typing import Dict, Any
 
-from src.language.language import Predicate, Atom, Quote, Constant, Variable, \
-    Term
+from src.language.language import Predicate, Atom, Variable, \
+    Term, get_variable_atom, get_renamed_atom
 
 logger = logging.getLogger()
 
@@ -58,47 +58,6 @@ def decorate_factory_function():
 
     decorator.functions = commands
     return decorator
-
-
-def get_renamed_atom(atom):
-    """
-    Gets a renamed atom, replacing their variables for a positional name.
-    In this way, atoms with different variable names will have the same key,
-    as long as the number of variables and their positions matches.
-
-    :param atom: the atom
-    :type atom: Atom
-    :return: the renamed atom
-    :rtype: Atom
-    """
-    terms = []
-    index = 0
-    term_map = dict()
-    for term in atom.terms:
-        if term.is_constant():
-            if isinstance(term, Quote):
-                terms.append(Constant(term.value))
-            else:
-                terms.append(term)
-        else:
-            if term not in term_map:
-                term_map[term] = "X{}".format(index)
-                index += 1
-            terms.append(term_map[term])
-    return Atom(atom.predicate, *terms)
-
-
-def get_variable_atom(atom):
-    """
-    Gets an atom by replacing their constant for unique variables.
-
-    :param atom: the atom
-    :type atom: Atom
-    :return: the renamed atom
-    :rtype: Atom
-    """
-    terms = [Variable("X{}".format(i)) for i in range(atom.arity())]
-    return Atom(atom.predicate, *terms, weight=atom.weight)
 
 
 def get_initial_value_by_name(initializer, shape):
@@ -543,7 +502,7 @@ class TensorFactory:
         # return initializer_name
         return self.program.get_parameter_value("initial_value", predicate)
 
-    def _get_one_hot_tensor(self, constant):
+    def get_one_hot_tensor(self, constant):
         """
         Gets an one-hot row tensor for the iterable constant.
 
@@ -728,7 +687,7 @@ class TensorFactory:
             w_tensor, v_tensor = \
                 self._get_weights_and_values_for_attribute_predicate(atom,
                                                                      trainable)
-            index = self._get_one_hot_tensor(atom.terms[constant_index])
+            index = self.get_one_hot_tensor(atom.terms[constant_index])
             weight = tf.linalg.matmul(index, w_tensor, a_is_sparse=True)
             value = tf.linalg.matmul(index, v_tensor, a_is_sparse=True)
             tensor = self.weight_attribute_combining_function(weight, value)
@@ -823,7 +782,7 @@ class TensorFactory:
         if tensor is None:
             variable_atom = get_variable_atom(atom)
             tensor = self.build_atom(variable_atom)
-            index = self._get_one_hot_tensor(atom.terms[0])
+            index = self.get_one_hot_tensor(atom.terms[0])
             tensor = tf.linalg.matmul(index, tensor, a_is_sparse=True)
             tensor = tf.reshape(tensor, [])
             self._tensor_by_atom[atom] = tensor
@@ -1010,7 +969,7 @@ class TensorFactory:
             variable_atom = Atom(atom.predicate, atom.terms[0], Variable("X"),
                                  weight=atom.weight)
             tensor = self.build_atom(variable_atom)
-            index = self._get_one_hot_tensor(atom.terms[1])
+            index = self.get_one_hot_tensor(atom.terms[1])
             tensor = tf.linalg.matmul(index, tensor, a_is_sparse=True)
             tensor = tf.reshape(tensor, [])
             self._tensor_by_atom[atom] = tensor
@@ -1035,7 +994,7 @@ class TensorFactory:
             variable_atom = Atom(atom.predicate, Variable("X"), atom.terms[1],
                                  weight=atom.weight)
             tensor = self.build_atom(variable_atom)
-            index = self._get_one_hot_tensor(atom.terms[0])
+            index = self.get_one_hot_tensor(atom.terms[0])
             tensor = tf.linalg.matmul(tensor, index, b_is_sparse=True,
                                       transpose_a=True, transpose_b=True)
             tensor = tf.reshape(tensor, [])
@@ -1052,8 +1011,8 @@ class TensorFactory:
         if tensor is None:
             variable_atom = get_variable_atom(atom)
             tensor = self.build_atom(variable_atom)
-            index_0 = self._get_one_hot_tensor(atom.terms[0])
-            index_1 = self._get_one_hot_tensor(atom.terms[1])
+            index_0 = self.get_one_hot_tensor(atom.terms[0])
+            index_1 = self.get_one_hot_tensor(atom.terms[1])
             index_1 = tf.reshape(index_1, [-1, 1])
             tensor = tf.linalg.matmul(index_0, tensor, a_is_sparse=True)
             tensor = tf.linalg.matmul(tensor, index_1, b_is_sparse=True)
@@ -1071,7 +1030,7 @@ class TensorFactory:
         if tensor is None:
             variable_atom = get_variable_atom(atom)
             tensor = self.build_atom(variable_atom)
-            index = self._get_one_hot_tensor(atom.terms[0])
+            index = self.get_one_hot_tensor(atom.terms[0])
             tensor = tf.linalg.matmul(index, tensor, a_is_sparse=True)
             tensor = tf.reshape(tensor, [-1, 1])
             self._tensor_by_atom[renamed_atom] = tensor
@@ -1095,7 +1054,7 @@ class TensorFactory:
         if tensor is None:
             variable_atom = get_variable_atom(atom)
             tensor = self.build_atom(variable_atom)
-            index = self._get_one_hot_tensor(atom.terms[1])
+            index = self.get_one_hot_tensor(atom.terms[1])
             index = tf.reshape(index, [-1, 1])
             tensor = tf.linalg.matmul(tensor, index, b_is_sparse=True)
             self._tensor_by_atom[renamed_atom] = tensor

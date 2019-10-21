@@ -157,7 +157,7 @@ def main(argv):
 
     network = NeuralLogNetwork(neural_program)
     # network.build_network()
-    paths, grounded_literals = find_clause_paths(targets["status2"])
+    paths, grounded_literals = find_clause_paths(targets["target"])
     string_literals = ", ".join(map(lambda x: x.__str__(), grounded_literals))
     rev_string_literals = ", ".join(
         reversed(list(map(lambda x: x.__str__(), grounded_literals))))
