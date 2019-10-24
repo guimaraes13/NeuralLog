@@ -4,14 +4,14 @@ Defines a NeuralLog Program.
 import collections
 import logging
 from collections import OrderedDict
+from typing import TypeVar, MutableMapping, Dict, Any, List, Set, Tuple
 
 import numpy as np
 from scipy.sparse import csr_matrix
-from typing import TypeVar, MutableMapping, Dict, Any, List, Set, Tuple
 
 from src.language.language import Number, TermType, Predicate, Atom, \
     HornClause, Term, AtomClause, ClauseMalformedException, TooManyArguments, \
-    PredicateTypeError, UnsupportedMatrixRepresentation, Clause
+    PredicateTypeError, UnsupportedMatrixRepresentation
 
 KT = TypeVar('KT')  # Key type.
 VT = TypeVar('VT')  # Value type.
@@ -472,7 +472,8 @@ class NeuralLogProgram:
 
         weights = csr_matrix((weight_data,
                               (entity_indices, [0] * len(weight_data))),
-                             shape=(self.number_of_entities, 1))
+                             shape=(self.number_of_entities, 1),
+                             dtype=np.float32)
         if mask:
             return weights
 
@@ -480,7 +481,7 @@ class NeuralLogProgram:
             weights,
             csr_matrix((attribute_data,
                         (entity_indices, [0] * len(attribute_data))),
-                       shape=(self.number_of_entities, 1))
+                       shape=(self.number_of_entities, 1), dtype=np.float32)
         )
 
     def _relational_matrix_representation(self, predicate, mask=False):
@@ -511,10 +512,12 @@ class NeuralLogProgram:
 
         if predicate.arity == 1:
             return csr_matrix((data, (ind[0], [0] * len(data))),
-                              shape=(self.number_of_entities, 1))
+                              shape=(self.number_of_entities, 1),
+                              dtype=np.float32)
 
         return csr_matrix((data, tuple(ind)),
-                          shape=(self.number_of_entities,) * predicate.arity)
+                          shape=(self.number_of_entities,) * predicate.arity,
+                          dtype=np.float32)
 
     def get_diagonal_matrix_representation(self, predicate, mask=False):
         """
@@ -543,7 +546,7 @@ class NeuralLogProgram:
             data.append(1.0 if mask else fact.weight)
 
         return csr_matrix((data, tuple(ind)),
-                          shape=(self.number_of_entities, 1))
+                          shape=(self.number_of_entities, 1), dtype=np.float32)
 
     def _check_iterable_terms(self, terms):
         """
@@ -604,7 +607,7 @@ class NeuralLogProgram:
             data.append(1.0 if mask else fact.weight)
 
         return csr_matrix((data, tuple(ind)),
-                          shape=(self.number_of_entities, 1))
+                          shape=(self.number_of_entities, 1), dtype=np.float32)
 
     def index_for_constant(self, constant):
         """
@@ -743,9 +746,10 @@ class NeuralLogProgram:
 
         parameter_dict = self.parameters
         predicate = get_predicate_from_string(atom.terms[0].value)
-        parameter_dict = parameter_dict.get(predicate, dict())
+        parameter_dict = parameter_dict.setdefault(predicate, dict())
         for i in range(1, arity - 2):
-            parameter_dict = parameter_dict.get(atom.terms[i].value, dict())
+            parameter_dict = parameter_dict.setdefault(atom.terms[i].value,
+                                                       dict())
         parameter_dict[atom.terms[-2].value] = atom.terms[-1].value
 
     def _add_default_parameters(self):
@@ -754,3 +758,31 @@ class NeuralLogProgram:
                 "class_name": "random_normal",
                 "config": {"mean": 0.5, "stddev": 0.125}
             }
+
+            self.parameters["literal_combining_function"] = "tf.math.add_n"
+            # function to combine the different proves of a literal
+            # (FactLayers and RuleLayers). The default is to sum all the
+            # proves, element-wise, by applying the `tf.math.add_n` function
+
+            self.parameters["path_combining_function"] = "tf.math.multiply"
+            # function to combine different path from a RuleLayer. The default
+            # is to multiply all the paths, element-wise, by applying the
+            # `tf.math.multiply` function
+
+            self.parameters["edge_combining_function"] = "tf.math.multiply"
+            # function to extract the value of the fact based on the input.
+            # The default is the element-wise multiplication implemented by the
+            # `tf.math.multiply` function
+
+            self.parameters["edge_combining_function_2d"] = "tf.matmul"
+            # function to extract the value of the fact based on the input,
+            # for 2d facts. The default is the dot multiplication implemented
+            # by the `tf.matmul` function
+
+            self.parameters["invert_fact_function"] = "tf.transpose"
+            # function to extract the inverse of a facts. The default is the
+            # transpose function implemented by `tf.transpose`
+
+            self.parameters["attribute_combine_function"] = "tf.math.multiply"
+            # function to combine the weights and values of the attribute facts.
+            # The default function is the `tf.matmul`.

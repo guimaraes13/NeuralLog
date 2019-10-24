@@ -140,12 +140,13 @@ def get_substitution(generic_atom, specific_atom):
             return None
         else:
             substitution = substitutions.get(generic_term, None)
-            if substitution in None:
+            if substitution is None:
                 substitutions[generic_term] = specific_term
             elif substitution != specific_term:
                 return None
 
     return substitutions
+
 
 class TooManyArguments(Exception):
     """
@@ -165,10 +166,30 @@ class TooManyArguments(Exception):
         """
         super().__init__("Too many arguments found for {} at line {}:{}."
                          " Found {} arguments, the maximum number of "
-                         "arguments allows is {}."
+                         "arguments allowed is {}."
                          .format(atom.getText(),
                                  atom.start.line, atom.start.column,
                                  found, self.MAX_NUMBER_OF_ARGUMENTS))
+
+
+class TooManyArgumentsFunction(Exception):
+    """
+    Represents an exception raised by function literal with too many arguments.
+    """
+
+    MAX_NUMBER_OF_ARGUMENTS = 1
+
+    def __init__(self, predicate) -> None:
+        """
+        Creates a too many arguments exception.
+
+        :param predicate: the predicate
+        :type predicate: Predicate
+        """
+        super().__init__("Too many arguments for function predicate {} at "
+                         "The maximum number of arguments allowed is {}."
+                         .format(predicate,
+                                 self.MAX_NUMBER_OF_ARGUMENTS))
 
 
 class AtomMalformedException(Exception):

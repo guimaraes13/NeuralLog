@@ -5,21 +5,24 @@ import logging
 from collections import deque
 from typing import Dict, Set, List, Tuple
 
-import numpy as np
 import tensorflow as tf
-from scipy.sparse import csr_matrix
 from tensorflow.python import keras
 
-from src.knowledge.tensor_factory import TensorFactory, \
-    get_standardised_name
 from src.language.language import Atom, Term, HornClause, Literal, \
-    get_renamed_literal, get_substitution
+    get_renamed_literal, get_substitution, TooManyArgumentsFunction
+from src.network.network_functions import get_literal_function, \
+    get_combining_function
+from src.network.tensor_factory import TensorFactory, \
+    get_standardised_name
 
 # Network part
-# TODO: create the neural network representation
 # TODO: create a function to transform the examples from logic to numeric
 # TODO: create a function to extracted the weights learned by the network
+# TODO: implement the negation
 # TODO: test everything
+
+# TODO: treaty the any predicate
+# TODO: treaty the sparse tensors
 
 # IMPROVE: test if the values of trainable iterable constants and trainable
 #  variables are pointing to the same variable.
@@ -387,7 +390,24 @@ class CyclicProgramException(Exception):
                          "{}".format(atom))
 
 
-class LiteralLayer(keras.layers.Layer):
+class NeuralLogLayer(keras.layers.Layer):
+    """
+    Represents a NeuralLogLayer.
+    """
+
+    def __init__(self, name, **kwargs):
+        # noinspection PyTypeChecker
+        kwargs["name"] = name
+        self.layer_name = name
+        super(NeuralLogLayer, self).__init__(**kwargs)
+
+    def __str__(self):
+        return "[{}] {}".format(self.__class__.__name__, self.layer_name)
+
+    __repr__ = __str__
+
+
+class LiteralLayer(NeuralLogLayer):
     """
     A Layer to combine the inputs of a literal. The inputs of a literal are
     the facts of the literal and the result of rules with the literal in
@@ -408,9 +428,7 @@ class LiteralLayer(keras.layers.Layer):
         :param kwargs: additional arguments
         :type kwargs: dict
         """
-        # noinspection PyTypeChecker
-        kwargs["name"] = name
-        super(LiteralLayer, self).__init__(**kwargs)
+        super(LiteralLayer, self).__init__(name, **kwargs)
         self.input_layers = input_layers
         self.literal_combining_function = literal_combining_function
 
@@ -438,7 +456,45 @@ class LiteralLayer(keras.layers.Layer):
         return cls(**config)
 
 
-class FactLayer(keras.layers.Layer):
+class FunctionLayer(NeuralLogLayer):
+    """
+    A Layer to apply the function literal at the input.
+    """
+
+    def __init__(self, name, function, inputs=None, **kwargs):
+        """
+        Creates a FunctionLayer.
+
+        :param name: the name of the layer
+        :type name: str
+        :param function: the function
+        :type function: function
+        """
+        super(FunctionLayer, self).__init__(name, **kwargs)
+        self.function = function
+        self.inputs = inputs
+
+    # noinspection PyMissingOrEmptyDocstring
+    def call(self, inputs, **kwargs):
+        if self.inputs is None:
+            return self.function(inputs)
+        return self.function(self.inputs)
+
+    # noinspection PyMissingOrEmptyDocstring
+    def compute_output_shape(self, input_shape):
+        return tf.TensorShape(input_shape)
+
+    # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
+    def get_config(self):
+        return super(FunctionLayer, self).get_config()
+
+    # noinspection PyMissingOrEmptyDocstring
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
+
+
+class FactLayer(NeuralLogLayer):
     """
     A Layer to represent the logic facts from a predicate.
     """
@@ -456,15 +512,27 @@ class FactLayer(keras.layers.Layer):
         :param kwargs: additional arguments
         :type kwargs: dict[str, Any]
         """
-        # noinspection PyTypeChecker
-        kwargs["name"] = name
-        super(FactLayer, self).__init__(**kwargs)
+        super(FactLayer, self).__init__(name, **kwargs)
         self.kernel = kernel
         self.fact_combining_function = fact_combining_function
 
     # noinspection PyMissingOrEmptyDocstring
+    def build(self, input_shape):
+        shape = self.kernel.shape.as_list()
+        # FIXME: Move the function to the creation of the layer
+        if isinstance(self.kernel, tf.SparseTensor):
+            if len(shape) == 2 and (shape[0] == 1 or shape[-1] == 1):
+                self.kernel = tf.sparse.to_dense(self.kernel)
+
+    # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
-        return self.fact_combining_function(inputs, self.kernel)
+        if isinstance(self.kernel, tf.SparseTensor):
+            # FIXME: Move the function to the creation of the layer
+            tensor = tf.sparse.sparse_dense_matmul(
+                self.kernel, inputs, adjoint_a=True, adjoint_b=True)
+            return tf.transpose(tensor)
+        else:
+            return self.fact_combining_function(inputs, self.kernel)
 
     # noinspection PyMissingOrEmptyDocstring
     def compute_output_shape(self, input_shape):
@@ -495,7 +563,7 @@ def compute_path_tensor(inputs, path):
     return tensor
 
 
-class RuleLayer(keras.layers.Layer):
+class RuleLayer(NeuralLogLayer):
     """
     A Layer to represent a logic rule.
     """
@@ -515,9 +583,7 @@ class RuleLayer(keras.layers.Layer):
         :param kwargs: additional arguments
         :type kwargs: dict[str, Any]
         """
-        # noinspection PyTypeChecker
-        kwargs["name"] = name
-        super(RuleLayer, self).__init__(**kwargs)
+        super(RuleLayer, self).__init__(name, **kwargs)
         self.paths = paths
         self.grounds = grounds
         self.path_combining_function = path_combining_function
@@ -546,7 +612,7 @@ class RuleLayer(keras.layers.Layer):
         return cls(**config)
 
 
-class SpecificRuleLayer(keras.layers.Layer):
+class SpecificRuleLayer(NeuralLogLayer):
     """
     A Layer to represent a rule with constants applied to it.
 
@@ -570,9 +636,7 @@ class SpecificRuleLayer(keras.layers.Layer):
         :param kwargs: additional arguments
         :type kwargs: dict[str, Any]
         """
-        # noinspection PyTypeChecker
-        kwargs["name"] = name
-        super(SpecificRuleLayer, self).__init__(**kwargs)
+        super(SpecificRuleLayer, self).__init__(name, **kwargs)
         self.rule_layer = rule_layer
         self.input_constant = input_constant
         self.output_constant = output_constant
@@ -756,39 +820,13 @@ class NeuralLogNetwork(keras.Model):
     _rule_layers: Dict[Tuple[HornClause, bool], RuleLayer] = dict()
     "The rule layer by clause"
 
-    # TODO: Create a way to define the functions in the program
     def __init__(self, program,
-                 literal_combining_function=tf.math.add_n,
-                 path_combining_function=tf.math.multiply,
-                 edge_combining_function=tf.math.multiply,
-                 edge_combining_function_2d=tf.matmul,
-                 invert_fact_function=tf.transpose,
                  attribute_combine_function=tf.math.multiply):
         """
         Creates a NeuralLogNetwork.
 
         :param program: the neural language
         :type program: NeuralLogProgram
-        :param literal_combining_function: function to combine the different
-        proves of a literal (FactLayers and RuleLayers). The default is to
-        sum all the proves, element-wise, by applying the `tf.math.add_n`
-        function
-        :type literal_combining_function: function
-        :param path_combining_function: function to combine different path
-        from a RuleLayer. The default is to multiply all the paths,
-        element-wise, by applying the `tf.math.multiply` function
-        :type path_combining_function: function
-        :param edge_combining_function: function to extract the value of the
-        fact based on the input. The default is the element-wise
-        multiplication implemented by the `tf.math.multiply` function
-        :type edge_combining_function: function
-        :param edge_combining_function_2d: function to extract the value of the
-        fact based on the input, for 2d facts. The default is the dot
-        multiplication implemented by the `tf.matmul` function
-        :type edge_combining_function_2d: function
-        :param invert_fact_function: function to extract inverse of a facts.
-        The default is the transpose function implemented by `tf.transpose`
-        :type invert_fact_function: function
         :param attribute_combine_function: function to combine the weights
         and values of the attribute facts. The default function is the
         `tf.matmul`
@@ -797,11 +835,6 @@ class NeuralLogNetwork(keras.Model):
         super(NeuralLogNetwork, self).__init__(name="NeuralLogNetwork")
         self.program = program
         self.constant_size = len(self.program.iterable_constants)
-        self.literal_combining_function = literal_combining_function
-        self.path_combining_function = path_combining_function
-        self.edge_combining_function = edge_combining_function
-        self.edge_combining_function_2d = edge_combining_function_2d
-        self.invert_fact_function = invert_fact_function
         self.attribute_combine_function = attribute_combine_function
         self.tensor_factory = TensorFactory(self.program)
         self.predicates = []
@@ -829,9 +862,6 @@ class NeuralLogNetwork(keras.Model):
 
     # noinspection PyMissingOrEmptyDocstring
     def get_matrix_representation(self, atom):
-        # TODO: get the tensor representation for the literal instead of the
-        #  predicate:
-        #  - adjust for negated literals;
         """
         Builds the matrix representation for the atom.
 
@@ -858,46 +888,110 @@ class NeuralLogNetwork(keras.Model):
             standard (input, output) literal format.
         :type inverted: bool
         :return: the predicate layer
-        :rtype: LiteralLayer
+        :rtype: LiteralLayer or FunctionLayer
         """
-        # TODO: check if the literal is a function symbol
         renamed_literal = get_renamed_literal(atom)
         key = (renamed_literal, inverted)
         literal_layer = self._literal_layers.get(key, None)
         if literal_layer is None:
-            if is_cyclic(renamed_literal, previous_atoms):
-                raise CyclicProgramException(atom)
-            inputs = [self._build_fact(renamed_literal, inverted=inverted)]
-            for clause in self.program.clauses_by_predicate.get(
-                    renamed_literal.predicate, []):
-                substitution = get_substitution(clause.head, renamed_literal)
-                if substitution is None:
-                    continue
-                rule = self._build_rule(clause, previous_atoms, inverted)
-                if rule is None:
-                    continue
-                if atom.get_number_of_variables() < atom.arity():
-                    layer_name = "rule_layer_{}".format(
-                        get_standardised_name(clause.__str__()))
-                    source = renamed_literal.terms[0 if inverted else -1]
-                    destination = renamed_literal.terms[-1 if inverted else 0]
-                    input_tensor = self.tensor_factory.get_one_hot_tensor(
-                        source)
-                    output_tensor = None
-                    if destination.is_constant() and atom.arity() == 2:
-                        output_tensor = self.tensor_factory.get_one_hot_tensor(
-                            destination)
-                        output_tensor = tf.transpose(output_tensor)
-                    rule = SpecificRuleLayer(
-                        layer_name, rule, input_tensor, output_tensor)
-                inputs.append(rule)
-
-            literal_layer = LiteralLayer(
-                "literal_layer_{}".format(
-                    get_standardised_name(renamed_literal.__str__())),
-                inputs, self.literal_combining_function)
+            if atom.predicate in self.program.logic_predicates:
+                literal_layer = self._build_logic_literal_layer(
+                    renamed_literal, previous_atoms, inverted)
+            else:
+                literal_layer = self._build_function_layer(renamed_literal)
             self._literal_layers[key] = literal_layer
         return literal_layer
+
+    def _build_logic_literal_layer(self, renamed_literal, previous_atoms,
+                                   inverted):
+        """
+        Builds the logic literal layer.
+
+        :param renamed_literal: the renamed literal
+        :type renamed_literal: Atom
+        :param previous_atoms: the previous atoms
+        :type previous_atoms: list[Atom] or set[Atom]
+        :param inverted: if `True`, creates the inverted literal; this is,
+            a literal in the format (output, input). If `False`, creates the
+            standard (input, output) literal format.
+        :type inverted: bool
+        :return: the literal layer
+        :rtype: LiteralLayer
+        """
+        if is_cyclic(renamed_literal, previous_atoms):
+            raise CyclicProgramException(renamed_literal)
+        inputs = [self._build_fact(renamed_literal, inverted=inverted)]
+        for clause in self.program.clauses_by_predicate.get(
+                renamed_literal.predicate, []):
+            substitution = get_substitution(clause.head, renamed_literal)
+            if substitution is None:
+                continue
+            rule = self._build_rule(clause, previous_atoms, inverted)
+            if rule is None:
+                continue
+            arity = renamed_literal.arity()
+            if renamed_literal.get_number_of_variables() < arity:
+                layer_name = "rule_layer_{}".format(
+                    get_standardised_name(clause.__str__()))
+                source = renamed_literal.terms[0 if inverted else -1]
+                destination = renamed_literal.terms[-1 if inverted else 0]
+                input_tensor = self.tensor_factory.get_one_hot_tensor(
+                    source)
+                output_tensor = None
+                if destination.is_constant() and arity == 2:
+                    output_tensor = self.tensor_factory.get_one_hot_tensor(
+                        destination)
+                    output_tensor = tf.transpose(output_tensor)
+                rule = SpecificRuleLayer(
+                    layer_name, rule, input_tensor, output_tensor)
+            inputs.append(rule)
+        combining_function = self.get_literal_combining_function(
+            renamed_literal)
+        return LiteralLayer(
+            "literal_layer_{}".format(
+                get_standardised_name(renamed_literal.__str__())), inputs,
+            combining_function)
+
+    def get_literal_combining_function(self, literal):
+        """
+        Gets the combining function for the `literal`. This is the function to
+        combine the different proves of a literal (FactLayers and RuleLayers).
+
+        The default is to sum all the proves, element-wise, by applying the
+        `tf.math.add_n` function.
+
+        :param literal: the literal
+        :type literal: Atom
+        :return: the combining function
+        :rtype: function
+        """
+        literal_combining_function = self.program.get_parameter_value(
+            "literal_combining_function", literal.predicate)
+        return get_combining_function(literal_combining_function)
+
+    def _build_function_layer(self, renamed_literal):
+        """
+        Builds the logic literal layer.
+
+        :param renamed_literal: the renamed literal
+        :type renamed_literal: Atom
+        :return: the function layer
+        :rtype: FunctionLayer
+        """
+        function_identifier = self.program.get_parameter_value(
+            "function_value", renamed_literal.predicate)
+        if function_identifier is None:
+            function_identifier = renamed_literal.predicate.name
+        function_value = get_literal_function(function_identifier)
+        if renamed_literal.arity() > 1:
+            raise TooManyArgumentsFunction(renamed_literal.predicate)
+        inputs = None
+        term = renamed_literal.terms[0]
+        if term.is_constant():
+            inputs = self.tensor_factory.get_one_hot_tensor(term)
+        name = "literal_layer_{}".format(
+            get_standardised_name(renamed_literal.__str__()))
+        return FunctionLayer(name, function_value, inputs=inputs)
 
     def _build_rule(self, clause, previous_atoms=None, inverted=False):
         """
@@ -927,21 +1021,37 @@ class NeuralLogNetwork(keras.Model):
                 layer_path = []
                 for i in range(len(path)):
                     literal_layer = self._build_literal(
-                        path[i], previous_atoms, path.inverted[i])
+                        path[i], current_atoms, path.inverted[i])
                     layer_path.append(literal_layer)
                 layer_paths.append(layer_path)
 
             grounded_literals = []
             for grounded in grounds:
-                literal_layer = self._build_literal(grounded, previous_atoms)
+                literal_layer = self._build_literal(grounded, current_atoms)
                 grounded_literals.append(literal_layer(None))
             layer_name = "rule_layer_{}".format(
                 get_standardised_name(clause.__str__()))
+            path_combining_function = self.get_path_combining_function()
             rule_layer = RuleLayer(layer_name, layer_paths, grounded_literals,
-                                   self.path_combining_function)
+                                   path_combining_function)
             self._rule_layers[key] = rule_layer
 
         return rule_layer
+
+    def get_path_combining_function(self):
+        """
+        Gets the path combining function. This is the function to combine
+        different path from a RuleLayer.
+
+        The default is to multiply all the paths, element-wise, by applying the
+        `tf.math.multiply` function.
+
+        :return: the combining function
+        :rtype: function
+        """
+        combining_function = self.program.get_parameter_value(
+            "path_combining_function")
+        return get_combining_function(combining_function)
 
     def _build_fact(self, atom, inverted=False):
         """
@@ -956,29 +1066,95 @@ class NeuralLogNetwork(keras.Model):
         :return: the fact layer
         :rtype: FactLayer
         """
-        renamed_atom = get_renamed_literal(atom)
-        key = (renamed_atom, inverted)
+        renamed_literal = get_renamed_literal(atom)
+        key = (renamed_literal, inverted)
         fact_layer = self._fact_layers.get(key, None)
         if fact_layer is None:
             layer_name = "fact_layer_{}".format(
-                get_standardised_name(renamed_atom.__str__()))
-            tensor = self.get_matrix_representation(renamed_atom)
-            edge_function = self.edge_combining_function
+                get_standardised_name(renamed_literal.__str__()))
+            tensor = self.get_matrix_representation(renamed_literal)
+            edge_function = self.get_edge_combining_function()
             if isinstance(tensor, tuple):
-                tensor = self.attribute_combine_function(tensor[0], tensor[1])
+                tensor = self.get_attribute_combine_function(
+                    renamed_literal)(tensor[0], tensor[1])
             elif atom.get_number_of_variables() == 2:
-                edge_function = self.edge_combining_function_2d
+                edge_function = self.get_edge_combining_function_2d()
                 if inverted:
-                    tensor = self.invert_fact_function(tensor)
+                    tensor = self.get_invert_fact_function(
+                        renamed_literal)(tensor)
 
             shape = tensor.shape.as_list()
             if len(shape) == 2 and shape[0] > shape[-1]:
-                tensor = tf.transpose(tensor)
+                if isinstance(tensor, tf.SparseTensor):
+                    tensor = tf.sparse.transpose(tensor)
+                else:
+                    tensor = tf.transpose(tensor)
             fact_layer = FactLayer(layer_name, tensor, edge_function)
             self._fact_layers[key] = fact_layer
 
         return fact_layer
 
+    def get_attribute_combine_function(self, literal):
+        """
+        Gets the fact inversion function. This is the function to combine the
+        weights and values of the attribute facts.
+
+        The default function is the `tf.matmul`.
+
+        :param literal: the literal
+        :type literal: Atom
+        :return: the combining function
+        :rtype: function
+        """
+        combining_function = self.program.get_parameter_value(
+            "attribute_combine_function", literal.predicate)
+        return get_combining_function(combining_function)
+
+    def get_invert_fact_function(self, literal):
+        """
+        Gets the fact inversion function. This is the function to extract
+        the inverse of a facts.
+
+        The default is the transpose function implemented by `tf.transpose`.
+
+        :param literal: the literal
+        :type literal: Atom
+        :return: the combining function
+        :rtype: function
+        """
+        combining_function = self.program.get_parameter_value(
+            "invert_fact_function", literal.predicate)
+        return get_combining_function(combining_function)
+
+    def get_edge_combining_function(self):
+        """
+        Gets the edge combining function. This is the function to extract the
+        value of the fact based on the input.
+
+        The default is the element-wise multiplication implemented by the
+        `tf.math.multiply` function.
+
+        :return: the combining function
+        :rtype: function
+        """
+        combining_function = self.program.get_parameter_value(
+            "edge_combining_function")
+        return get_combining_function(combining_function)
+
+    def get_edge_combining_function_2d(self):
+        """
+        Gets the edge combining function 2d. This is the function to extract the
+        value of the fact based on the input, for 2d facts.
+
+        The default is the dot multiplication implemented by the `tf.matmul`
+        function.
+
+        :return: the combining function
+        :rtype: function
+        """
+        combining_function = self.program.get_parameter_value(
+            "edge_combining_function_2d")
+        return get_combining_function(combining_function)
     # if __name__ == "__main__":
 #     # x = tf.constant([[1], [2], [3], [4]], dtype=tf.float32)
 #     # y_true = tf.constant([[0], [-1], [-2], [-3]], dtype=tf.float32)

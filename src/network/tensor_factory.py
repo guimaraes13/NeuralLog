@@ -8,8 +8,8 @@ from enum import Enum
 import numpy as np
 import re
 import tensorflow as tf
+from src.network.network_functions import get_initializer
 from scipy.sparse import csr_matrix
-from tensorflow.keras import initializers
 from typing import Dict, Any
 
 from src.language.language import Predicate, Atom, Variable, \
@@ -71,7 +71,7 @@ def get_initial_value_by_name(initializer, shape):
     :return: the initial value
     :rtype: function
     """
-    initializer = initializers.get(initializer)
+    initializer = get_initializer(initializer)
     initial_value = lambda: initializer(shape)
     return initial_value
 
@@ -662,7 +662,7 @@ class TensorFactory:
             weight = weight.copy()
             value = value.copy()
             for i in range(len(weight.data)):
-                if value.data[i] != constant_value:
+                if not np.isclose(value.data[i], constant_value):
                     weight.data[i] = 0.0
                     value.data[i] = constant_value
             w_tensor = self._matrix_to_constant(
