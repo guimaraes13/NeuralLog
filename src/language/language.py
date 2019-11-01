@@ -68,7 +68,10 @@ def get_variable_atom(atom):
     :rtype: Atom
     """
     terms = [Variable("X{}".format(i)) for i in range(atom.arity())]
-    return Atom(atom.predicate, *terms, weight=atom.weight)
+    variable_atom = Atom(atom.predicate, *terms, weight=atom.weight)
+    if isinstance(atom, Literal):
+        return Literal(variable_atom, negated=atom.negated)
+    return variable_atom
 
 
 def get_renamed_atom(atom):
@@ -146,6 +149,23 @@ def get_substitution(generic_atom, specific_atom):
                 return None
 
     return substitutions
+
+
+def get_variable_indices(atom):
+    """
+    Gets the indexes of the variables in the atom.
+
+    :param atom: the atom
+    :type atom: Atom
+    :return: the indices of the variables
+    :rtype: list[int]
+    """
+    indexes = []
+    for i in range(atom.arity()):
+        if not atom.terms[i].is_constant():
+            indexes.append(i)
+
+    return indexes
 
 
 class TooManyArguments(Exception):
@@ -459,6 +479,9 @@ class Predicate:
         """
         self.name = name
         self.arity = arity
+
+    def __lt__(self, other):
+        return self.key() < other.key()
 
     def is_template(self):
         """

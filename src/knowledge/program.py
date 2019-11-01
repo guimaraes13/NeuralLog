@@ -3,6 +3,7 @@ Defines a NeuralLog Program.
 """
 import collections
 import logging
+import sys
 from collections import OrderedDict
 from typing import TypeVar, MutableMapping, Dict, Any, List, Set, Tuple
 
@@ -12,6 +13,8 @@ from scipy.sparse import csr_matrix
 from src.language.language import Number, TermType, Predicate, Atom, \
     HornClause, Term, AtomClause, ClauseMalformedException, TooManyArguments, \
     PredicateTypeError, UnsupportedMatrixRepresentation
+
+NO_EXAMPLE_SET = ":none:"
 
 KT = TypeVar('KT')  # Key type.
 VT = TypeVar('VT')  # Value type.
@@ -132,6 +135,27 @@ def get_predicate_from_string(string):
     return Predicate(string, -1)
 
 
+def print_neural_log_program(program, writer=sys.stdout):
+    """
+    Prints the NeuralLogProgram to the writer.
+
+    :param program: the program
+    :type program: NeuralLogProgram
+    :param writer: the writer. Default is to print to the standard output
+    """
+    key = lambda x: (x.arity, x.name)
+    for predicate in sorted(program.facts_by_predicate.keys(), key=key):
+        for item in program.facts_by_predicate[predicate].values():
+            print(AtomClause(item), file=writer)
+        print(file=writer)
+
+    print(file=writer)
+    for predicate in sorted(program.clauses_by_predicate.keys(), key=key):
+        for item in program.clauses_by_predicate[predicate]:
+            print(item, file=writer)
+        print(file=writer)
+
+
 # noinspection DuplicatedCode
 class BiDict(dict, MutableMapping[KT, VT]):
     """
@@ -158,6 +182,25 @@ class BiDict(dict, MutableMapping[KT, VT]):
         super(BiDict, self).__delitem__(key)
 
 
+def get_value_from_parameter(names, parameters):
+    """
+    Gets the value from the `parameters` dict.
+
+    :param names: the names of the value
+    :type names: list[str]
+    :param parameters: the parameters dict
+    :type parameters: [str, dict or str]
+    :return: the value of the parameter
+    :rtype: str or None
+    """
+    value = None
+    for key in names:
+        value = parameters.get(key, None)
+        if not isinstance(value, dict):
+            break
+    return value
+
+
 class NeuralLogProgram:
     """
     Represents a NeuralLog language.
@@ -179,7 +222,7 @@ class NeuralLogProgram:
     of the same atom with different weights, in this way, only the last 
     definition will be considered"""
 
-    examples: Dict[Predicate, Dict[Any, Atom]] = dict()
+    examples: Dict[str, Dict[Predicate, Dict[Any, Atom]]] = dict()
     """The examples. The values of this variable are dictionaries where the key 
     are the predicate and a tuple of the terms and the values are the atoms 
     itself. It was done this way in order to collapse different definitions 
@@ -210,20 +253,23 @@ class NeuralLogProgram:
     parameters: Dict[Any, Any] = dict()
     "A dictionary with the parameters defined in the program"
 
-    def __init__(self, clauses):
+    def __init__(self):
         """
         Creates a NeuralLog Program.
-
-        :param clauses: the clauses of the language
-        :type clauses: collections.iterable[Clause]
         """
         self._last_atom_for_predicate: Dict[Predicate, Atom] = dict()
-        self._process_clauses(clauses)
-        del self._last_atom_for_predicate
+        # self.add_clauses(clauses)
+        # del self._last_atom_for_predicate
+        # self.build_program()
+
+    def build_program(self):
+        """
+        Builds the program after all the clauses had been added.
+        """
         self._get_constants()
         self._add_default_parameters()
 
-    def _process_clauses(self, clauses):
+    def add_clauses(self, clauses, *args, **kwargs):
         """
         Splits the clauses from the facts and create a map of the type of the
         predicates.
@@ -235,23 +281,11 @@ class NeuralLogProgram:
         for clause in clauses:
             if isinstance(clause, AtomClause):
                 if self._is_builtin_predicate(clause.atom.predicate):
-                    self._process_builtin_clause(clause)
+                    self._process_builtin_clause(clause, *args, **kwargs)
                     continue
 
             if isinstance(clause, AtomClause) and clause.is_grounded():
-                self._add_predicate(clause.atom)
-                fact_dict = self.facts_by_predicate.setdefault(
-                    clause.atom.predicate, OrderedDict())
-                old_atom = fact_dict.get(clause.simple_key(), None)
-                if old_atom is not None:
-                    logger.warning("Warning: atom %s defined at line %d:%d "
-                                   "replaced by Atom %s defined at line %d:%d.",
-                                   old_atom, old_atom.context.start.line,
-                                   old_atom.context.start.column,
-                                   clause.atom, clause.atom.context.start.line,
-                                   clause.atom.context.start.column)
-                fact_dict[clause.simple_key()] = clause.atom
-                self.logic_predicates.add(clause.atom.predicate)
+                self.add_fact(clause.atom, True)
             elif isinstance(clause, HornClause):
                 self._add_predicate(clause.head)
                 self.logic_predicates.add(clause.head.predicate)
@@ -272,6 +306,45 @@ class NeuralLogProgram:
         # noinspection PyTypeChecker
         self.functional_predicates = \
             self.predicates.keys() - self.logic_predicates
+
+    def add_fact(self, atom, report_replacement=False):
+        """
+        Adds the atom to the program.
+
+        :param atom: the atom
+        :type atom: Atom
+        :param report_replacement: if `True` logs a warning if the atom
+        already exists in the program.
+        :type report_replacement: bool
+        """
+        self._add_predicate(atom)
+        fact_dict = self.facts_by_predicate.setdefault(
+            atom.predicate, OrderedDict())
+        old_atom = fact_dict.get(atom.simple_key(), None)
+        if report_replacement and old_atom is not None:
+            if old_atom.context is not None and atom.context is not None:
+                logger.warning("Warning: atom %s defined at line %d:%d "
+                               "replaced by Atom %s defined at line %d:%d.",
+                               old_atom, old_atom.context.start.line,
+                               old_atom.context.start.column,
+                               atom, atom.context.start.line,
+                               atom.context.start.column)
+            elif atom.context is None:
+                logger.warning("Warning: atom %s defined at line %d:%d "
+                               "replaced by Atom %s.",
+                               old_atom, old_atom.context.start.line,
+                               old_atom.context.start.column, atom)
+            elif old_atom.context is None:
+                logger.warning("Warning: atom %s replaced by Atom %s defined at"
+                               " line %d:%d.", old_atom,
+                               atom, atom.context.start.line,
+                               atom.context.start.column)
+            else:
+                logger.warning("Warning: atom %s replaced by Atom %s",
+                               old_atom, atom)
+
+        fact_dict[atom.simple_key()] = atom
+        self.logic_predicates.add(atom.predicate)
 
     def _add_predicate(self, atom):
         """
@@ -310,10 +383,11 @@ class NeuralLogProgram:
             for fact in facts.values():
                 self._get_constants_from_atom(fact, _iterable_constants)
                 fact.context = None
-        for examples in self.examples.values():
-            for example in examples.values():
-                self._get_constants_from_atom(example, _iterable_constants)
-                example.context = None
+        for sets in self.examples.values():
+            for examples in sets.values():
+                for example in examples.values():
+                    self._get_constants_from_atom(example, _iterable_constants)
+                    example.context = None
         for clauses in self.clauses_by_predicate.values():
             for clause in clauses:
                 self._get_constants_from_atom(clause.head, _iterable_constants)
@@ -636,7 +710,7 @@ class NeuralLogProgram:
 
         return False
 
-    def _process_builtin_clause(self, clause):
+    def _process_builtin_clause(self, clause, *args, **kwargs):
         """
         Process the builtin clause.
 
@@ -645,7 +719,7 @@ class NeuralLogProgram:
         """
         predicate = clause.atom.predicate
         # noinspection PyUnresolvedReferences
-        self.builtin.functions[predicate.name](self, clause)
+        self.builtin.functions[predicate.name](self, clause, *args, **kwargs)
 
     def get_parameter_value(self, name, predicate=None):
         """
@@ -657,25 +731,21 @@ class NeuralLogProgram:
         :type predicate: Predicate
         :return: the value of the parameter
         """
-
-        if name is None:
-            parameters = self.parameters
-        else:
-            parameters = self.parameters.get(predicate, self.parameters)
-
         if isinstance(name, str):
             name = [name]
 
-        value = None
-        for key in name:
-            value = parameters.get(key, None)
-            if not isinstance(value, dict):
-                break
+        if predicate is None:
+            return get_value_from_parameter(name, self.parameters)
+        else:
+            parameters = self.parameters.get(predicate, self.parameters)
+            value = get_value_from_parameter(name, parameters)
+            if value is None:
+                return get_value_from_parameter(name, self.parameters)
+            return value
 
-        return value
-
+    # noinspection PyUnusedLocal
     @builtin("example")
-    def _handle_example(self, example):
+    def _handle_example(self, example, *args, **kwargs):
         """
         Process the builtin `example` predicate.
 
@@ -688,7 +758,10 @@ class NeuralLogProgram:
             *example.atom.terms[1:],
             context=example.atom.context
         )
-        example_dict = self.examples.setdefault(atom.predicate, OrderedDict())
+
+        example_set = kwargs.get("example_set", NO_EXAMPLE_SET)
+        example_dict = self.examples.setdefault(example_set, OrderedDict())
+        example_dict = example_dict.setdefault(atom.predicate, OrderedDict())
         key = atom.simple_key()
         old_atom = example_dict.get(key, None)
         if old_atom is not None:
@@ -759,7 +832,13 @@ class NeuralLogProgram:
                 "config": {"mean": 0.5, "stddev": 0.125}
             }
 
-            self.parameters["literal_combining_function"] = "tf.math.add_n"
+            self.parameters["literal_negation_function"] = \
+                "literal_negation_function"
+            self.parameters["literal_negation_function:sparse"] = \
+                "literal_negation_function:sparse"
+
+            # self.parameters["literal_combining_function"] = "tf.math.add_n"
+            self.parameters["literal_combining_function"] = "tf.math.add"
             # function to combine the different proves of a literal
             # (FactLayers and RuleLayers). The default is to sum all the
             # proves, element-wise, by applying the `tf.math.add_n` function
@@ -774,7 +853,18 @@ class NeuralLogProgram:
             # The default is the element-wise multiplication implemented by the
             # `tf.math.multiply` function
 
+            self.parameters["edge_neutral_element"] = {
+                "class_name": "tf.constant",
+                "config": {"value": 1.0}
+            }
+            # element is used to extract the tensor value of grounded literal
+            # in a rule. The default edge combining function is the element-wise
+            # multiplication. Thus, the neutral element is `1.0`, represented by
+            # `tf.constant(1.0)`.
+
             self.parameters["edge_combining_function_2d"] = "tf.matmul"
+            self.parameters["edge_combining_function_2d:sparse"] = \
+                "edge_combining_function_2d:sparse"
             # function to extract the value of the fact based on the input,
             # for 2d facts. The default is the dot multiplication implemented
             # by the `tf.matmul` function
@@ -783,6 +873,12 @@ class NeuralLogProgram:
             # function to extract the inverse of a facts. The default is the
             # transpose function implemented by `tf.transpose`
 
-            self.parameters["attribute_combine_function"] = "tf.math.multiply"
+            # self.parameters["any_aggregation_function"] = "tf.reduce_sum"
+            self.parameters["any_aggregation_function"] = \
+                "any_aggregation_function"
+            # function to aggregate the input of an any predicate. The default
+            # function is the `tf.reduce_sum`.
+
+            # self.parameters["attribute_combine_function"] = "tf.math.multiply"
             # function to combine the weights and values of the attribute facts.
             # The default function is the `tf.matmul`.

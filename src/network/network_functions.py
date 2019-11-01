@@ -63,44 +63,6 @@ def neural_log_initializer(identifier):
     return lambda x: registry(x, identifier, initializers)
 
 
-# noinspection PyMissingOrEmptyDocstring
-@neural_log_literal_function("my_print_value")
-def print_value(value1, value2):
-    print(value1, value2)
-
-
-# noinspection PyMissingOrEmptyDocstring,PyShadowingBuiltins
-@neural_log_literal_function("my_func")
-class MyFunc:
-
-    def __init__(self, min=0, max=1):
-        self.min = min
-        self.max = max
-
-    def __call__(self, *args, **kwargs):
-        print("Class min:\t{}\nClass max:\t{}\nArguments:\t{}".format(
-            self.min, self.max, args))
-
-
-# @neural_log_literal_function("my_const_value")
-# noinspection PyMissingOrEmptyDocstring
-@neural_log_initializer("my_const_value")
-class ConstantLiteral:
-
-    def __init__(self, value):
-        self.value = value
-
-    def __call__(self, *args, **kwargs):
-        return tf.constant(self.value, shape=args[0])
-
-
-# @neural_log_literal_function("my_const_value_2")
-# noinspection PyMissingOrEmptyDocstring,PyUnusedLocal
-@neural_log_initializer("my_const_value_2")
-def constant_literal_2(*args, **kwargs):
-    return tf.constant(2.0, shape=args[0])
-
-
 def _deserialize(configuration, function_dict, keras_func, name_only=False):
     """
     Gets the function object from `configuration`.
@@ -196,16 +158,102 @@ def get_combining_function(identifier):
     :type identifier: str or dict[str, str or dict]
     :raise ValueError: if the function is not found
     :return: the function
-    :rtype: function
+    :rtype: function or tf.Tensor
     """
-    if isinstance(identifier, str) and identifier.startswith("tf."):
-        identifiers = identifier.split(".")[1:]
+    configuration = None
+    if isinstance(identifier, dict):
+        class_name = identifier["class_name"]
+        configuration = identifier["config"]
+    else:
+        class_name = identifier
+    if class_name.startswith("tf."):
+        names = class_name.split(".")[1:]
         func = None
-        for name in identifiers:
+        for name in names:
             func = getattr(tf, name)
-        return func
+        if configuration is None:
+            return func
+        else:
+            return func(**configuration)
     else:
         return _get(identifier, combining_functions, None)
+
+
+@neural_log_combining_function("edge_combining_function_2d:sparse")
+def edge_combining_function_2d_sparse(a, sp_b):
+    """
+    Combines the tensors `a` and `sp_b`, where `sp_b` is a sparse tensor.
+
+    :param a: the tensor a
+    :type a: tf.Tensor
+    :param sp_b: the tensor b
+    :type sp_b: tf.SparseTensor
+    :return: a combination of the tensor
+    :rtype: tf.Tensor
+    """
+    tensor = tf.sparse.sparse_dense_matmul(sp_b, a,
+                                           adjoint_a=True, adjoint_b=True)
+    return tf.transpose(tensor)
+
+
+@neural_log_literal_function("literal_negation_function")
+def literal_negation_function(a):
+    """
+    Returns the negation of the atom tensor `a`.
+
+    :param a: the atom tensor
+    :type a: tf.Tensor
+    :return: the negation of `a`
+    :rtype: tf.Tensor
+    """
+    return tf.add(1.0, -a)
+
+
+@neural_log_literal_function("literal_negation_function:sparse")
+def literal_negation_function_sparse(a):
+    """
+    Returns the negation of the atom sparse tensor `a`.
+
+    :param a: the atom sparse tensor
+    :type a: tf.SparseTensor
+    :return: the negation of `a`
+    :rtype: tf.SparseTensor
+    """
+    return literal_negation_function(tf.sparse.to_dense(a))
+
+
+# noinspection PyMissingOrEmptyDocstring
+@neural_log_initializer("my_const_value")
+class MyConstant:
+
+    def __init__(self, value):
+        self.value = value
+
+    def __call__(self, shape):
+        return tf.Variable(self.value, shape=shape)
+        # return self.value
+
+
+# noinspection PyMissingOrEmptyDocstring
+@neural_log_initializer("my_const_value_2")
+def my_const_value_2(shape):
+    return tf.Variable(2.0, shape=shape)
+    # return 2.0
+
+
+@neural_log_combining_function("any_aggregation_function")
+def any_aggregation_function(a):
+    """
+    Returns the function to aggregate the input of an `Any` predicate.
+
+    The default function is the `tf.reduce_sum`.
+
+    :param a: the input tensor
+    :type a: tf.Tensor
+    :return: the result tensor
+    :rtype: tf.Tensor
+    """
+    return tf.reduce_sum(a, axis=1)
 
 
 if __name__ == "__main__":
