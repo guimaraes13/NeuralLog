@@ -4,7 +4,7 @@ Defines a NeuralLog Program.
 import collections
 import logging
 import sys
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from typing import TypeVar, MutableMapping, Dict, Any, List, Set, Tuple
 
 import numpy as np
@@ -12,8 +12,9 @@ from scipy.sparse import csr_matrix
 
 from src.language.language import Number, TermType, Predicate, Atom, \
     HornClause, Term, AtomClause, ClauseMalformedException, TooManyArguments, \
-    PredicateTypeError, UnsupportedMatrixRepresentation
+    PredicateTypeError, UnsupportedMatrixRepresentation, Literal
 
+ANY_PREDICATE_NAME = "any"
 NO_EXAMPLE_SET = ":none:"
 
 KT = TypeVar('KT')  # Key type.
@@ -157,6 +158,483 @@ def print_neural_log_program(program, writer=sys.stdout):
 
 
 # noinspection DuplicatedCode
+def get_value_from_parameter(names, parameters):
+    """
+    Gets the value from the `parameters` dict.
+
+    :param names: the names of the value
+    :type names: list[str]
+    :param parameters: the parameters dict
+    :type parameters: [str, dict or str]
+    :return: the value of the parameter
+    :rtype: str or None
+    """
+    value = None
+    for key in names:
+        value = parameters.get(key, None)
+        if not isinstance(value, dict):
+            break
+    return value
+
+
+def get_disconnected_literals(clause, connected_literals):
+    """
+    Gets the literals from the `clause` which are disconnected from the
+    source and destination variables but are grounded.
+
+    :param clause: the clause
+    :type clause: HornClause
+    :param connected_literals: the set of connected literals
+    :type connected_literals: Set[Literal]
+    :return: the list of disconnected literals
+    :rtype: List[Literal]
+    """
+    ground_literals = []
+    for literal in clause.body:
+        if literal in connected_literals or not literal.is_grounded():
+            continue
+        ground_literals.append(literal)
+    return ground_literals
+
+
+def build_literal_dictionaries(clause):
+    """
+    Builds the dictionaries with the literals of the `clause`. This method
+    creates two dictionaries, the first one containing the literals that
+    connects different terms; and the second one the loop literals,
+    which connects the terms to themselves, either by being unary or by having
+    equal terms.
+
+    Both dictionaries have the terms in the literals as keys.
+
+    :param clause: the clause
+    :type clause: HornClause
+    :return: the dictionaries
+    :rtype: (Dict[Term, List[Literal]], Dict[Term, List[Literal]])
+    """
+    binary_literals_by_term = dict()  # type: Dict[Term, List[Literal]]
+    loop_literals_by_term = dict()  # type: Dict[Term, List[Literal]]
+    for literal in clause.body:
+        if literal.arity() == 1:
+            dict_to_append = loop_literals_by_term
+        elif literal.arity() == 2:
+            if literal.terms[0] == literal.terms[-1]:
+                dict_to_append = loop_literals_by_term
+            else:
+                dict_to_append = binary_literals_by_term
+        else:
+            continue
+        for term in set(literal.terms):
+            dict_to_append.setdefault(term, []).append(literal)
+    return binary_literals_by_term, loop_literals_by_term
+
+
+def find_paths(partial_paths, destination, binary_literals_by_term,
+               completed_paths, visited_literals):
+    """
+    Finds the paths from `partial_paths` to `destination` by appending the
+    literals from `binary_literals_by_term`. The completed paths are stored
+    in `completer_paths` while the used literals are stores in
+    `visited_literals`.
+
+    Finally, it returns the dead end paths.
+
+    :param partial_paths: The initial partial paths
+    :type partial_paths: deque[RulePath]
+    :param destination: the destination term
+    :type destination: Term
+    :param binary_literals_by_term: the literals to be appended
+    :type binary_literals_by_term: Dict[Term, List[Literals]]
+    :param completed_paths: the completed paths
+    :type completed_paths: deque[RulePath]
+    :param visited_literals: the visited literals
+    :type visited_literals: Set[Literal]
+    :return: the dead end paths
+    :rtype: List[RulePath]
+    """
+    dead_end_paths = []  # type: List[RulePath]
+    while len(partial_paths) > 0:
+        size = len(partial_paths)
+        for i in range(size):
+            path = partial_paths.popleft()
+            path_end = path.path_end()
+
+            if path_end == destination:
+                completed_paths.append(path)
+                continue
+
+            possible_edges = binary_literals_by_term.get(path_end, [None])
+            not_added_path = True
+            for literal in possible_edges:
+                new_path = path.new_path_with_item(literal)
+                if new_path is None:
+                    continue
+                partial_paths.append(new_path)
+                # noinspection PyTypeChecker
+                visited_literals.add(literal)
+                not_added_path = False
+
+            if not_added_path:
+                dead_end_paths.append(path)
+    return dead_end_paths
+
+
+def append_not_in_set(literal, literals, appended):
+    """
+    Appends `literal` to `literals` if it is not in `appended`.
+    Also, updates appended.
+
+    :param literal: the literal to append
+    :type literal: Literal
+    :param literals: the list to append to
+    :type literals: List[Literal]
+    :param appended: the set of already appended literals
+    :type appended: Set[Literal]
+    """
+    if literal not in appended:
+        literals.append(literal)
+        appended.add(literal)
+
+
+def complete_path_with_any(dead_end_paths, destination,
+                           inverted=False):
+    """
+    Completes the path by appending the special `any` predicate between the
+    end of the path and the destination.
+
+    :param dead_end_paths: the paths to be completed
+    :type dead_end_paths: collections.Iterable[RulePath]
+    :param destination: the destination
+    :type destination: Term
+    :param inverted: if `True`, append the any predicate with the terms in the
+    reversed order
+    :type inverted: bool
+    :return: the completed paths
+    :rtype: List[RulePath]
+    """
+    completed_paths = []
+    for path in dead_end_paths:
+        if inverted:
+            any_literal = Literal(Atom(ANY_PREDICATE_NAME,
+                                       destination, path.path_end()))
+        else:
+            any_literal = Literal(Atom(ANY_PREDICATE_NAME,
+                                       path.path_end(), destination))
+        path.append(any_literal)
+        completed_paths.append(path)
+    return completed_paths
+
+
+def append_loop_predicates(completed_paths, loop_literals_by_term,
+                           visited_literals, reverse_path=False):
+    """
+    Appends the loop predicates to the path.
+
+    :param completed_paths: the completed paths
+    :type completed_paths: deque[RulePath]
+    :param loop_literals_by_term: the loop predicates by term
+    :type loop_literals_by_term: Dict[Term, List[Literals]]
+    :param visited_literals: the set of visited literals to be updated
+    :type visited_literals: Set[Literal]
+    :param reverse_path: if `True`, reverse the path before processing
+    :type reverse_path: bool
+    :return: the final paths
+    :rtype: List[RulePath]
+    """
+    final_paths = []  # type: List[RulePath]
+    for path in completed_paths:
+        if reverse_path:
+            path = path.reverse()
+        last_reversed = False
+        literals = []
+        appended = set()
+        for i in range(len(path.path)):
+            last_reversed = path.inverted[i]
+            input_term = path[i].terms[-1 if last_reversed else 0]
+            output_term = path[i].terms[0 if last_reversed else -1]
+            for literal in loop_literals_by_term.get(input_term, []):
+                append_not_in_set(literal, literals, appended)
+            literals.append(path.path[i])
+            for literal in loop_literals_by_term.get(output_term, []):
+                append_not_in_set(literal, literals, appended)
+                last_reversed = False
+            visited_literals.update(appended)
+        final_paths.append(RulePath(literals, last_reversed))
+    return final_paths
+
+
+def find_all_forward_paths(source, destination,
+                           loop_literals_by_term,
+                           binary_literals_by_term, visited_literals):
+    """
+    Finds all forward paths from `source` to `destination` by using the
+    literals in `binary_literals_by_term` and `loop_literals_by_term`.
+    If the destination cannot be reached, it includes a special `any`
+    predicated to connect the path.
+
+    :param source: the source of the paths
+    :type source: Term
+    :param destination: the destination of the paths
+    :type destination: Term
+    :param loop_literals_by_term: the literals that connects different terms
+    :type loop_literals_by_term: Dict[Term, List[Literals]]
+    :param binary_literals_by_term: the loop literals, which connects the
+    terms to themselves
+    :type binary_literals_by_term: Dict[Term, List[Literals]]
+    :param visited_literals: the set of visited literals
+    :type visited_literals: Set[Literal]
+    :return: the completed forward paths between source and destination
+    :rtype: List[RulePath]
+    """
+    partial_paths = deque()  # type: deque[RulePath]
+    completed_paths = deque()  # type: deque[RulePath]
+
+    for literal in binary_literals_by_term.get(source, []):
+        inverted = literal.terms[-1] == source
+        partial_paths.append(RulePath([literal], inverted))
+        visited_literals.add(literal)
+
+    dead_end_paths = find_paths(
+        partial_paths, destination, binary_literals_by_term,
+        completed_paths, visited_literals)
+
+    for path in complete_path_with_any(
+            dead_end_paths, destination, inverted=False):
+        completed_paths.append(path)
+
+    return append_loop_predicates(
+        completed_paths, loop_literals_by_term, visited_literals,
+        reverse_path=False)
+
+
+def find_all_backward_paths(source, destination,
+                            loop_literals_by_term,
+                            binary_literals_by_term, visited_literals):
+    """
+    Finds all backward paths from `source` to `destination` by using the
+    literals in `binary_literals_by_term` and `loop_literals_by_term`.
+    If the destination cannot be reached, it includes a special `any`
+    predicated to connect the path.
+
+    :param source: the source of the paths
+    :type source: Term
+    :param destination: the destination of the paths
+    :type destination: Term
+    :param loop_literals_by_term: the literals that connects different terms
+    :type loop_literals_by_term: Dict[Term, List[Literals]]
+    :param binary_literals_by_term: the loop literals, which connects the
+    terms to themselves
+    :type binary_literals_by_term: Dict[Term, List[Literals]]
+    :param visited_literals: the set of visited literals
+    :type visited_literals: Set[Literal]
+    :return: the completed backward paths between source and destination
+    :rtype: List[RulePath]
+    """
+    partial_paths = deque()  # type: deque[RulePath]
+    completed_paths = deque()  # type: deque[RulePath]
+
+    for literal in binary_literals_by_term.get(source, []):
+        if literal in visited_literals:
+            continue
+        inverted = literal.terms[-1] == source
+        partial_paths.append(RulePath([literal], inverted))
+        visited_literals.add(literal)
+
+    dead_end_paths = find_paths(
+        partial_paths, destination, binary_literals_by_term,
+        completed_paths, visited_literals)
+
+    for path in complete_path_with_any(
+            dead_end_paths, destination, inverted=True):
+        completed_paths.append(path)
+
+    return append_loop_predicates(
+        completed_paths, loop_literals_by_term, visited_literals,
+        reverse_path=True)
+
+
+def find_clause_paths(clause, inverted=False):
+    """
+    Finds the paths in the clause.
+    :param inverted: if `True`, creates the paths for the inverted rule;
+    this is, the rule in the format (output, input). If `False`,
+    creates the path for the standard (input, output) rule format.
+    :type inverted: bool
+    :param clause: the clause
+    :type clause: HornClause
+    :return: the completed paths between the terms of the clause and the
+    remaining grounded literals
+    :rtype: (List[RulePath], List[Literal])
+    """
+    # Defining variables
+    source = clause.head.terms[0]
+    destination = clause.head.terms[-1]
+    if inverted:
+        source, destination = destination, source
+    binary_literals_by_term, loop_literals_by_term = \
+        build_literal_dictionaries(clause)
+    visited_literals = set()
+
+    # Finding forward paths
+    forward_paths = find_all_forward_paths(
+        source, destination, loop_literals_by_term,
+        binary_literals_by_term, visited_literals)
+
+    # Finding backward paths
+    source, destination = destination, source
+    backward_paths = find_all_backward_paths(
+        source, destination, loop_literals_by_term,
+        binary_literals_by_term, visited_literals)
+
+    ground_literals = get_disconnected_literals(
+        clause, visited_literals)
+
+    return forward_paths + backward_paths, ground_literals
+
+
+class RulePath:
+    """
+    Represents a rule path.
+    """
+
+    path: List[Literal] = list()
+    "The path of literals"
+
+    literals: Set[Literal] = set()
+    "The set of literals in the path"
+
+    terms: Set[Term]
+    "The set of all terms in the path"
+
+    inverted: List[bool]
+    """It is True if the correspondent literal is inverted;
+    it is false, otherwise"""
+
+    def __init__(self, path, last_inverted=False):
+        """
+        Initializes a path.
+
+        :param path: the path
+        :type path: collections.Iterable[Literal]
+        :param last_inverted: if the last literal is inverted
+        :type last_inverted: bool
+        """
+        self.path = list(path)
+        self.literals = set(path)
+        # self.last_term = self.path[-1].terms[0 if inverted else -1]
+        self.terms = set()
+        for literal in self.literals:
+            self.terms.update(literal.terms)
+        self.inverted = self._compute_inverted(last_inverted)
+
+    def _compute_inverted(self, last_inverted):
+        inverted = []
+        last_term = self.path[-1].terms[0 if last_inverted else -1]
+        for i in reversed(range(0, len(self.path))):
+            literal = self.path[i]
+            if literal.arity() != 1 and literal.terms[0] == last_term:
+                inverted.append(True)
+                last_term = literal.terms[-1]
+            else:
+                inverted.append(False)
+                last_term = literal.terms[0]
+
+        return list(reversed(inverted))
+
+    def append(self, item):
+        """
+        Appends the item to the end of the path, if it is not in the path yet.
+
+        :param item: the item
+        :type item: Literal
+        :return: True, if the item has been appended to the path; False,
+        otherwise.
+        :rtype: bool
+        """
+        if item is None:
+            return False
+
+        if item.arity() == 1:
+            output_variable = item.terms[0]
+            last_inverted = False
+        else:
+            if item.terms[0] == self.path_end():
+                output_variable = item.terms[-1]
+                last_inverted = False
+            else:
+                output_variable = item.terms[0]
+                last_inverted = True
+
+        if item.arity() != 1 and output_variable in self.terms:
+            return False
+
+        self.path.append(item)
+        self.literals.add(item)
+        self.terms.update(item.terms)
+        self.inverted.append(last_inverted)
+        return True
+
+    def new_path_with_item(self, item):
+        """
+        Creates a new path with `item` at the end.
+
+        :param item: the item
+        :type item: Literal or None
+        :return: the new path, if its is possible to append the item; None,
+        otherwise
+        :rtype: RulePath or None
+        """
+        path = RulePath(self.path)
+        return path if path.append(item) else None
+
+    def path_end(self):
+        """
+        Gets the term at the end of the path.
+
+        :return: the term at the end of the path
+        :rtype: Term
+        """
+        return self.path[-1].terms[0 if self.inverted[-1] else -1]
+
+    def reverse(self):
+        """
+        Gets a reverse path.
+
+        :return: the reverse path
+        :rtype: RulePath
+        """
+        not_inverted = self.path[0].arity() != 1 and not self.inverted[0]
+        path = RulePath(reversed(self.path), not_inverted)
+        return path
+
+    def __getitem__(self, item):
+        return self.path.__getitem__(item)
+
+    def __len__(self):
+        return self.path.__len__()
+
+    def __str__(self):
+        message = ""
+        for i in reversed(range(0, len(self.path))):
+            literal = self.path[i]
+            prefix = literal.predicate.name
+            iterator = list(map(lambda x: x.value, literal.terms))
+            if self.inverted[i]:
+                prefix += "^{-1}"
+                iterator = reversed(iterator)
+
+            prefix += "("
+            prefix += ", ".join(iterator)
+            prefix += ")"
+            message = prefix + message
+            if i > 0:
+                message = ", " + message
+
+        return message
+
+    __repr__ = __str__
+
+
 class BiDict(dict, MutableMapping[KT, VT]):
     """
     A bidirectional dictionary.
@@ -182,23 +660,21 @@ class BiDict(dict, MutableMapping[KT, VT]):
         super(BiDict, self).__delitem__(key)
 
 
-def get_value_from_parameter(names, parameters):
+def get_constants_from_path(clause, iterable_constants):
     """
-    Gets the value from the `parameters` dict.
+    Gets all the constant terms from the paths in the clause and adds it
+    to `iterable_constants`.
 
-    :param names: the names of the value
-    :type names: list[str]
-    :param parameters: the parameters dict
-    :type parameters: [str, dict or str]
-    :return: the value of the parameter
-    :rtype: str or None
+    :param clause: the clause
+    :type clause: HornClause
+    :param iterable_constants: the iterable constants
+    :type iterable_constants: set[Term]
     """
-    value = None
-    for key in names:
-        value = parameters.get(key, None)
-        if not isinstance(value, dict):
-            break
-    return value
+    paths, _ = find_clause_paths(clause)
+    for path in paths:
+        for term in path.terms:
+            if term.is_constant() and not isinstance(term, Number):
+                iterable_constants.add(term)
 
 
 class NeuralLogProgram:
@@ -395,6 +871,7 @@ class NeuralLogProgram:
                 for literal in clause.body:
                     self._get_constants_from_atom(literal, _iterable_constants)
                     literal.context = None
+                get_constants_from_path(clause, _iterable_constants)
         self._build_constant_dict(_iterable_constants)
 
     def _build_constant_dict(self, _iterable_constants):
@@ -826,59 +1303,87 @@ class NeuralLogProgram:
         parameter_dict[atom.terms[-2].value] = atom.terms[-1].value
 
     def _add_default_parameters(self):
-        if "initial_value" not in self.parameters:
-            self.parameters["initial_value"] = {
+        self.parameters.setdefault(
+            "initial_value", {
                 "class_name": "random_normal",
                 "config": {"mean": 0.5, "stddev": 0.125}
-            }
+            })
 
-            self.parameters["literal_negation_function"] = \
-                "literal_negation_function"
-            self.parameters["literal_negation_function:sparse"] = \
-                "literal_negation_function:sparse"
+        self.parameters.setdefault("literal_negation_function",
+                                   "literal_negation_function")
+        self.parameters.setdefault("literal_negation_function:sparse",
+                                   "literal_negation_function:sparse")
 
-            # self.parameters["literal_combining_function"] = "tf.math.add_n"
-            self.parameters["literal_combining_function"] = "tf.math.add"
-            # function to combine the different proves of a literal
-            # (FactLayers and RuleLayers). The default is to sum all the
-            # proves, element-wise, by applying the `tf.math.add_n` function
+        self.parameters.setdefault("literal_combining_function", "tf.math.add")
+        # function to combine the different proves of a literal
+        # (FactLayers and RuleLayers). The default is to sum all the
+        # proves, element-wise, by applying the `tf.math.add_n` function
 
-            self.parameters["path_combining_function"] = "tf.math.multiply"
-            # function to combine different path from a RuleLayer. The default
-            # is to multiply all the paths, element-wise, by applying the
-            # `tf.math.multiply` function
+        self.parameters.setdefault("and_combining_function",
+                                   "tf.math.multiply")
+        # function to combine different vector and get an `AND` behaviour
+        # between them.
+        # The default is to multiply all the paths, element-wise, by applying
+        # the `tf.math.multiply` function.
 
-            self.parameters["edge_combining_function"] = "tf.math.multiply"
-            # function to extract the value of the fact based on the input.
-            # The default is the element-wise multiplication implemented by the
-            # `tf.math.multiply` function
+        self.parameters.setdefault("path_combining_function",
+                                   "tf.math.multiply")
+        # function to combine different path from a RuleLayer. The default
+        # is to multiply all the paths, element-wise, by applying the
+        # `tf.math.multiply` function
 
-            self.parameters["edge_neutral_element"] = {
-                "class_name": "tf.constant",
-                "config": {"value": 1.0}
-            }
-            # element is used to extract the tensor value of grounded literal
-            # in a rule. The default edge combining function is the element-wise
-            # multiplication. Thus, the neutral element is `1.0`, represented by
-            # `tf.constant(1.0)`.
+        self.parameters.setdefault("edge_combining_function",
+                                   "tf.math.multiply")
+        # function to extract the value of the fact based on the input.
+        # The default is the element-wise multiplication implemented by the
+        # `tf.math.multiply` function
 
-            self.parameters["edge_combining_function_2d"] = "tf.matmul"
-            self.parameters["edge_combining_function_2d:sparse"] = \
-                "edge_combining_function_2d:sparse"
-            # function to extract the value of the fact based on the input,
-            # for 2d facts. The default is the dot multiplication implemented
-            # by the `tf.matmul` function
+        self.parameters.setdefault("edge_neutral_element",
+                                   {
+                                       "class_name": "tf.constant",
+                                       "config": {"value": 1.0}
+                                   })
+        # element is used to extract the tensor value of grounded literal
+        # in a rule. The default edge combining function is the element-wise
+        # multiplication. Thus, the neutral element is `1.0`, represented by
+        # `tf.constant(1.0)`.
 
-            self.parameters["invert_fact_function"] = "tf.transpose"
-            # function to extract the inverse of a facts. The default is the
-            # transpose function implemented by `tf.transpose`
+        self.parameters.setdefault("edge_combining_function_2d", "tf.matmul")
+        self.parameters.setdefault("edge_combining_function_2d:sparse",
+                                   "edge_combining_function_2d:sparse")
+        # function to extract the value of the fact based on the input,
+        # for 2d facts. The default is the dot multiplication implemented
+        # by the `tf.matmul` function
 
-            # self.parameters["any_aggregation_function"] = "tf.reduce_sum"
-            self.parameters["any_aggregation_function"] = \
-                "any_aggregation_function"
-            # function to aggregate the input of an any predicate. The default
-            # function is the `tf.reduce_sum`.
+        # self.parameters.setdefault("attribute_edge_combining_function",
+        #                            "tf.math.multiply")
+        # function to extract the value of the fact based on the input, for
+        # attribute facts.
+        # The default is the dot multiplication implemented by the `tf.matmul`
+        # function.
 
-            # self.parameters["attribute_combine_function"] = "tf.math.multiply"
-            # function to combine the weights and values of the attribute facts.
-            # The default function is the `tf.matmul`.
+        self.parameters.setdefault("invert_fact_function", "tf.transpose")
+        # function to extract the inverse of a facts. The default is the
+        # transpose function implemented by `tf.transpose`
+
+        # self.parameters["any_aggregation_function"] = "tf.reduce_sum"
+        self.parameters.setdefault("any_aggregation_function",
+                                   "any_aggregation_function")
+        # function to aggregate the input of an any predicate. The default
+        # function is the `tf.reduce_sum`.
+
+        self.parameters.setdefault("attributes_combine_function",
+                                   "tf.math.multiply")
+        # function to combine the numeric terms of a fact.
+        # The default function is the `tf.math.multiply`.
+
+        self.parameters.setdefault("weighted_attribute_combining_function",
+                                   "tf.math.multiply")
+        # function to combine the weights and values of the attribute facts.
+        # The default function is the `tf.math.multiply`.
+
+        self.parameters.setdefault("output_extract_function",
+                                   "tf.nn.embedding_lookup")
+        # function to extract the value of an atom with a constant at the
+        # last term position.
+        # The default function is the `tf.nn.embedding_lookup`.

@@ -2,19 +2,22 @@
 Compiles the language into a neural network.
 """
 import logging
-from collections import deque, OrderedDict
+from collections import OrderedDict
 from typing import Dict, Set, List, Tuple
 
 import tensorflow as tf
 from tensorflow.python import keras
 
-from src.knowledge.program import NeuralLogProgram, NO_EXAMPLE_SET
+from src.knowledge.program import NeuralLogProgram, NO_EXAMPLE_SET, \
+    ANY_PREDICATE_NAME, find_clause_paths
 from src.language.language import Atom, Term, HornClause, Literal, \
     get_renamed_literal, get_substitution, TooManyArgumentsFunction, \
-    get_variable_indices, Predicate, get_variable_atom
+    get_variable_indices, Predicate, get_renamed_atom
 from src.network.network_functions import get_literal_function, \
-    get_combining_function
-from src.network.tensor_factory import TensorFactory, \
+    get_combining_function, NeuralLogLayer, SPARSE_FUNCTION_SUFFIX, FactLayer, \
+    InvertedFactLayer
+
+from src.network.layer_factory import LayerFactory, \
     get_standardised_name
 
 # Network part
@@ -31,8 +34,6 @@ from src.network.tensor_factory import TensorFactory, \
 
 # WARNING: Do not support literals with same variable in the head of rules.
 # WARNING: Do not support literals with constant numbers in the rules.
-SPARSE_FUNCTION_SUFFIX = ":sparse"
-ANY_PREDICATE_NAME = "any"
 
 logger = logging.getLogger()
 
@@ -61,321 +62,6 @@ def is_cyclic(atom, previous_atoms):
     return False
 
 
-def get_disconnected_literals(clause, connected_literals):
-    """
-    Gets the literals from the `clause` which are disconnected from the
-    source and destination variables but are grounded.
-
-    :param clause: the clause
-    :type clause: HornClause
-    :param connected_literals: the set of connected literals
-    :type connected_literals: Set[Literal]
-    :return: the list of disconnected literals
-    :rtype: List[Literal]
-    """
-    ground_literals = []
-    for literal in clause.body:
-        if literal in connected_literals or not literal.is_grounded():
-            continue
-        ground_literals.append(literal)
-    return ground_literals
-
-
-def build_literal_dictionaries(clause):
-    """
-    Builds the dictionaries with the literals of the `clause`. This method
-    creates two dictionaries, the first one containing the literals that
-    connects different terms; and the second one the loop literals,
-    which connects the terms to themselves, either by being unary or by having
-    equal terms.
-
-    Both dictionaries have the terms in the literals as keys.
-
-    :param clause: the clause
-    :type clause: HornClause
-    :return: the dictionaries
-    :rtype: (Dict[Term, List[Literal]], Dict[Term, List[Literal]])
-    """
-    binary_literals_by_term = dict()  # type: Dict[Term, List[Literal]]
-    loop_literals_by_term = dict()  # type: Dict[Term, List[Literal]]
-    for literal in clause.body:
-        if literal.arity() == 1:
-            dict_to_append = loop_literals_by_term
-        elif literal.arity() == 2:
-            if literal.terms[0] == literal.terms[-1]:
-                dict_to_append = loop_literals_by_term
-            else:
-                dict_to_append = binary_literals_by_term
-        else:
-            continue
-        for term in set(literal.terms):
-            dict_to_append.setdefault(term, []).append(literal)
-    return binary_literals_by_term, loop_literals_by_term
-
-
-def find_paths(partial_paths, destination, binary_literals_by_term,
-               completed_paths, visited_literals):
-    """
-    Finds the paths from `partial_paths` to `destination` by appending the
-    literals from `binary_literals_by_term`. The completed paths are stored
-    in `completer_paths` while the used literals are stores in
-    `visited_literals`.
-
-    Finally, it returns the dead end paths.
-
-    :param partial_paths: The initial partial paths
-    :type partial_paths: deque[RulePath]
-    :param destination: the destination term
-    :type destination: Term
-    :param binary_literals_by_term: the literals to be appended
-    :type binary_literals_by_term: Dict[Term, List[Literals]]
-    :param completed_paths: the completed paths
-    :type completed_paths: deque[RulePath]
-    :param visited_literals: the visited literals
-    :type visited_literals: Set[Literal]
-    :return: the dead end paths
-    :rtype: List[RulePath]
-    """
-    dead_end_paths = []  # type: List[RulePath]
-    while len(partial_paths) > 0:
-        size = len(partial_paths)
-        for i in range(size):
-            path = partial_paths.popleft()
-            path_end = path.path_end()
-
-            if path_end == destination:
-                completed_paths.append(path)
-                continue
-
-            possible_edges = binary_literals_by_term.get(path_end, [None])
-            not_added_path = True
-            for literal in possible_edges:
-                new_path = path.new_path_with_item(literal)
-                if new_path is None:
-                    continue
-                partial_paths.append(new_path)
-                # noinspection PyTypeChecker
-                visited_literals.add(literal)
-                not_added_path = False
-
-            if not_added_path:
-                dead_end_paths.append(path)
-    return dead_end_paths
-
-
-def append_not_in_set(literal, literals, appended):
-    """
-    Appends `literal` to `literals` if it is not in `appended`.
-    Also, updates appended.
-
-    :param literal: the literal to append
-    :type literal: Literal
-    :param literals: the list to append to
-    :type literals: List[Literal]
-    :param appended: the set of already appended literals
-    :type appended: Set[Literal]
-    """
-    if literal not in appended:
-        literals.append(literal)
-        appended.add(literal)
-
-
-def complete_path_with_any(dead_end_paths, destination,
-                           inverted=False):
-    """
-    Completes the path by appending the special `any` predicate between the
-    end of the path and the destination.
-
-    :param dead_end_paths: the paths to be completed
-    :type dead_end_paths: collections.Iterable[RulePath]
-    :param destination: the destination
-    :type destination: Term
-    :param inverted: if `True`, append the any predicate with the terms in the
-    reversed order
-    :type inverted: bool
-    :return: the completed paths
-    :rtype: List[RulePath]
-    """
-    completed_paths = []
-    for path in dead_end_paths:
-        if inverted:
-            any_literal = Literal(Atom(ANY_PREDICATE_NAME,
-                                       destination, path.path_end()))
-        else:
-            any_literal = Literal(Atom(ANY_PREDICATE_NAME,
-                                       path.path_end(), destination))
-        path.append(any_literal)
-        completed_paths.append(path)
-    return completed_paths
-
-
-def append_loop_predicates(completed_paths, loop_literals_by_term,
-                           visited_literals, reverse_path=False):
-    """
-    Appends the loop predicates to the path.
-
-    :param completed_paths: the completed paths
-    :type completed_paths: deque[RulePath]
-    :param loop_literals_by_term: the loop predicates by term
-    :type loop_literals_by_term: Dict[Term, List[Literals]]
-    :param visited_literals: the set of visited literals to be updated
-    :type visited_literals: Set[Literal]
-    :param reverse_path: if `True`, reverse the path before processing
-    :type reverse_path: bool
-    :return: the final paths
-    :rtype: List[RulePath]
-    """
-    final_paths = []  # type: List[RulePath]
-    for path in completed_paths:
-        if reverse_path:
-            path = path.reverse()
-        last_reversed = False
-        literals = []
-        appended = set()
-        for i in range(len(path.path)):
-            last_reversed = path.inverted[i]
-            input_term = path[i].terms[-1 if last_reversed else 0]
-            output_term = path[i].terms[0 if last_reversed else -1]
-            for literal in loop_literals_by_term.get(input_term, []):
-                append_not_in_set(literal, literals, appended)
-            literals.append(path.path[i])
-            for literal in loop_literals_by_term.get(output_term, []):
-                append_not_in_set(literal, literals, appended)
-                last_reversed = False
-            visited_literals.update(appended)
-        final_paths.append(RulePath(literals, last_reversed))
-    return final_paths
-
-
-def find_all_forward_paths(source, destination,
-                           loop_literals_by_term,
-                           binary_literals_by_term, visited_literals):
-    """
-    Finds all forward paths from `source` to `destination` by using the
-    literals in `binary_literals_by_term` and `loop_literals_by_term`.
-    If the destination cannot be reached, it includes a special `any`
-    predicated to connect the path.
-
-    :param source: the source of the paths
-    :type source: Term
-    :param destination: the destination of the paths
-    :type destination: Term
-    :param loop_literals_by_term: the literals that connects different terms
-    :type loop_literals_by_term: Dict[Term, List[Literals]]
-    :param binary_literals_by_term: the loop literals, which connects the
-    terms to themselves
-    :type binary_literals_by_term: Dict[Term, List[Literals]]
-    :param visited_literals: the set of visited literals
-    :type visited_literals: Set[Literal]
-    :return: the completed forward paths between source and destination
-    :rtype: List[RulePath]
-    """
-    partial_paths = deque()  # type: deque[RulePath]
-    completed_paths = deque()  # type: deque[RulePath]
-
-    for literal in binary_literals_by_term.get(source, []):
-        inverted = literal.terms[-1] == source
-        partial_paths.append(RulePath([literal], inverted))
-        visited_literals.add(literal)
-
-    dead_end_paths = find_paths(
-        partial_paths, destination, binary_literals_by_term,
-        completed_paths, visited_literals)
-
-    for path in complete_path_with_any(
-            dead_end_paths, destination, inverted=False):
-        completed_paths.append(path)
-
-    return append_loop_predicates(
-        completed_paths, loop_literals_by_term, visited_literals,
-        reverse_path=False)
-
-
-def find_all_backward_paths(source, destination,
-                            loop_literals_by_term,
-                            binary_literals_by_term, visited_literals):
-    """
-    Finds all backward paths from `source` to `destination` by using the
-    literals in `binary_literals_by_term` and `loop_literals_by_term`.
-    If the destination cannot be reached, it includes a special `any`
-    predicated to connect the path.
-
-    :param source: the source of the paths
-    :type source: Term
-    :param destination: the destination of the paths
-    :type destination: Term
-    :param loop_literals_by_term: the literals that connects different terms
-    :type loop_literals_by_term: Dict[Term, List[Literals]]
-    :param binary_literals_by_term: the loop literals, which connects the
-    terms to themselves
-    :type binary_literals_by_term: Dict[Term, List[Literals]]
-    :param visited_literals: the set of visited literals
-    :type visited_literals: Set[Literal]
-    :return: the completed backward paths between source and destination
-    :rtype: List[RulePath]
-    """
-    partial_paths = deque()  # type: deque[RulePath]
-    completed_paths = deque()  # type: deque[RulePath]
-
-    for literal in binary_literals_by_term.get(source, []):
-        if literal in visited_literals:
-            continue
-        inverted = literal.terms[-1] == source
-        partial_paths.append(RulePath([literal], inverted))
-        visited_literals.add(literal)
-
-    dead_end_paths = find_paths(
-        partial_paths, destination, binary_literals_by_term,
-        completed_paths, visited_literals)
-
-    for path in complete_path_with_any(
-            dead_end_paths, destination, inverted=True):
-        completed_paths.append(path)
-
-    return append_loop_predicates(
-        completed_paths, loop_literals_by_term, visited_literals,
-        reverse_path=True)
-
-
-def find_clause_paths(clause, inverted=False):
-    """
-    Finds the paths in the clause.
-    :param inverted: if `True`, creates the paths for the inverted rule;
-    this is, the rule in the format (output, input). If `False`,
-    creates the path for the standard (input, output) rule format.
-    :type inverted: bool
-    :param clause: the clause
-    :type clause: HornClause
-    :return: the completed paths between the terms of the clause and the
-    remaining grounded literals
-    :rtype: (List[RulePath], List[Literal])
-    """
-    # Defining variables
-    source = clause.head.terms[0]
-    destination = clause.head.terms[-1]
-    if inverted:
-        source, destination = destination, source
-    binary_literals_by_term, loop_literals_by_term = \
-        build_literal_dictionaries(clause)
-    visited_literals = set()
-
-    # Finding forward paths
-    forward_paths = find_all_forward_paths(
-        source, destination, loop_literals_by_term,
-        binary_literals_by_term, visited_literals)
-
-    # Finding backward paths
-    source, destination = destination, source
-    backward_paths = find_all_backward_paths(
-        source, destination, loop_literals_by_term,
-        binary_literals_by_term, visited_literals)
-
-    ground_literals = get_disconnected_literals(
-        clause, visited_literals)
-
-    return forward_paths + backward_paths, ground_literals
-
-
 class CyclicProgramException(Exception):
     """
     Represents a cyclic program exception.
@@ -390,23 +76,6 @@ class CyclicProgramException(Exception):
         """
         super().__init__("Cyclic program, cannot create the Predicate Node for "
                          "{}".format(atom))
-
-
-class NeuralLogLayer(keras.layers.Layer):
-    """
-    Represents a NeuralLogLayer.
-    """
-
-    def __init__(self, name, **kwargs):
-        # noinspection PyTypeChecker
-        kwargs["name"] = name
-        self.layer_name = name
-        super(NeuralLogLayer, self).__init__(**kwargs)
-
-    def __str__(self):
-        return "[{}] {}".format(self.__class__.__name__, self.layer_name)
-
-    __repr__ = __str__
 
 
 class LiteralLayer(NeuralLogLayer):
@@ -543,109 +212,44 @@ class AnyLiteralLayer(NeuralLogLayer):
         return cls(**config)
 
 
-class FactLayer(NeuralLogLayer):
-    """
-    A Layer to represent the logic facts from a predicate.
-    """
-
-    def __init__(self, name, kernel, fact_combining_function, **kwargs):
-        """
-        Creates a PredicateLayer.
-
-        :param name: the name of the layer
-        :type name: str
-        :param kernel: the data of the layer.
-        :type kernel: tf.Tensor
-        :param fact_combining_function: the fact combining function
-        :type fact_combining_function: function
-        :param kwargs: additional arguments
-        :type kwargs: dict[str, Any]
-        """
-        super(FactLayer, self).__init__(name, **kwargs)
-        self.kernel = kernel
-        self.fact_combining_function = fact_combining_function
-
-    # noinspection PyMissingOrEmptyDocstring
-    def call(self, inputs, **kwargs):
-        return self.fact_combining_function(inputs, self.kernel)
-
-    # noinspection PyMissingOrEmptyDocstring
-    def compute_output_shape(self, input_shape):
-        return tf.TensorShape(input_shape)
-
-    # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
-    def get_config(self):
-        return super(FactLayer, self).get_config()
-
-    # noinspection PyMissingOrEmptyDocstring
-    @classmethod
-    def from_config(cls, config):
-        return cls(**config)
-
-
-class SpecificFactLayer(NeuralLogLayer):
-    """
-    A layer to represent a fact with constants applied to it.
-    """
-
-    def __init__(self, name, kernel, fact_combining_function,
-                 input_constant=None,
-                 input_combining_function=None, output_constant=None,
-                 output_extract_function=None, **kwargs):
-        """
-        Creates a PredicateLayer.
-
-        :param name: the name of the layer
-        :type name: str
-        :param kernel: the data of the layer.
-        :type kernel: tf.Tensor
-        :param fact_combining_function: the fact combining function
-        :type fact_combining_function: function
-        :param input_constant: the input constant
-        :type input_constant: tf.Tensor
-        :param input_combining_function: the function to combine the fixed
-        input with the input of the layer
-        :type input_combining_function: function
-        :param output_constant: the output constant, if any
-        :type output_constant: tf.Tensor
-        :param output_extract_function: the function to extract the fact value
-        of the fixed output constant
-        :type output_extract_function: function
-        :param kwargs: additional arguments
-        :type kwargs: dict[str, Any]
-        """
-        super(SpecificFactLayer, self).__init__(name, **kwargs)
-        self.kernel = kernel
-        self.fact_combining_function = fact_combining_function
-        self.input_constant = input_constant
-        self.inputs_combining_function = input_combining_function
-        self.output_constant = output_constant
-        self.output_extract_function = output_extract_function
-
-    # noinspection PyMissingOrEmptyDocstring
-    def call(self, inputs, **kwargs):
-        if self.input_constant is None:
-            input_constant = inputs
-        else:
-            input_constant = self.inputs_combining_function(self.input_constant,
-                                                            inputs)
-        result = self.fact_combining_function(input_constant, self.kernel)
-        if self.output_constant is not None:
-            result = self.output_extract_function(result, self.output_constant)
-        return result
-
-    # noinspection PyMissingOrEmptyDocstring
-    def compute_output_shape(self, input_shape):
-        return tf.TensorShape(input_shape)
-
-    # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
-    def get_config(self):
-        return super(SpecificFactLayer, self).get_config()
-
-    # noinspection PyMissingOrEmptyDocstring
-    @classmethod
-    def from_config(cls, config):
-        return cls(**config)
+# class FactLayer(NeuralLogLayer):
+#     """
+#     A Layer to represent the logic facts from a predicate.
+#     """
+#
+#     def __init__(self, name, kernel, fact_combining_function, **kwargs):
+#         """
+#         Creates a PredicateLayer.
+#
+#         :param name: the name of the layer
+#         :type name: str
+#         :param kernel: the data of the layer.
+#         :type kernel: tf.Tensor
+#         :param fact_combining_function: the fact combining function
+#         :type fact_combining_function: function
+#         :param kwargs: additional arguments
+#         :type kwargs: dict[str, Any]
+#         """
+#         super(FactLayer, self).__init__(name, **kwargs)
+#         self.kernel = kernel
+#         self.fact_combining_function = fact_combining_function
+#
+#     # noinspection PyMissingOrEmptyDocstring
+#     def call(self, inputs, **kwargs):
+#         return self.fact_combining_function(inputs, self.kernel)
+#
+#     # noinspection PyMissingOrEmptyDocstring
+#     def compute_output_shape(self, input_shape):
+#         return tf.TensorShape(input_shape)
+#
+#     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
+#     def get_config(self):
+#         return super(FactLayer, self).get_config()
+#
+#     # noinspection PyMissingOrEmptyDocstring
+#     @classmethod
+#     def from_config(cls, config):
+#         return cls(**config)
 
 
 class RuleLayer(NeuralLogLayer):
@@ -777,149 +381,6 @@ class SpecificRuleLayer(NeuralLogLayer):
         return cls(**config)
 
 
-class RulePath:
-    """
-    Represents a rule path.
-    """
-
-    path: List[Literal] = list()
-    "The path of literals"
-
-    literals: Set[Literal] = set()
-    "The set of literals in the path"
-
-    terms: Set[Term]
-    "The set of all terms in the path"
-
-    inverted: List[bool]
-    """It is True if the correspondent literal is inverted;
-    it is false, otherwise"""
-
-    def __init__(self, path, last_inverted=False):
-        """
-        Initializes a path.
-
-        :param path: the path
-        :type path: collections.Iterable[Literal]
-        :param last_inverted: if the last literal is inverted
-        :type last_inverted: bool
-        """
-        self.path = list(path)
-        self.literals = set(path)
-        # self.last_term = self.path[-1].terms[0 if inverted else -1]
-        self.terms = set()
-        for literal in self.literals:
-            self.terms.update(literal.terms)
-        self.inverted = self._compute_inverted(last_inverted)
-
-    def _compute_inverted(self, last_inverted):
-        inverted = []
-        last_term = self.path[-1].terms[0 if last_inverted else -1]
-        for i in reversed(range(0, len(self.path))):
-            literal = self.path[i]
-            if literal.arity() != 1 and literal.terms[0] == last_term:
-                inverted.append(True)
-                last_term = literal.terms[-1]
-            else:
-                inverted.append(False)
-                last_term = literal.terms[0]
-
-        return list(reversed(inverted))
-
-    def append(self, item):
-        """
-        Appends the item to the end of the path, if it is not in the path yet.
-
-        :param item: the item
-        :type item: Literal
-        :return: True, if the item has been appended to the path; False,
-        otherwise.
-        :rtype: bool
-        """
-        if item is None:
-            return False
-
-        if item.arity() == 1:
-            output_variable = item.terms[0]
-            last_inverted = False
-        else:
-            if item.terms[0] == self.path_end():
-                output_variable = item.terms[-1]
-                last_inverted = False
-            else:
-                output_variable = item.terms[0]
-                last_inverted = True
-
-        if item.arity() != 1 and output_variable in self.terms:
-            return False
-
-        self.path.append(item)
-        self.literals.add(item)
-        self.terms.update(item.terms)
-        self.inverted.append(last_inverted)
-        return True
-
-    def new_path_with_item(self, item):
-        """
-        Creates a new path with `item` at the end.
-
-        :param item: the item
-        :type item: Literal or None
-        :return: the new path, if its is possible to append the item; None,
-        otherwise
-        :rtype: RulePath or None
-        """
-        path = RulePath(self.path)
-        return path if path.append(item) else None
-
-    def path_end(self):
-        """
-        Gets the term at the end of the path.
-
-        :return: the term at the end of the path
-        :rtype: Term
-        """
-        return self.path[-1].terms[0 if self.inverted[-1] else -1]
-
-    def reverse(self):
-        """
-        Gets a reverse path.
-
-        :return: the reverse path
-        :rtype: RulePath
-        """
-        not_inverted = self.path[0].arity() != 1 and not self.inverted[0]
-        path = RulePath(reversed(self.path), not_inverted)
-        return path
-
-    def __getitem__(self, item):
-        return self.path.__getitem__(item)
-
-    def __len__(self):
-        return self.path.__len__()
-
-    def __str__(self):
-        message = ""
-        for i in reversed(range(0, len(self.path))):
-            literal = self.path[i]
-            prefix = literal.predicate.name
-            iterator = list(map(lambda x: x.value, literal.terms))
-            if self.inverted[i]:
-                prefix += "^{-1}"
-                iterator = reversed(iterator)
-
-            prefix += "("
-            prefix += ", ".join(iterator)
-            prefix += ")"
-            message = prefix + message
-            if i > 0:
-                message = ", " + message
-
-        return message
-
-    __repr__ = __str__
-
-
 class NeuralLogNetwork(keras.Model):
     """
     The NeuralLog Network.
@@ -947,10 +408,9 @@ class NeuralLogNetwork(keras.Model):
         super(NeuralLogNetwork, self).__init__(name="NeuralLogNetwork")
         self.program = program
         self.constant_size = len(self.program.iterable_constants)
-        self.tensor_factory = TensorFactory(self.program)
+        self.layer_factory = LayerFactory(self.program)
         self.predicates = OrderedDict()
 
-        self.path_combining_function = self._get_path_combining_function()
         self.edge_combining_function = self._get_edge_combining_function()
         self.edge_combining_function_2d = None
         self.edge_combining_function_2d_sparse = None
@@ -1007,7 +467,7 @@ class NeuralLogNetwork(keras.Model):
 
         return self.edge_combining_function_2d
 
-    def _get_path_combining_function(self):
+    def _get_path_combining_function(self, predicate=None):
         """
         Gets the path combining function. This is the function to combine
         different path from a RuleLayer.
@@ -1015,11 +475,13 @@ class NeuralLogNetwork(keras.Model):
         The default is to multiply all the paths, element-wise, by applying the
         `tf.math.multiply` function.
 
+        :param predicate: the predicate
+        :type predicate: Predicate
         :return: the combining function
         :rtype: function
         """
         combining_function = self.program.get_parameter_value(
-            "path_combining_function")
+            "path_combining_function", predicate)
         return get_combining_function(combining_function)
 
     def _get_edge_neutral_element(self):
@@ -1104,7 +566,9 @@ class NeuralLogNetwork(keras.Model):
         :return: the matrix representation of the data for the given predicate
         :rtype: tf.Tensor
         """
-        atom_tensor = self.tensor_factory.build_atom(atom)
+        # FIXME: the negation should be applied to the literal layer, not the
+        #  to the fact layer
+        atom_tensor = self.layer_factory.build_atom(atom)
         if isinstance(atom, Literal) and atom.negated:
             sparse = isinstance(atom_tensor, tf.SparseTensor)
             return self.get_literal_negation_function(atom, sparse)(atom_tensor)
@@ -1171,10 +635,10 @@ class NeuralLogNetwork(keras.Model):
                     get_standardised_name(clause.__str__()))
                 source = renamed_literal.terms[-1 if inverted else 0]
                 destination = renamed_literal.terms[0 if inverted else -1]
-                input_tensor = self.tensor_factory.get_one_hot_tensor(source)
+                input_tensor = self.layer_factory.get_one_hot_tensor(source)
                 lookup = None
                 if destination.is_constant() and arity == 2:
-                    lookup = self.tensor_factory.get_constant_lookup(
+                    lookup = self.layer_factory.get_constant_lookup(
                         destination)
                 rule = SpecificRuleLayer(
                     layer_name, rule, input_tensor,
@@ -1223,7 +687,7 @@ class NeuralLogNetwork(keras.Model):
         inputs = None
         term = renamed_literal.terms[0]
         if term.is_constant():
-            inputs = self.tensor_factory.get_one_hot_tensor(term)
+            inputs = self.layer_factory.get_one_hot_tensor(term)
         name = "literal_layer_{}".format(
             get_standardised_name(renamed_literal.__str__()))
         return FunctionLayer(name, function_value, inputs=inputs)
@@ -1271,7 +735,8 @@ class NeuralLogNetwork(keras.Model):
                 get_standardised_name(clause.__str__()))
             rule_layer = RuleLayer(
                 layer_name, layer_paths, grounded_layers,
-                self.path_combining_function, self.neutral_element)
+                self._get_path_combining_function(clause.head.predicate),
+                self.neutral_element)
             self._rule_layers[key] = rule_layer
 
         return rule_layer
@@ -1289,52 +754,60 @@ class NeuralLogNetwork(keras.Model):
         :return: the fact layer
         :rtype: FactLayer
         """
-        renamed_literal = get_renamed_literal(atom)
-        key = (renamed_literal, inverted)
+        renamed_atom = get_renamed_atom(atom)
+        key = (renamed_atom, inverted)
         fact_layer = self._fact_layers.get(key, None)
         if fact_layer is None:
-            variable_literal = get_variable_atom(atom)
-            tensor = self.get_matrix_representation(variable_literal)
-            edge_function = self.edge_combining_function
-            is_sparse = isinstance(tensor, tf.SparseTensor)
-            arity = renamed_literal.arity()
-            if arity == 2:
-                edge_function = self.get_edge_combining_function_2d(is_sparse)
-                if inverted:
-                    tensor = self.get_invert_fact_function(
-                        renamed_literal)(tensor)
-            elif is_sparse:
-                tensor = tf.sparse.to_dense(tensor)
-            layer_name = "fact_layer_{}".format(
-                get_standardised_name(renamed_literal.__str__()))
-            if renamed_literal.get_number_of_variables() < arity:
-                input_constant = None
-                output_constant = None
-                source = renamed_literal.terms[-1 if inverted else 0]
-                if source.is_constant() and arity == 2:
-                    input_constant = self.tensor_factory.get_one_hot_tensor(
-                        source)
-                destination = renamed_literal.terms[0 if inverted else -1]
-                output_extract_function = tf.nn.embedding_lookup
-                if destination.is_constant():
-                    if arity == 1:
-                        output_constant = \
-                            self.tensor_factory.get_constant_lookup(destination)
-                    else:
-                        output_extract_function = \
-                            self.get_edge_combining_function_2d()
-                        output_constant = \
-                            self.tensor_factory.get_one_hot_tensor(destination)
-                        output_constant = tf.transpose(output_constant)
-                input_combining_function = self._get_path_combining_function()
-                fact_layer = SpecificFactLayer(
-                    layer_name, tensor, edge_function,
-                    input_constant=input_constant,
-                    input_combining_function=input_combining_function,
-                    output_constant=output_constant,
-                    output_extract_function=output_extract_function)
-            else:
-                fact_layer = FactLayer(layer_name, tensor, edge_function)
+            # variable_literal = get_variable_atom(atom)
+            # tensor = self.get_matrix_representation(variable_literal)
+            # tensor = self.tensor_factory.build_atom(renamed_atom)
+            # edge_function = self.edge_combining_function
+            # is_sparse = isinstance(tensor, tf.SparseTensor)
+            # arity = renamed_atom.arity()
+            # if arity == 2:
+            #     edge_function = self.get_edge_combining_function_2d(is_sparse)
+            #     if inverted:
+            #         tensor = self.get_invert_fact_function(
+            #             renamed_atom)(tensor)
+            # elif is_sparse:
+            #     tensor = tf.sparse.to_dense(tensor)
+            # layer_name = "fact_layer_{}".format(
+            #     get_standardised_name(renamed_atom.__str__()))
+            # if renamed_atom.get_number_of_variables() < arity:
+            #     input_constant = None
+            #     output_constant = None
+            #     source = renamed_atom.terms[-1 if inverted else 0]
+            #     if source.is_constant() and arity == 2:
+            #         input_constant = self.tensor_factory.get_one_hot_tensor(
+            #             source)
+            #     destination = renamed_atom.terms[0 if inverted else -1]
+            #     output_extract_function = tf.nn.embedding_lookup
+            #     if destination.is_constant():
+            #         if arity == 1:
+            #             output_constant = \
+            #                 self.tensor_factory.get_constant_lookup(destination)
+            #         else:
+            #             output_extract_function = \
+            #                 self.get_edge_combining_function_2d()
+            #             output_constant = \
+            #                 self.tensor_factory.get_one_hot_tensor(destination)
+            #             output_constant = tf.transpose(output_constant)
+            #     input_combining_function = self._get_path_combining_function()
+            #     fact_layer = SpecificFactLayer(
+            #         layer_name, tensor, edge_function,
+            #         input_constant=input_constant,
+            #         input_combining_function=input_combining_function,
+            #         output_constant=output_constant,
+            #         output_extract_function=output_extract_function)
+            # else:
+            #     fact_layer = FactLayer(layer_name, tensor, edge_function)
+            fact_layer = self.layer_factory.build_atom(renamed_atom)
+            if inverted:
+                inverted_function = \
+                    self.layer_factory.get_invert_fact_function(
+                        atom.predicate)
+                fact_layer = InvertedFactLayer(fact_layer, inverted_function)
+            # fact_layer = FactLayer(layer_name, tensor, edge_function)
             self._fact_layers[key] = fact_layer
 
         return fact_layer
@@ -1360,7 +833,7 @@ class NeuralLogNetwork(keras.Model):
         """
         Updates the program based on the learned parameters.
         """
-        for atom, tensor in self.tensor_factory.variable_cache.items():
+        for atom, tensor in self.layer_factory.variable_cache.items():
             variable_indices = get_variable_indices(atom)
             rank = len(variable_indices)
             values = tensor.numpy()

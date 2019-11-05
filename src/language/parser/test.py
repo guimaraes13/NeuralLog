@@ -200,8 +200,8 @@ def main(argv):
     # optimizer = tf.keras.optimizers.SGD(learning_rate=0.1)
     optimizer = tf.keras.optimizers.Adagrad(learning_rate=0.1)
     model.compile(loss="mse", optimizer=optimizer, metrics=["mse"])
+    model.build(None)
     model.run_eagerly = True
-    predict(model, neural_program, x)
 
     model.update_program()
     output = open(os.path.join(log_dir, "programs", "program2.pl"), "w")
@@ -209,33 +209,43 @@ def main(argv):
     output.close()
 
     neural_dataset = NeuralLogDataset(model)
-    features_1, labels_1 = neural_dataset.build(example_set="examples_1",
-                                                sparse_features=True)
-    features_1 = tf.sparse.to_dense(features_1)
-    labels_1 = tuple(map(lambda x: tf.sparse.to_dense(x), labels_1))
+    features_1, labels_1 = neural_dataset.build(example_set="examples_1")
+    # features_1 = tf.sparse.to_dense(features_1)
+    # labels_1 = tuple(map(lambda x: tf.sparse.to_dense(x), labels_1))
 
-    features_2, labels_2 = neural_dataset.build(example_set="examples_2",
-                                                sparse_features=True)
-    features_2 = tf.sparse.to_dense(features_2)
-    labels_2 = tuple(map(lambda x: tf.sparse.to_dense(x), labels_2))
+    features_2, labels_2 = neural_dataset.build(example_set="examples_2")
+    # features_2 = tf.sparse.to_dense(features_2)
+    # labels_2 = tuple(map(lambda x: tf.sparse.to_dense(x), labels_2))
 
-    # dataset = tf.data.Dataset.from_tensor_slices((features, labels))
-    # dataset = dataset.map(DatasetMap(len(neural_program.iterable_constants)))
-    # dataset = dataset.make_one_shot_iterator()
-    # dataset = dataset.get_next()
-    epochs = 10
+    dense_feature_1 = tf.one_hot(features_1, model.constant_size)
+    dense_feature_2 = tf.one_hot(features_2, model.constant_size)
+    # predict(model, neural_program, dense_feature_1)
+    predict(model, neural_program, dense_feature_2)
+    epochs = 20
     verbose = 0
-    model.fit(features_1, labels_1, epochs=epochs, callbacks=[tensorboard_callback],
-              batch_size=1, verbose=verbose)
-    predict(model, neural_program, x)
+    dataset = tf.data.Dataset.from_tensor_slices((features_1, labels_1))
+    dataset = dataset.map(DatasetMap(model.constant_size))
+    dataset = dataset.batch(1)
+    model.fit(dataset, epochs=epochs, callbacks=[tensorboard_callback],
+              verbose=verbose)
+
+    # predict(model, neural_program, x)
+    predict(model, neural_program, dense_feature_1)
+    predict(model, neural_program, dense_feature_2)
     model.update_program()
     output = open(os.path.join(log_dir, "programs", "program3.pl"), "w")
     print_neural_log_program(neural_program, output)
     output.close()
 
-    model.fit(features_2, labels_2, epochs=epochs, callbacks=[tensorboard_callback],
-              batch_size=1, verbose=verbose)
-    predict(model, neural_program, x)
+    dataset = tf.data.Dataset.from_tensor_slices((features_2, labels_2))
+    dataset = dataset.map(DatasetMap(model.constant_size))
+    dataset = dataset.batch(1)
+    model.fit(dataset, epochs=epochs, callbacks=[tensorboard_callback],
+              verbose=verbose)
+
+    # predict(model, neural_program, x)
+    predict(model, neural_program, dense_feature_1)
+    predict(model, neural_program, dense_feature_2)
     model.update_program()
     output = open(os.path.join(log_dir, "programs", "program4.pl"), "w")
     print_neural_log_program(neural_program, output)
@@ -251,26 +261,53 @@ class DatasetMap:
     def __init__(self, constant_size):
         self.constant_size = constant_size
 
-    def __call__(self, x, y, *args, **kwargs):
-        features = tf.transpose(x)
-        labels = y
+    def call(self, features, labels, *args, **kwargs):
+        features = tf.one_hot(features, self.constant_size)
+        labels = tuple(map(lambda x: tf.sparse.to_dense(x), labels))
+
         return features, labels
 
+    __call__ = call
 
 def predict(model, neural_program, x):
+    predictions = model.predict(x)  # type: List[np.ndarray]
+    predicates = list(model.predicates.keys())
+    x_numpy = x.numpy()
+    print("*" * 10, "predictions", "*" * 10)
+    for i in range(len(predicates)):
+        # print(predicates[i])
+        for j in range(len(predictions[i])):
+            indices = np.where(model.predict(x)[i][j] != 0.0)[0]
+            if len(indices) == 0:
+                continue
+            term = neural_program.iterable_constants[np.argmax(x_numpy[j])]
+            print(predicates[i].name, "(", term, ", X0):", sep="")
+            for index in indices:
+                print(predictions[i][j][index],
+                      neural_program.iterable_constants[index], sep=":\t")
+            print()
+    print()
+
+def predict_old(model, neural_program, x):
     prediction = model.predict(x)
     print(type(prediction))
     print(prediction)
+    x_numpy = x.numpy()
+    predicates = list(model.predicates.keys())
     if isinstance(prediction, list):
-        for p in prediction:
-            _print_prediction(neural_program, p)
+        for i in range(len(prediction)):
+            print(predicates[i])
+            for j in range(len(prediction[0])):
+                print(neural_program.iterable_constants[np.argmax(x_numpy[i])])
+                _print_prediction(neural_program, prediction[i], predicates)
     else:
-        _print_prediction(neural_program, prediction)
+        _print_prediction(neural_program, prediction, predicates)
 
 
-def _print_prediction(neural_program, prediction):
+def _print_prediction(neural_program, prediction, predicates):
     for i in range(prediction.shape[0]):
-        for j in np.where(prediction[i] != 0.0)[0]:
+        values = np.where(prediction[i] != 0.0)[0]
+        for j in values:
             print(prediction[i][j], neural_program.iterable_constants[j],
                   sep=":\t")
         print()

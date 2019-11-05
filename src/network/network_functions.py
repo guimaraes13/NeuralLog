@@ -4,10 +4,276 @@ File to define custom functions to use in the network.
 
 import tensorflow as tf
 import tensorflow.keras
+from tensorflow_core.python import keras
+
+SPARSE_FUNCTION_SUFFIX = ":sparse"
 
 literal_functions = dict()
 combining_functions = dict()
 initializers = dict()
+
+
+class NeuralLogLayer(keras.layers.Layer):
+    """
+    Represents a NeuralLogLayer.
+    """
+
+    def __init__(self, name, **kwargs):
+        # noinspection PyTypeChecker
+        kwargs["name"] = name
+        self.layer_name = name
+        super(NeuralLogLayer, self).__init__(**kwargs)
+
+    def __str__(self):
+        return "[{}] {}".format(self.__class__.__name__, self.layer_name)
+
+    __repr__ = __str__
+
+
+class AbstractFactLayer(NeuralLogLayer):
+    """
+    Represents an abstract fact layer.
+    """
+
+    def __init__(self, name, **kwargs):
+        """
+        Creates an AbstractFactLayer.
+        :param name: the name of the layer
+        :type name: str
+        :param kwargs: additional arguments
+        :type kwargs: dict[str, Any]
+        """
+        super(AbstractFactLayer, self).__init__(name, **kwargs)
+
+    # noinspection PyMissingOrEmptyDocstring
+    def compute_output_shape(self, input_shape):
+        return tf.TensorShape(input_shape)
+
+    # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
+    def get_config(self):
+        return super(AbstractFactLayer, self).get_config()
+
+    # noinspection PyMissingOrEmptyDocstring,PyShadowingNames
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
+
+
+class FactLayer(AbstractFactLayer):
+    """
+    Represents a simple fact layer.
+    """
+
+    def __init__(self, name, kernel, fact_combining_function, **kwargs):
+        """
+        Creates a SimpleFactLayer.
+
+        :param name: the name of the layer
+        :type name: str
+        :param kernel: the data of the layer.
+        :type kernel: tf.Tensor
+        :param fact_combining_function: the fact combining function
+        :type fact_combining_function: function
+        :param kwargs: additional arguments
+        :type kwargs: dict[str, Any]
+        """
+        super(FactLayer, self).__init__(name, **kwargs)
+        self.kernel = kernel
+        self.fact_combining_function = fact_combining_function
+
+    def get_kernel(self):
+        """
+        Gets the processed kernel to apply the fact combining function.
+
+        :return: the kernel
+        :rtype: tf.Tensor
+        """
+        return self.kernel
+
+    # noinspection PyMissingOrEmptyDocstring
+    def call(self, inputs, **kwargs):
+        return self.fact_combining_function(inputs, self.get_kernel())
+
+
+class DiagonalFactLayer(FactLayer):
+    """
+    Represents a simple fact layer.
+    """
+
+    def __init__(self, name, kernel, fact_combining_function, **kwargs):
+        """
+        Creates a SimpleFactLayer.
+
+        :param name: the name of the layer
+        :type name: str
+        :param kernel: the data of the layer.
+        :type kernel: tf.Tensor
+        :param fact_combining_function: the fact combining function
+        :type fact_combining_function: function
+        :param kernel: the data of the layer.
+        :type kernel: tf.Tensor
+        :param fact_combining_function: the fact combining function
+        :type fact_combining_function: function
+        :param kwargs: additional arguments
+        :type kwargs: dict[str, Any]
+        """
+        super(DiagonalFactLayer, self).__init__(
+            name, kernel, fact_combining_function, **kwargs)
+
+    # noinspection PyMissingOrEmptyDocstring
+    def get_kernel(self):
+        return tf.linalg.tensor_diag_part(
+            super(DiagonalFactLayer, self).get_kernel())
+
+
+class InvertedFactLayer(FactLayer):
+    """
+    Represents a inverted fact layer.
+    """
+
+    def __init__(self, fact_layer, inverted_function, **kwargs):
+        """
+        Creates a InvertedFactLayer.
+
+        :param fact_layer: the fact layer
+        :type fact_layer: FactLayer
+        :param inverted_function: the fact inversion function. The function to
+        extract the inverse of the facts
+        :type inverted_function: function
+        :param kwargs: additional arguments
+        :type kwargs: dict[str, Any]
+        """
+        name = fact_layer.name + "_inv"
+        kernel = inverted_function(fact_layer.get_kernel())
+        fact_combining_function = fact_layer.fact_combining_function
+        super(InvertedFactLayer, self).__init__(
+            name, kernel, fact_combining_function, **kwargs)
+
+
+class SpecificFactLayer(AbstractFactLayer):
+    """
+    A layer to represent a fact with constants applied to it.
+    """
+
+    def __init__(self, name, fact_layer,
+                 input_constant=None,
+                 input_combining_function=None, output_constant=None,
+                 output_extract_function=None, **kwargs):
+        """
+        Creates a PredicateLayer.
+
+        :param fact_layer: a fact layer
+        :type fact_layer: AbstractFactLayer
+        :param fact_combining_function: the fact combining function
+        :type fact_combining_function: function
+        :param input_constant: the input constant
+        :type input_constant: tf.Tensor
+        :param input_combining_function: the function to combine the fixed
+        input with the input of the layer
+        :type input_combining_function: function
+        :param output_constant: the output constant, if any
+        :type output_constant: tf.Tensor
+        :param output_extract_function: the function to extract the fact value
+        of the fixed output constant
+        :type output_extract_function: function
+        :param kwargs: additional arguments
+        :type kwargs: dict[str, Any]
+        """
+        super(SpecificFactLayer, self).__init__(name, **kwargs)
+        self.fact_layer = fact_layer
+        self.input_constant = input_constant
+        self.inputs_combining_function = input_combining_function
+        self.output_constant = output_constant
+        self.output_extract_function = output_extract_function
+
+    # noinspection PyMissingOrEmptyDocstring
+    def call(self, inputs, **kwargs):
+        if self.input_constant is None:
+            input_constant = inputs
+        else:
+            input_constant = self.inputs_combining_function(self.input_constant,
+                                                            inputs)
+        result = self.fact_layer.call(input_constant)
+        if self.output_constant is not None:
+            if len(result.shape.as_list()) == 2:
+                result = tf.transpose(result)
+            result = self.output_extract_function(result, self.output_constant)
+        return result
+
+
+class InvertedSpecificFactLayer(AbstractFactLayer):
+    """
+    A layer to represent a inverted fact with constants applied to it.
+    """
+
+    def __init__(self, name, fact_layer, fact_combining_function,
+                 output_constant=None, output_extract_function=None, **kwargs):
+        """
+        Creates a PredicateLayer.
+
+        :param fact_layer: a fact layer
+        :type fact_layer: AbstractFactLayer
+        :param fact_combining_function: the fact combining function
+        :type fact_combining_function: function
+        :param output_constant: the output constant, if any
+        :type output_constant: tf.Tensor
+        :param output_extract_function: the function to extract the fact value
+        of the fixed output constant
+        :type output_extract_function: function
+        :param kwargs: additional arguments
+        :type kwargs: dict[str, Any]
+        """
+        super(InvertedSpecificFactLayer, self).__init__(name, **kwargs)
+        self.fact_layer = fact_layer
+        self.fact_combining_function = fact_combining_function
+        self.output_constant = output_constant
+        self.output_extract_function = output_extract_function
+
+    # noinspection PyMissingOrEmptyDocstring
+    def get_kernel(self):
+        kernel = self.fact_layer.get_kernel()
+        return self.output_extract_function(kernel, self.output_constant)
+
+    # noinspection PyMissingOrEmptyDocstring
+    def call(self, inputs, **kwargs):
+        return self.fact_combining_function(self.get_kernel(), inputs)
+
+
+class AttributeFactLayer(FactLayer):
+    """
+    Represents an attribute fact layer.
+    """
+
+    def __init__(self, name, weights, values,
+                 fact_combining_function, weight_combining_function, **kwargs):
+        """
+        Creates an AttributeFactLayer.
+
+        :param name: the name of the layer
+        :type name: str
+        :param weights: the weights of the layer.
+        :type weights: tf.Tensor
+        :param weights: the values of the layer.
+        :type weights: tf.Tensor
+        :param fact_combining_function: the fact combining function
+        :type fact_combining_function: function
+        :param weight_combining_function: the function to combine the weights
+        and values of the attribute facts
+        :type weight_combining_function: function
+        :param attributes_combining_function: the function to
+        combine the numeric terms of a fact
+        :type attributes_combining_function: function
+        :param kwargs: additional arguments
+        :type kwargs: dict[str, Any]
+        """
+        super(AttributeFactLayer, self).__init__(
+            name, weights, fact_combining_function, **kwargs)
+        self.values = values
+        self.weight_combining_function = weight_combining_function
+
+    # noinspection PyMissingOrEmptyDocstring
+    def get_kernel(self):
+        return self.weight_combining_function(self.kernel, self.values)
 
 
 def registry(func, identifier, func_dict):
@@ -168,9 +434,9 @@ def get_combining_function(identifier):
         class_name = identifier
     if class_name.startswith("tf."):
         names = class_name.split(".")[1:]
-        func = None
+        func = tf
         for name in names:
-            func = getattr(tf, name)
+            func = getattr(func, name)
         if configuration is None:
             return func
         else:
@@ -223,6 +489,8 @@ def literal_negation_function_sparse(a):
 
 
 # noinspection PyMissingOrEmptyDocstring
+
+
 @neural_log_initializer("my_const_value")
 class MyConstant:
 
@@ -235,6 +503,8 @@ class MyConstant:
 
 
 # noinspection PyMissingOrEmptyDocstring
+
+
 @neural_log_initializer("my_const_value_2")
 def my_const_value_2(shape):
     return tf.Variable(2.0, shape=shape)

@@ -68,7 +68,7 @@ def get_variable_atom(atom):
     :rtype: Atom
     """
     terms = [Variable("X{}".format(i)) for i in range(atom.arity())]
-    variable_atom = Atom(atom.predicate, *terms, weight=atom.weight)
+    variable_atom = Atom(atom.predicate, *terms)
     if isinstance(atom, Literal):
         return Literal(variable_atom, negated=atom.negated)
     return variable_atom
