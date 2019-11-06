@@ -296,8 +296,7 @@ def append_not_in_set(literal, literals, appended):
         appended.add(literal)
 
 
-def complete_path_with_any(dead_end_paths, destination,
-                           inverted=False):
+def complete_path_with_any(dead_end_paths, destination, inverted=False):
     """
     Completes the path by appending the special `any` predicate between the
     end of the path and the destination.
@@ -871,7 +870,7 @@ class NeuralLogProgram:
                 for literal in clause.body:
                     self._get_constants_from_atom(literal, _iterable_constants)
                     literal.context = None
-                get_constants_from_path(clause, _iterable_constants)
+                # get_constants_from_path(clause, _iterable_constants)
         self._build_constant_dict(_iterable_constants)
 
     def _build_constant_dict(self, _iterable_constants):

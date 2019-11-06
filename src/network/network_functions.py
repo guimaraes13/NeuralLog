@@ -231,12 +231,15 @@ class InvertedSpecificFactLayer(AbstractFactLayer):
 
     # noinspection PyMissingOrEmptyDocstring
     def get_kernel(self):
-        kernel = self.fact_layer.get_kernel()
-        return self.output_extract_function(kernel, self.output_constant)
+        # kernel = self.fact_layer.get_kernel()
+        # return self.output_extract_function(kernel, self.output_constant)
+        kernel = self.fact_layer(self.output_constant)
+        return tf.reshape(kernel, [-1, 1])
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
-        return self.fact_combining_function(self.get_kernel(), inputs)
+        # return self.fact_combining_function(self.get_kernel(), inputs)
+        return self.fact_combining_function(inputs, self.get_kernel())
 
 
 class AttributeFactLayer(FactLayer):
