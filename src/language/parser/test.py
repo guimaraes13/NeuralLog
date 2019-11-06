@@ -219,23 +219,22 @@ def main(argv):
 
     dense_feature_1 = tf.one_hot(features_1, model.constant_size)
     dense_feature_2 = tf.one_hot(features_2, model.constant_size)
-    # predict(model, neural_program, dense_feature_1)
+    predict(model, neural_program, dense_feature_1)
     predict(model, neural_program, dense_feature_2)
-    epochs = 20
-    verbose = 0
+    epochs = 50
+    verbose = 1
     dataset = tf.data.Dataset.from_tensor_slices((features_1, labels_1))
     dataset = dataset.map(DatasetMap(model.constant_size))
     dataset = dataset.batch(1)
     model.fit(dataset, epochs=epochs, callbacks=[tensorboard_callback],
               verbose=verbose)
 
-    # predict(model, neural_program, x)
-    predict(model, neural_program, dense_feature_1)
-    predict(model, neural_program, dense_feature_2)
     model.update_program()
     output = open(os.path.join(log_dir, "programs", "program3.pl"), "w")
     print_neural_log_program(neural_program, output)
     output.close()
+    predict(model, neural_program, dense_feature_1)
+    predict(model, neural_program, dense_feature_2)
 
     dataset = tf.data.Dataset.from_tensor_slices((features_2, labels_2))
     dataset = dataset.map(DatasetMap(model.constant_size))
@@ -243,13 +242,12 @@ def main(argv):
     model.fit(dataset, epochs=epochs, callbacks=[tensorboard_callback],
               verbose=verbose)
 
-    # predict(model, neural_program, x)
-    predict(model, neural_program, dense_feature_1)
-    predict(model, neural_program, dense_feature_2)
     model.update_program()
     output = open(os.path.join(log_dir, "programs", "program4.pl"), "w")
     print_neural_log_program(neural_program, output)
     output.close()
+    predict(model, neural_program, dense_feature_1)
+    predict(model, neural_program, dense_feature_2)
 
     # neural_dataset = NeuralLogDataset(model)
     # features, labels = neural_dataset.build()

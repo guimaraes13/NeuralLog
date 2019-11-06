@@ -284,10 +284,13 @@ class RuleLayer(NeuralLogLayer):
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
-        path_result = self._compute_path_tensor(inputs, 0)
-        for i in range(1, len(self.paths)):
-            tensor = self._compute_path_tensor(inputs, i)
-            path_result = self.path_combining_function(path_result, tensor)
+        if len(self.paths) > 0:
+            path_result = self._compute_path_tensor(inputs, 0)
+            for i in range(1, len(self.paths)):
+                tensor = self._compute_path_tensor(inputs, i)
+                path_result = self.path_combining_function(path_result, tensor)
+        else:
+            path_result = self.neural_element
         for grounded_layer in self.grounded_layers:
             grounded_result = grounded_layer(self.neural_element)
             path_result = self.path_combining_function(path_result,
@@ -644,12 +647,11 @@ class NeuralLogNetwork(keras.Model):
                     layer_name, rule, input_tensor,
                     self._get_path_combining_function(), lookup)
             inputs.append(rule)
-        combining_function = self.get_literal_combining_function(
-            renamed_literal)
+        combining_func = self.get_literal_combining_function(renamed_literal)
         return LiteralLayer(
             "literal_layer_{}".format(
                 get_standardised_name(renamed_literal.__str__())), inputs,
-            combining_function)
+            combining_func)
 
     def get_literal_combining_function(self, literal):
         """

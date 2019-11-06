@@ -346,7 +346,7 @@ def append_loop_predicates(completed_paths, loop_literals_by_term,
             path = path.reverse()
         last_reversed = False
         literals = []
-        appended = set()
+        appended = path.literals
         for i in range(len(path.path)):
             last_reversed = path.inverted[i]
             input_term = path[i].terms[-1 if last_reversed else 0]
@@ -388,22 +388,54 @@ def find_all_forward_paths(source, destination,
     partial_paths = deque()  # type: deque[RulePath]
     completed_paths = deque()  # type: deque[RulePath]
 
+    initial_path = build_initial_path(source, loop_literals_by_term,
+                                      visited_literals)
     for literal in binary_literals_by_term.get(source, []):
-        inverted = literal.terms[-1] == source
-        partial_paths.append(RulePath([literal], inverted))
+        if initial_path is None:
+            inverted = literal.terms[-1] == source
+            partial_paths.append(RulePath([literal], inverted))
+        else:
+            partial_paths.append(initial_path.new_path_with_item(literal))
         visited_literals.add(literal)
+    if len(partial_paths) == 0 and initial_path is not None:
+        partial_paths.append(initial_path)
 
     dead_end_paths = find_paths(
         partial_paths, destination, binary_literals_by_term,
         completed_paths, visited_literals)
 
-    for path in complete_path_with_any(
-            dead_end_paths, destination, inverted=False):
+    completed_with_any = complete_path_with_any(
+        dead_end_paths, destination, inverted=False)
+    for path in completed_with_any:
         completed_paths.append(path)
 
     return append_loop_predicates(
         completed_paths, loop_literals_by_term, visited_literals,
         reverse_path=False)
+
+
+def build_initial_path(source, loop_literals_by_term, visited_literals):
+    """
+    Builds a path with its initial literals, if any.
+
+    :param source: the source of the path
+    :type source: Term
+    :param loop_literals_by_term: the literals that connects different terms
+    :type loop_literals_by_term: Dict[Term, List[Literals]]
+    :param visited_literals: the literals added to the path
+    :type visited_literals: Set[Literal]
+    :return: the path or `None`
+    :rtype: RulePath or None
+    """
+    loop_literals = loop_literals_by_term.get(source, [])
+    if len(loop_literals) == 0:
+        return None
+    initial_path = RulePath([loop_literals[0]])
+    visited_literals.add(loop_literals[0])
+    for loop_literal in loop_literals[1:]:
+        initial_path.append(loop_literal)
+        visited_literals.add(loop_literal)
+    return initial_path
 
 
 def find_all_backward_paths(source, destination,
