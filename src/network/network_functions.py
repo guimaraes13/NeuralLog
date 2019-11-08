@@ -568,6 +568,32 @@ def mean(a):
     return tf.reshape(sum_a / non_zero, [-1, 1])
 
 
+@neural_log_literal_function("square_root")
+def square_root(a):
+    """
+    Returns the square root of the values of `a`.
+
+    :param a: the input tensor
+    :type a: tf.Tensor
+    :return: the result tensor
+    :rtype: tf.Tensor
+    """
+    return tf.math.sqrt(a)
+
+
+@neural_log_literal_function("inverse")
+def inverse(a):
+    """
+    Returns the inverse of the values of `a`.
+
+    :param a: the input tensor
+    :type a: tf.Tensor
+    :return: the result tensor
+    :rtype: tf.Tensor
+    """
+    return tf.math.divide(1.0, a)
+
+
 if __name__ == "__main__":
     get_literal_function("my_print_value")(2, 3)
     config = {"class_name": "my_func", "config": {"min": 5, "max": 10}}

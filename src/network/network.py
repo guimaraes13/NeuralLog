@@ -173,27 +173,22 @@ class AnyLiteralLayer(NeuralLogLayer):
     Layer to represent the special `any` literal.
     """
 
-    def __init__(self, name, aggregation_function, multiples, **kwargs):
+    def __init__(self, name, aggregation_function, **kwargs):
         """
         Creates an AnyLiteralLayer
 
         :param name: the name of the layer
         :type name: str
-        :param multiples: the tile multiples
-        :type multiples: tf.Tensor
         :param kwargs: additional arguments
         :type kwargs: dict[str, Any]
         """
         super(AnyLiteralLayer, self).__init__(name, **kwargs)
         self.aggregation_function = aggregation_function
-        self.multiples = multiples
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
         result = self.aggregation_function(inputs)
         result = tf.reshape(result, [-1, 1])
-        # print("Result:", result)
-        # return tf.tile(result, self.multiples)
         return result
 
     # noinspection PyMissingOrEmptyDocstring
@@ -216,14 +211,14 @@ class RuleLayer(NeuralLogLayer):
     """
 
     def __init__(self, name, paths, grounded_layers, path_combining_function,
-                 neutral_element, **kwargs):
+                 neutral_element, constant_size, **kwargs):
         """
         Creates a RuleLayer.
 
         :param name: the name of the layer
         :type name: str
         :param paths: the paths of the layer
-        :type paths: List[collections.Iterable[LiteralLayer]]
+        :type paths: List[List[LiteralLayer]]
         :param grounded_layers: the grounded literal layers
         :type grounded_layers: List[LiteralLayer]
         :param path_combining_function: the path combining function
@@ -238,36 +233,44 @@ class RuleLayer(NeuralLogLayer):
         self.paths = paths
         self.grounded_layers = grounded_layers
         self.path_combining_function = path_combining_function
-        self.neural_element = neutral_element
+        self.neutral_element = neutral_element
+        self.any_neutral_element = tf.ones(constant_size, dtype=tf.float32)
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
         if len(self.paths) > 0:
-            path_result = self._compute_path_tensor(inputs, 0)
+            path_result = self._compute_path_tensor(inputs, self.paths[0])
             for i in range(1, len(self.paths)):
-                tensor = self._compute_path_tensor(inputs, i)
+                tensor = self._compute_path_tensor(inputs, self.paths[i])
                 path_result = self.path_combining_function(path_result, tensor)
         else:
-            path_result = self.neural_element
+            path_result = self.neutral_element
         for grounded_layer in self.grounded_layers:
-            grounded_result = grounded_layer(self.neural_element)
+            grounded_result = grounded_layer(self.neutral_element)
             path_result = self.path_combining_function(path_result,
                                                        grounded_result)
         return path_result
 
-    def _compute_path_tensor(self, inputs, index):
+    def _compute_path_tensor(self, inputs, path):
         """
         Computes the path for the `inputs`.
 
         :param inputs: the inputs
         :type inputs: tf.Tensor
-        :param index: the index of the path
-        :type index: int
+        :param path: the path
+        :type path: List[LiteralLayer]
         :return: the computed path
         :rtype: tf.Tensor
         """
         tensor = inputs
-        for literal_layer in self.paths[index]:
+        for i in range(len(path)):
+            literal_layer = path[i]
+            if isinstance(literal_layer, AnyLiteralLayer):
+                new_tensor = self._compute_path_tensor(self.neutral_element,
+                                                       path[i + 1:])
+                new_tensor = tf.reshape(new_tensor, [1, -1])
+                tensor = literal_layer(tensor)
+                return tf.matmul(tensor, new_tensor)
             tensor = literal_layer(tensor)
         return tensor
 
@@ -283,66 +286,6 @@ class RuleLayer(NeuralLogLayer):
     @classmethod
     def from_config(cls, config):
         return cls(**config)
-
-
-# class SpecificRuleLayer(NeuralLogLayer):
-#     """
-#     A layer to represent a rule with constants applied to it.
-#
-#     It is used to extract a more specific literal from a rule inference,
-#     for instance the literal l(X, a), from a rule with head l(X, Y).
-#     """
-#
-#     def __init__(self, name, rule_layer, input_constant,
-#                  inputs_combining_function, output_constant=None,
-#                  output_extraction_function=None, **kwargs):
-#         """
-#         Creates a SpecificRuleLayer.
-#
-#         :param name: the name of the layer
-#         :type name: str
-#         :param rule_layer: the more general rule layer
-#         :type rule_layer: RuleLayer
-#         :param input_constant: the input constant
-#         :type input_constant: tf.Tensor
-#         :type inputs_combining_function: function
-#         :param inputs_combining_function: the function to combine the fixed
-#         input with the input of the layer
-#         :param output_constant: the output constant, if any
-#         :type output_constant: tf.Tensor
-#         :param output_constant: the output extraction function, if any
-#         :type output_constant: function or None
-#         :param kwargs: additional arguments
-#         :type kwargs: dict[str, Any]
-#         """
-#         super(SpecificRuleLayer, self).__init__(name, **kwargs)
-#         self.rule_layer = rule_layer
-#         self.input_constant = input_constant
-#         self.inputs_combining_function = inputs_combining_function
-#         self.output_constant = output_constant
-#         self.output_extraction_function = output_extraction_function
-#
-#     # noinspection PyMissingOrEmptyDocstring
-#     def call(self, inputs, **kwargs):
-#         input_constant = self.inputs_combining_function(self.input_constant,
-#                                                         inputs)
-#         result = self.rule_layer(input_constant)
-#         if self.output_constant is not None:
-#             result = self.output_extraction_function(result,
-#                                                      self.output_constant)
-#         return result
-#
-#     # noinspection PyMissingOrEmptyDocstring
-#     def compute_output_shape(self, input_shape):
-#         return tf.TensorShape(input_shape)
-#
-#     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
-#     def get_config(self):
-#         return super(SpecificRuleLayer, self).get_config()
-#
-#     # noinspection PyMissingOrEmptyDocstring
-#     def from_config(cls, config):
-#         return cls(**config)
 
 
 class ExtractUnaryLiteralLayer(NeuralLogLayer):
@@ -477,13 +420,12 @@ class NeuralLogNetwork(keras.Model):
         Gets the any literal layer.
 
         :return: the any literal layer
-        :rtype: AnyLiteralLayer
+        :rtype: EndAnyLiteralLayer
         """
         combining_function = self.program.get_parameter_value(
             "any_aggregation_function")
         function = get_combining_function(combining_function)
-        return AnyLiteralLayer("literal_layer_any-X0-X1-", function,
-                               tf.constant([1, self.constant_size]))
+        return AnyLiteralLayer("literal_layer_any-X0-X1-", function)
 
     # noinspection PyMissingOrEmptyDocstring
     def build(self, input_shape):
@@ -742,7 +684,7 @@ class NeuralLogNetwork(keras.Model):
             rule_layer = RuleLayer(
                 layer_name, layer_paths, grounded_layers,
                 self._get_path_combining_function(clause.head.predicate),
-                self.neutral_element)
+                self.neutral_element, self.layer_factory.constant_size)
             self._rule_layers[key] = rule_layer
 
         return rule_layer
