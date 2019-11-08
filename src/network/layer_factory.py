@@ -382,7 +382,7 @@ class LayerFactory:
                                                               predicate)
         return get_combining_function(combining_function)
 
-    def get_invert_fact_function(self, predicate):
+    def get_invert_fact_function(self, predicate, sparse=False):
         """
         Gets the fact inversion function. This is the function to extract
         the inverse of the facts.
@@ -391,11 +391,16 @@ class LayerFactory:
 
         :param predicate: the predicate
         :type predicate: Predicate
+        :param sparse: if the kernel tensor is sparse
+        :param sparse: bool
         :return: the combining function
         :rtype: function
         """
+        function_name = "invert_fact_function"
+        if sparse:
+            function_name += SPARSE_FUNCTION_SUFFIX
         combining_function = self.program.get_parameter_value(
-            "invert_fact_function", predicate)
+            function_name, predicate)
         return get_combining_function(combining_function)
 
     def get_output_extract_function(self, predicate):
@@ -519,10 +524,7 @@ class LayerFactory:
                 "init-{}".format(renamed_atom.__str__()), initial_value, shape)
             mask = self._build_constant(
                 mask, shape, "mask-{}".format(renamed_atom.__str__()))
-            # mask = self._matrix_to_variable(atom, mask, shape, "mask-{}")
             tensor = tf.multiply(tensor, mask)
-            # w = self._matrix_to_variable(atom, weights, shape,
-            #                              name_format="weights-{}")
             w = self._get_variable("weights-{}".format(renamed_atom.__str__()),
                                    weights, weights.shape)
             if tuple(shape) != weights.shape:
@@ -652,11 +654,6 @@ class LayerFactory:
         :return: the name of the initializer
         :rtype: str
         """
-        # predicate_parameter = self.program.parameters.get(
-        #     predicate, self.program.parameters)
-        # initializer_name = predicate_parameter["initial_value"]
-        #
-        # return initializer_name
         return self.program.get_parameter_value("initial_value", predicate)
 
     def get_constant_lookup(self, term):
@@ -1200,8 +1197,6 @@ class LayerFactory:
                                        FactoryTermType.VARIABLE))
     def arity_2_2_trainable_constant_variable(self, atom):
         return self._get_arity_2_2_trainable_variable_and_constant(atom)
-        # weights = self.get_vector_representation_with_constant(atom)
-        # return self._matrix_to_variable(atom, weights)
 
     # noinspection PyMissingOrEmptyDocstring
     @tensor_function(TensorFunctionKey(2, 2, True,
@@ -1252,8 +1247,6 @@ class LayerFactory:
                                        FactoryTermType.CONSTANT))
     def arity_2_2_trainable_variable_constant(self, atom):
         return self._get_arity_2_2_trainable_variable_and_constant(atom)
-        # weights = self.get_vector_representation_with_constant(atom)
-        # return self._matrix_to_variable(atom, weights)
 
     # noinspection PyMissingOrEmptyDocstring
     @tensor_function(TensorFunctionKey(2, 2, True,
@@ -1264,16 +1257,16 @@ class LayerFactory:
         name = self._get_layer_name(atom)
         fact_layer = self.build_atom(variable_atom)
         predicate = atom.predicate
-        inverted_function = self.get_invert_fact_function(predicate)
+        sparse = False
+        if isinstance(fact_layer, FactLayer):
+            sparse = isinstance(fact_layer.get_kernel(), tf.SparseTensor)
+        inverted_function = self.get_invert_fact_function(predicate, sparse)
         fact_layer = InvertedFactLayer(fact_layer, inverted_function)
-        fact_combining_function = self.get_edge_combining_function(predicate)
+        fact_combining_function = self.get_edge_combining_function_2d(predicate)
         output_constant = self.get_one_hot_tensor(atom.terms[1])
-        # output_extract_func = self.get_output_extract_function(predicate)
-        output_extract_func = None
         return InvertedSpecificFactLayer(
             name, fact_layer, fact_combining_function,
-            output_constant=output_constant,
-            output_extract_function=output_extract_func)
+            output_constant=output_constant)
 
     # noinspection PyMissingOrEmptyDocstring
     @tensor_function(TensorFunctionKey(2, 2, True, FactoryTermType.VARIABLE,

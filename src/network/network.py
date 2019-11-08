@@ -13,24 +13,18 @@ from src.knowledge.program import NeuralLogProgram, NO_EXAMPLE_SET, \
 from src.language.language import Atom, Term, HornClause, Literal, \
     get_renamed_literal, get_substitution, TooManyArgumentsFunction, \
     get_variable_indices, Predicate, get_renamed_atom
-from src.network.network_functions import get_literal_function, \
-    get_combining_function, NeuralLogLayer, SPARSE_FUNCTION_SUFFIX, FactLayer, \
-    InvertedFactLayer
-
 from src.network.layer_factory import LayerFactory, \
     get_standardised_name
+from src.network.network_functions import get_literal_function, \
+    get_combining_function, NeuralLogLayer, FactLayer, \
+    InvertedFactLayer, SpecificFactLayer
 
 # Network part
 # TODO: create a function to transform the examples from logic to numeric
-# TODO: test everything
 # QUESTION: Should we move the functional symbols to the end of the path?
 #  if we do, the rule will have the same behaviour, independent of the
 #  order of the literals. If we do not, we will be able to choose the intended
 #  behaviour, based on the order of the literals.
-
-# IMPROVE: test if the values of trainable iterable constants and trainable
-#  variables are pointing to the same variable.
-#  Skip this to the network test.
 
 # WARNING: Do not support literals with same variable in the head of rules.
 # WARNING: Do not support literals with constant numbers in the rules.
@@ -86,7 +80,7 @@ class LiteralLayer(NeuralLogLayer):
     """
 
     def __init__(self, name, input_layers, literal_combining_function,
-                 **kwargs):
+                 negation_function, **kwargs):
         """
         Creates a LiteralLayer.
 
@@ -96,26 +90,30 @@ class LiteralLayer(NeuralLogLayer):
         :type input_layers: List[FactLayer or RuleLayer]
         :param literal_combining_function: the literal combining function
         :type literal_combining_function: function
+        :param negation_function: the literal negation function
+        :type negation_function: function or None
         :param kwargs: additional arguments
         :type kwargs: dict
         """
         super(LiteralLayer, self).__init__(name, **kwargs)
         self.input_layers = input_layers
         self.literal_combining_function = literal_combining_function
+        self.negation_function = negation_function
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
         if len(self.input_layers) == 1:
-            return self.input_layers[0](inputs)
+            result = self.input_layers[0](inputs)
+            if self.negation_function is not None:
+                return self.negation_function(result)
+            return result
 
-        # results = []
-        # for input_layer in self.input_layers:
-        #     results.append(input_layer(inputs))
-        # return self.literal_combining_function(results)
         result = self.input_layers[0](inputs)
         for input_layer in self.input_layers[1:]:
             layer_result = input_layer(inputs)
             result = self.literal_combining_function(result, layer_result)
+        if self.negation_function is not None:
+            return self.negation_function(result)
         return result
 
     # noinspection PyMissingOrEmptyDocstring
@@ -212,46 +210,6 @@ class AnyLiteralLayer(NeuralLogLayer):
         return cls(**config)
 
 
-# class FactLayer(NeuralLogLayer):
-#     """
-#     A Layer to represent the logic facts from a predicate.
-#     """
-#
-#     def __init__(self, name, kernel, fact_combining_function, **kwargs):
-#         """
-#         Creates a PredicateLayer.
-#
-#         :param name: the name of the layer
-#         :type name: str
-#         :param kernel: the data of the layer.
-#         :type kernel: tf.Tensor
-#         :param fact_combining_function: the fact combining function
-#         :type fact_combining_function: function
-#         :param kwargs: additional arguments
-#         :type kwargs: dict[str, Any]
-#         """
-#         super(FactLayer, self).__init__(name, **kwargs)
-#         self.kernel = kernel
-#         self.fact_combining_function = fact_combining_function
-#
-#     # noinspection PyMissingOrEmptyDocstring
-#     def call(self, inputs, **kwargs):
-#         return self.fact_combining_function(inputs, self.kernel)
-#
-#     # noinspection PyMissingOrEmptyDocstring
-#     def compute_output_shape(self, input_shape):
-#         return tf.TensorShape(input_shape)
-#
-#     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
-#     def get_config(self):
-#         return super(FactLayer, self).get_config()
-#
-#     # noinspection PyMissingOrEmptyDocstring
-#     @classmethod
-#     def from_config(cls, config):
-#         return cls(**config)
-
-
 class RuleLayer(NeuralLogLayer):
     """
     A Layer to represent a logic rule.
@@ -327,56 +285,102 @@ class RuleLayer(NeuralLogLayer):
         return cls(**config)
 
 
-class SpecificRuleLayer(NeuralLogLayer):
-    """
-    A layer to represent a rule with constants applied to it.
+# class SpecificRuleLayer(NeuralLogLayer):
+#     """
+#     A layer to represent a rule with constants applied to it.
+#
+#     It is used to extract a more specific literal from a rule inference,
+#     for instance the literal l(X, a), from a rule with head l(X, Y).
+#     """
+#
+#     def __init__(self, name, rule_layer, input_constant,
+#                  inputs_combining_function, output_constant=None,
+#                  output_extraction_function=None, **kwargs):
+#         """
+#         Creates a SpecificRuleLayer.
+#
+#         :param name: the name of the layer
+#         :type name: str
+#         :param rule_layer: the more general rule layer
+#         :type rule_layer: RuleLayer
+#         :param input_constant: the input constant
+#         :type input_constant: tf.Tensor
+#         :type inputs_combining_function: function
+#         :param inputs_combining_function: the function to combine the fixed
+#         input with the input of the layer
+#         :param output_constant: the output constant, if any
+#         :type output_constant: tf.Tensor
+#         :param output_constant: the output extraction function, if any
+#         :type output_constant: function or None
+#         :param kwargs: additional arguments
+#         :type kwargs: dict[str, Any]
+#         """
+#         super(SpecificRuleLayer, self).__init__(name, **kwargs)
+#         self.rule_layer = rule_layer
+#         self.input_constant = input_constant
+#         self.inputs_combining_function = inputs_combining_function
+#         self.output_constant = output_constant
+#         self.output_extraction_function = output_extraction_function
+#
+#     # noinspection PyMissingOrEmptyDocstring
+#     def call(self, inputs, **kwargs):
+#         input_constant = self.inputs_combining_function(self.input_constant,
+#                                                         inputs)
+#         result = self.rule_layer(input_constant)
+#         if self.output_constant is not None:
+#             result = self.output_extraction_function(result,
+#                                                      self.output_constant)
+#         return result
+#
+#     # noinspection PyMissingOrEmptyDocstring
+#     def compute_output_shape(self, input_shape):
+#         return tf.TensorShape(input_shape)
+#
+#     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
+#     def get_config(self):
+#         return super(SpecificRuleLayer, self).get_config()
+#
+#     # noinspection PyMissingOrEmptyDocstring
+#     def from_config(cls, config):
+#         return cls(**config)
 
-    It is used to extract a more specific literal from a rule inference,
-    for instance the literal l(X, a), from a rule with head l(X, Y).
+
+class ExtractUnaryLiteralLayer(NeuralLogLayer):
+    """
+    Class to extract the value of a unary literal predicate prediction.
     """
 
-    def __init__(self, name, rule_layer, input_constant,
-                 inputs_combining_function, output_constant=None,
-                 **kwargs):
+    def __init__(self, literal_layer, input_combining_function, **kwargs):
         """
         Creates a SpecificRuleLayer.
 
-        :param name: the name of the layer
-        :type name: str
-        :param rule_layer: the more general rule layer
-        :type rule_layer: RuleLayer
-        :param input_constant: the input constant
-        :type input_constant: tf.Tensor
-        :type inputs_combining_function: function
-        :param inputs_combining_function: the function to combine the fixed
-        input with the input of the layer
-        :param output_constant: the output constant, if any
-        :type output_constant: tf.Tensor
+        :param literal_layer: the more unary rule layer
+        :type literal_layer: LiteralLayer
+        :type input_combining_function: function
+        :param input_combining_function: the function to combine input with
+        the output of the literal layer
         :param kwargs: additional arguments
         :type kwargs: dict[str, Any]
         """
-        super(SpecificRuleLayer, self).__init__(name, **kwargs)
-        self.rule_layer = rule_layer
-        self.input_constant = input_constant
-        self.inputs_combining_function = inputs_combining_function
-        self.output_constant = output_constant
+        name = literal_layer.name + "_extract_unary"
+        super(ExtractUnaryLiteralLayer, self).__init__(name, **kwargs)
+        self.literal_layer = literal_layer
+        self.input_combining_function = input_combining_function
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
-        input_constant = self.inputs_combining_function(self.input_constant,
-                                                        inputs)
-        result = self.rule_layer(input_constant)
-        if self.output_constant is not None:
-            result = tf.nn.embedding_lookup(result, self.output_constant)
-        return result
+        result = self.literal_layer(inputs)
+        return self.input_combining_function(inputs, result)
 
     # noinspection PyMissingOrEmptyDocstring
     def compute_output_shape(self, input_shape):
-        return tf.TensorShape(input_shape)
+        output_shape = list(input_shape)
+        output_shape[-1] = 1
+        return tuple(output_shape)
 
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):
-        return super(SpecificRuleLayer, self).get_config()
+        return super(ExtractUnaryLiteralLayer, self).get_config()
 
     # noinspection PyMissingOrEmptyDocstring
     @classmethod
@@ -386,13 +390,14 @@ class SpecificRuleLayer(NeuralLogLayer):
 
 class NeuralLogNetwork(keras.Model):
     """
-    The NeuralLog Network.
+    The NeuralLog
+    Network.
     """
 
     _literal_layers: Dict[Tuple[Literal, bool], LiteralLayer] = dict()
     "The literal layer by literal"
 
-    _fact_layers: Dict[Tuple[Literal, bool], FactLayer] = dict()
+    _fact_layers: Dict[Tuple[Atom, bool], FactLayer] = dict()
     "The fact layer by literal"
 
     _rule_layers: Dict[Tuple[HornClause, bool], RuleLayer] = dict()
@@ -414,24 +419,10 @@ class NeuralLogNetwork(keras.Model):
         self.layer_factory = LayerFactory(self.program)
         self.predicates = OrderedDict()
 
-        self.edge_combining_function = self._get_edge_combining_function()
-        self.edge_combining_function_2d = None
-        self.edge_combining_function_2d_sparse = None
-        self._get_edge_combining_function_2d()
         self.neutral_element = self._get_edge_neutral_element()
         self.any_literal_layer = self._get_any_literal()
 
-    def _get_edge_combining_function_2d(self):
-        function_name = "edge_combining_function_2d"
-        combining_function = self.program.get_parameter_value(function_name)
-        self.edge_combining_function_2d = get_combining_function(
-            combining_function)
-        function_name += SPARSE_FUNCTION_SUFFIX
-        combining_function = self.program.get_parameter_value(function_name)
-        self.edge_combining_function_2d_sparse = get_combining_function(
-            combining_function)
-
-    def get_literal_negation_function(self, atom, sparse=False):
+    def get_literal_negation_function(self, predicate):
         """
         Gets the literal negation function for the atom. This function is the
         function to be applied when the atom is negated.
@@ -439,36 +430,14 @@ class NeuralLogNetwork(keras.Model):
         The default function 1 - `a`, where `a` is the tensor representation
         of the atom.
 
-        :param atom: the atom
-        :type atom: Atom
-        :param sparse: if the tensor representation of `atom` is sparse
-        :type sparse: bool
+        :param predicate: the predicate
+        :type predicate: Predicate
         :return: the negation function
         :rtype: function
         """
-        function_name = "literal_negation_function"
-        if sparse:
-            function_name += SPARSE_FUNCTION_SUFFIX
-        name = self.program.get_parameter_value(function_name, atom.predicate)
+        name = self.program.get_parameter_value("literal_negation_function",
+                                                predicate)
         return get_literal_function(name)
-
-    def get_edge_combining_function_2d(self, sparse=False):
-        """
-        Gets the edge combining function 2d. This is the function to extract the
-        value of the fact based on the input, for 2d facts.
-
-        The default is the dot multiplication implemented by the `tf.matmul`
-        function.
-
-        :param sparse: if the kernel tensor is sparse
-        :param sparse: bool
-        :return: the combining function
-        :rtype: function
-        """
-        if sparse:
-            return self.edge_combining_function_2d_sparse
-
-        return self.edge_combining_function_2d
 
     def _get_path_combining_function(self, predicate=None):
         """
@@ -503,21 +472,6 @@ class NeuralLogNetwork(keras.Model):
             "edge_neutral_element")
         return get_combining_function(combining_function)
 
-    def _get_edge_combining_function(self):
-        """
-        Gets the edge combining function. This is the function to extract the
-        value of the fact based on the input.
-
-        The default is the element-wise multiplication implemented by the
-        `tf.math.multiply` function.
-
-        :return: the combining function
-        :rtype: function
-        """
-        combining_function = self.program.get_parameter_value(
-            "edge_combining_function")
-        return get_combining_function(combining_function)
-
     def _get_any_literal(self):
         """
         Gets the any literal layer.
@@ -541,7 +495,29 @@ class NeuralLogNetwork(keras.Model):
                     Literal(
                         Atom(predicate, *list(map(lambda x: "X{}".format(x),
                                                   range(predicate.arity))))))
+                if predicate.arity == 1:
+                    combining_func = \
+                        self.get_unary_literal_extraction_function(predicate)
+                    predicate_layer = ExtractUnaryLiteralLayer(predicate_layer,
+                                                               combining_func)
                 self.predicates[predicate] = predicate_layer
+
+    def get_unary_literal_extraction_function(self, predicate):
+        """
+        Gets the unary literal extraction function. This is the function to
+        extract the value of unary prediction.
+
+        The default is the dot multiplication, implemented by the
+        `tf.matmul`, applied to the transpose of the literal prediction.
+
+        :param predicate: the predicate
+        :type predicate: Predicate
+        :return: the combining function
+        :rtype: function
+        """
+        combining_function = self.program.get_parameter_value(
+            "unary_literal_extraction_function", predicate)
+        return get_combining_function(combining_function)
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, training=None, mask=None):
@@ -556,26 +532,6 @@ class NeuralLogNetwork(keras.Model):
     def compute_output_shape(self, input_shape):
         shape = tf.TensorShape(input_shape).as_list()
         return tf.TensorShape(shape)
-
-    # noinspection PyMissingOrEmptyDocstring
-    def get_matrix_representation(self, atom):
-        """
-        Builds the matrix representation for the atom.
-
-        :param atom: the atom
-        :type atom: Atom
-        :raise UnsupportedMatrixRepresentation in the case the predicate is
-        not convertible to matrix form
-        :return: the matrix representation of the data for the given predicate
-        :rtype: tf.Tensor
-        """
-        # FIXME: the negation should be applied to the literal layer, not the
-        #  to the fact layer
-        atom_tensor = self.layer_factory.build_atom(atom)
-        if isinstance(atom, Literal) and atom.negated:
-            sparse = isinstance(atom_tensor, tf.SparseTensor)
-            return self.get_literal_negation_function(atom, sparse)(atom_tensor)
-        return atom_tensor
 
     # noinspection PyMissingOrEmptyDocstring
     def _build_literal(self, atom, previous_atoms=None, inverted=False):
@@ -632,26 +588,74 @@ class NeuralLogNetwork(keras.Model):
             rule = self._build_rule(clause, previous_atoms, inverted)
             if rule is None:
                 continue
-            arity = renamed_literal.arity()
-            if renamed_literal.get_number_of_variables() < arity:
-                layer_name = "rule_layer_{}".format(
-                    get_standardised_name(clause.__str__()))
-                source = renamed_literal.terms[-1 if inverted else 0]
-                destination = renamed_literal.terms[0 if inverted else -1]
-                input_tensor = self.layer_factory.get_one_hot_tensor(source)
-                lookup = None
-                if destination.is_constant() and arity == 2:
-                    lookup = self.layer_factory.get_constant_lookup(
-                        destination)
-                rule = SpecificRuleLayer(
-                    layer_name, rule, input_tensor,
-                    self._get_path_combining_function(), lookup)
+
+            rule = self._build_specific_rule(renamed_literal, inverted, rule,
+                                             substitution)
             inputs.append(rule)
         combining_func = self.get_literal_combining_function(renamed_literal)
+        negation_function = None
+        if isinstance(renamed_literal, Literal) and renamed_literal.negated:
+            negation_function = self.get_literal_negation_function(
+                renamed_literal.predicate)
         return LiteralLayer(
             "literal_layer_{}".format(
                 get_standardised_name(renamed_literal.__str__())), inputs,
-            combining_func)
+            combining_func, negation_function=negation_function)
+
+    def _build_specific_rule(self, literal, inverted, rule, substitution):
+        """
+        Builds a specific rule from a more generic one.
+
+        :param literal: the literal
+        :type literal: Atom
+        :param inverted: if `True`, creates the inverted literal; this is,
+            a literal in the format (output, input). If `False`, creates the
+            standard (input, output) literal format.
+        :type inverted: bool
+        :param rule: the general rule
+        :type rule: RuleLayer
+        :param substitution: the dictionary with the substitution from the
+        generic term to the specific one
+        :type substitution: dict[Term, Term]
+        :return: the specific rule
+        :rtype: SpecificFactLayer
+        """
+        predicate = literal.predicate
+        substitution_terms = dict()
+        for generic, specific in substitution.items():
+            if not generic.is_constant() and specific.is_constant():
+                substitution_terms[specific] = generic
+        if len(substitution_terms) > 0:
+            source = literal.terms[-1 if inverted else 0]
+            destination = literal.terms[0 if inverted else -1]
+            literal_string = literal.__str__()
+            if inverted:
+                literal_string = "inv_" + literal_string
+            layer_name = get_standardised_name(
+                "{}_specific_{}".format(rule.name, literal_string))
+            input_constant = None
+            input_combining_function = None
+            output_constant = None
+            output_extract_func = None
+
+            if source.is_constant() and source in substitution_terms:
+                input_constant = self.layer_factory.get_one_hot_tensor(source)
+                input_combining_function = \
+                    self.layer_factory.get_and_combining_function(predicate)
+            if destination.is_constant() and destination in substitution_terms:
+                output_constant = \
+                    self.layer_factory.get_constant_lookup(destination)
+                output_extract_func = \
+                    self.layer_factory.get_output_extract_function(predicate)
+
+            rule = SpecificFactLayer(
+                layer_name, rule,
+                input_constant=input_constant,
+                input_combining_function=input_combining_function,
+                output_constant=output_constant,
+                output_extract_function=output_extract_func
+            )
+        return rule
 
     def get_literal_combining_function(self, literal):
         """
@@ -760,54 +764,14 @@ class NeuralLogNetwork(keras.Model):
         key = (renamed_atom, inverted)
         fact_layer = self._fact_layers.get(key, None)
         if fact_layer is None:
-            # variable_literal = get_variable_atom(atom)
-            # tensor = self.get_matrix_representation(variable_literal)
-            # tensor = self.tensor_factory.build_atom(renamed_atom)
-            # edge_function = self.edge_combining_function
-            # is_sparse = isinstance(tensor, tf.SparseTensor)
-            # arity = renamed_atom.arity()
-            # if arity == 2:
-            #     edge_function = self.get_edge_combining_function_2d(is_sparse)
-            #     if inverted:
-            #         tensor = self.get_invert_fact_function(
-            #             renamed_atom)(tensor)
-            # elif is_sparse:
-            #     tensor = tf.sparse.to_dense(tensor)
-            # layer_name = "fact_layer_{}".format(
-            #     get_standardised_name(renamed_atom.__str__()))
-            # if renamed_atom.get_number_of_variables() < arity:
-            #     input_constant = None
-            #     output_constant = None
-            #     source = renamed_atom.terms[-1 if inverted else 0]
-            #     if source.is_constant() and arity == 2:
-            #         input_constant = self.tensor_factory.get_one_hot_tensor(
-            #             source)
-            #     destination = renamed_atom.terms[0 if inverted else -1]
-            #     output_extract_function = tf.nn.embedding_lookup
-            #     if destination.is_constant():
-            #         if arity == 1:
-            #             output_constant = \
-            #                 self.tensor_factory.get_constant_lookup(destination)
-            #         else:
-            #             output_extract_function = \
-            #                 self.get_edge_combining_function_2d()
-            #             output_constant = \
-            #                 self.tensor_factory.get_one_hot_tensor(destination)
-            #             output_constant = tf.transpose(output_constant)
-            #     input_combining_function = self._get_path_combining_function()
-            #     fact_layer = SpecificFactLayer(
-            #         layer_name, tensor, edge_function,
-            #         input_constant=input_constant,
-            #         input_combining_function=input_combining_function,
-            #         output_constant=output_constant,
-            #         output_extract_function=output_extract_function)
-            # else:
-            #     fact_layer = FactLayer(layer_name, tensor, edge_function)
             fact_layer = self.layer_factory.build_atom(renamed_atom)
             if inverted:
-                inverted_function = \
-                    self.layer_factory.get_invert_fact_function(
-                        atom.predicate)
+                sparse = False
+                if isinstance(fact_layer, FactLayer):
+                    sparse = isinstance(fact_layer.get_kernel(),
+                                        tf.SparseTensor)
+                inverted_function = self.layer_factory.get_invert_fact_function(
+                    atom.predicate, sparse)
                 fact_layer = InvertedFactLayer(fact_layer, inverted_function)
             # fact_layer = FactLayer(layer_name, tensor, edge_function)
             self._fact_layers[key] = fact_layer

@@ -221,8 +221,8 @@ def main(argv):
     dense_feature_2 = tf.one_hot(features_2, model.constant_size)
     predict(model, neural_program, dense_feature_1)
     predict(model, neural_program, dense_feature_2)
-    epochs = 50
-    verbose = 1
+    epochs = 10
+    verbose = 0
     dataset = tf.data.Dataset.from_tensor_slices((features_1, labels_1))
     dataset = dataset.map(DatasetMap(model.constant_size))
     dataset = dataset.batch(1)

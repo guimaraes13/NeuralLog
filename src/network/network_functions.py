@@ -6,6 +6,10 @@ import tensorflow as tf
 import tensorflow.keras
 from tensorflow_core.python import keras
 
+TENSOR_FLOAT32_MAX = tf.constant(tf.float32.max)
+
+CLIP_VALUE_MIN = tf.constant(1.0)
+
 SPARSE_FUNCTION_SUFFIX = ":sparse"
 
 literal_functions = dict()
@@ -198,6 +202,7 @@ class SpecificFactLayer(AbstractFactLayer):
             if len(result.shape.as_list()) == 2:
                 result = tf.transpose(result)
             result = self.output_extract_function(result, self.output_constant)
+            result = tf.reshape(result, [-1, 1])
         return result
 
 
@@ -506,8 +511,6 @@ class MyConstant:
 
 
 # noinspection PyMissingOrEmptyDocstring
-
-
 @neural_log_initializer("my_const_value_2")
 def my_const_value_2(shape):
     return tf.Variable(2.0, shape=shape)
@@ -527,6 +530,42 @@ def any_aggregation_function(a):
     :rtype: tf.Tensor
     """
     return tf.reduce_sum(a, axis=1)
+
+
+@neural_log_combining_function("unary_literal_extraction_function")
+def unary_literal_extraction_function(a, b):
+    """
+    Returns the function to extract the value of unary prediction.
+
+    The default is the dot multiplication, implemented by the `tf.matmul`,
+    applied to the transpose of the literal prediction.
+
+    :param a: the first input tensor
+    :type a: tf.Tensor
+    :param b: the second input tensor
+    :type b: tf.Tensor
+    :return: the result tensor
+    :rtype: tf.Tensor
+    """
+    result = tf.math.multiply(a, b)
+    return tf.reduce_sum(result, axis=1)
+
+
+@neural_log_literal_function("mean")
+def mean(a):
+    """
+    Returns the mean of the non-zero values of `a` for each row.
+
+    :param a: the input tensor
+    :type a: tf.Tensor
+    :return: the result tensor
+    :rtype: tf.Tensor
+    """
+    sum_a = tf.math.reduce_sum(a, axis=1, keepdims=False)
+    non_zero = tf.math.count_nonzero(a, axis=1,
+                                     keepdims=False, dtype=tf.float32)
+    non_zero = tf.clip_by_value(non_zero, CLIP_VALUE_MIN, TENSOR_FLOAT32_MAX)
+    return tf.reshape(sum_a / non_zero, [-1, 1])
 
 
 if __name__ == "__main__":

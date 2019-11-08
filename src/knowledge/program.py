@@ -1394,6 +1394,8 @@ class NeuralLogProgram:
         # function.
 
         self.parameters.setdefault("invert_fact_function", "tf.transpose")
+        self.parameters.setdefault("invert_fact_function:sparse",
+                                   "tf.sparse.transpose")
         # function to extract the inverse of a facts. The default is the
         # transpose function implemented by `tf.transpose`
 
@@ -1418,3 +1420,9 @@ class NeuralLogProgram:
         # function to extract the value of an atom with a constant at the
         # last term position.
         # The default function is the `tf.nn.embedding_lookup`.
+
+        self.parameters.setdefault("unary_literal_extraction_function",
+                                   "unary_literal_extraction_function")
+        # function to extract the value of unary prediction.
+        # The default is the dot multiplication, implemented by the `tf.matmul`,
+        # applied to the transpose of the literal prediction.
