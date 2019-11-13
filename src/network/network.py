@@ -20,7 +20,6 @@ from src.network.network_functions import get_literal_function, \
     InvertedFactLayer, SpecificFactLayer
 
 # Network part
-# TODO: create a function to transform the examples from logic to numeric
 # QUESTION: Should we move the functional symbols to the end of the path?
 #  if we do, the rule will have the same behaviour, independent of the
 #  order of the literals. If we do not, we will be able to choose the intended
@@ -349,21 +348,26 @@ class NeuralLogNetwork(keras.Model):
     program: NeuralLogProgram
     "The NeuralLog program"
 
-    def __init__(self, program):
+    def __init__(self, program, train=True):
         """
         Creates a NeuralLogNetwork.
 
         :param program: the neural language
         :type program: NeuralLogProgram
+        :param train: if `False`, all the literals will be considered as not
+        trainable/learnable, this is useful to build neural networks for
+        inference only. In this way, the unknown facts will be treated as
+        zeros, instead of being randomly initialized
+        :type train: bool
         """
         super(NeuralLogNetwork, self).__init__(name="NeuralLogNetwork")
         self.program = program
         self.constant_size = len(self.program.iterable_constants)
-        self.layer_factory = LayerFactory(self.program)
+        self.layer_factory = LayerFactory(self.program, train=train)
         self.predicates = OrderedDict()
 
         self.neutral_element = self._get_edge_neutral_element()
-        self.any_literal_layer = self._get_any_literal()
+        # self.any_literal_layer = self._get_any_literal()
 
     def get_literal_negation_function(self, predicate):
         """
@@ -428,7 +432,11 @@ class NeuralLogNetwork(keras.Model):
         return AnyLiteralLayer("literal_layer_any-X0-X1-", function)
 
     # noinspection PyMissingOrEmptyDocstring
-    def build(self, input_shape):
+    # def build(self, input_shape):
+    #     self.build_layers()
+    #     super(NeuralLogNetwork, self).build(input_shape)
+
+    def build_layers(self):
         for example_set in self.program.examples.values():
             for predicate in example_set:
                 if predicate in self.predicates.keys():
@@ -463,12 +471,14 @@ class NeuralLogNetwork(keras.Model):
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, training=None, mask=None):
-        results = []
-        for predicate_layer in self.predicates.values():
-            results.append(predicate_layer(inputs))
-        # if len(results) == 1:
-        #     return results[0]
-        return tuple(results)
+        # results = []
+        # for predicate_layer in self.predicates.values():
+        #     results.append(predicate_layer(inputs))
+        # return tuple(results)
+        results = {}
+        for predicate, predicate_layer in self.predicates.items():
+            results[predicate.__str__()] = (predicate_layer(inputs))
+        return results
 
     # noinspection PyMissingOrEmptyDocstring
     def compute_output_shape(self, input_shape):
@@ -668,7 +678,7 @@ class NeuralLogNetwork(keras.Model):
                 layer_path = []
                 for i in range(len(path)):
                     if path[i].predicate.name == ANY_PREDICATE_NAME:
-                        literal_layer = self.any_literal_layer
+                        literal_layer = self._get_any_literal()
                     else:
                         literal_layer = self._build_literal(
                             path[i], current_atoms, path.inverted[i])
@@ -785,6 +795,45 @@ class NeuralLogDataset:
         """
         self.network = network
 
+    # noinspection PyUnusedLocal
+    def call(self, features, labels, *args, **kwargs):
+        """
+        Used to transform the features and examples from the sparse
+        representation to dense in order to train the network.
+
+        :param features: A dense index tensor of the features
+        :type features: tf.Tensor
+        :param labels: A tuple sparse tensor of labels
+        :type labels: tuple[tf.SparseTensor]
+        :param args: additional arguments
+        :type args: list
+        :param kwargs: additional arguments
+        :type kwargs: dict
+        :return: the features and label tensors
+        :rtype: (tf.Tensor, tuple[tf.Tensor])
+        """
+        features = tf.one_hot(features, self.network.constant_size)
+        labels = tuple(map(lambda x: tf.sparse.to_dense(x), labels))
+
+        return features, labels
+
+    __call__ = call
+
+    def get_dataset(self, example_set=NO_EXAMPLE_SET):
+        """
+        Gets the data set for the example set.
+
+        :param example_set: the name of the example set
+        :type example_set: str
+        :return: the dataset
+        :rtype: tf.data.Dataset
+        """
+        features, labels = self.build(example_set=example_set,
+                                      sparse_features=False)
+        dataset = tf.data.Dataset.from_tensor_slices((features, labels))
+        dataset = dataset.map(self)
+        return dataset
+
     def build(self, example_set=NO_EXAMPLE_SET, sparse_features=False):
         """
         Builds the features and label to train the neural network based on
@@ -802,8 +851,6 @@ class NeuralLogDataset:
         :return: the features and labels
         :rtype: (tf.Tensor or tf.SparseTensor, tf.SparseTensor)
         """
-        # TODO: preprocess the 1D tensor to create a one hot vector of
-        #  `constant_size` wide and 1.0 at the position of the 1D tensor value.
         constant_size = self.network.constant_size
         index_by_term = OrderedDict()  # type: OrderedDict[Term, int]
         predicates = []

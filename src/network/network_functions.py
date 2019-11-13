@@ -591,7 +591,7 @@ def inverse(a):
     :return: the result tensor
     :rtype: tf.Tensor
     """
-    return tf.math.divide(1.0, a)
+    return tf.math.divide_no_nan(1.0, a)
 
 
 if __name__ == "__main__":

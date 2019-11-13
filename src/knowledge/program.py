@@ -893,7 +893,8 @@ class NeuralLogProgram:
         for sets in self.examples.values():
             for examples in sets.values():
                 for example in examples.values():
-                    self._get_constants_from_atom(example, _iterable_constants)
+                    self._get_constants_from_atom(example, _iterable_constants,
+                                                  is_example=True)
                     example.context = None
         for clauses in self.clauses_by_predicate.values():
             for clause in clauses:
@@ -920,7 +921,8 @@ class NeuralLogProgram:
             count += 1
         self.number_of_entities = count
 
-    def _get_constants_from_atom(self, atom, iterable_constants):
+    def _get_constants_from_atom(self, atom, iterable_constants,
+                                 is_example=False):
         """
         Gets the constants from an atom.
 
@@ -934,7 +936,7 @@ class NeuralLogProgram:
             if not atom[i].is_constant() or types[i].number:
                 continue
             self.constants.add(atom[i])
-            if types[i].variable:
+            if is_example or types[i].variable:
                 iterable_constants.add(atom[i])
 
     def get_matrix_representation(self, predicate, mask=False):
@@ -1281,8 +1283,9 @@ class NeuralLogProgram:
                            atom.context.start.column)
         example_dict[key] = atom
 
+    # noinspection PyUnusedLocal
     @builtin("learn")
-    def _learn_predicate(self, clause):
+    def _learn_predicate(self, clause, *args, **kwargs):
         """
         Process the builtin `learn` predicate.
 
@@ -1292,8 +1295,9 @@ class NeuralLogProgram:
         predicate = get_predicate_from_string(clause.atom.terms[0].get_name())
         self.trainable_predicates.add(predicate)
 
+    # noinspection PyUnusedLocal
     @builtin("set_parameter")
-    def _set_parameter(self, clause):
+    def _set_parameter(self, clause, *args, **kwargs):
         """
         Process the builtin `set_parameter` predicate.
 
@@ -1312,8 +1316,9 @@ class NeuralLogProgram:
                 atom.terms[i].value, dict())
         parameter_dict[atom.terms[-2].value] = atom.terms[-1].value
 
+    # noinspection PyUnusedLocal
     @builtin("set_predicate_parameter")
-    def _set_predicate_parameter(self, clause):
+    def _set_predicate_parameter(self, clause, *args, **kwargs):
         """
         Process the builtin `set_predicate_parameter` predicate.
 

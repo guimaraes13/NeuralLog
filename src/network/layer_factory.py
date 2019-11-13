@@ -148,8 +148,8 @@ def get_standardised_name(string):
     """
     standard = SPACE_REGEX.sub("_", string)
     standard = ALLOW_REGEX.sub("-", standard)
-    if FIRST_CHARACTER.search(standard[0]) is not None:
-        return "." + standard
+    # if FIRST_CHARACTER.search(standard[0]) is not None:
+    #     return "." + standard
 
     return standard
 
@@ -178,10 +178,17 @@ class LayerFactory:
 
     tensor_function = decorate_factory_function()
 
-    def __init__(self, program, layer_name_format="fact_layer_{}"):
+    def __init__(self, program, layer_name_format="fact_layer_{}", train=True):
         """
         Creates a TensorFactory.
 
+        :param layer_name_format: the format of the layer name
+        :type layer_name_format: str
+        :param train: if `False`, all the literals will be considered as not
+        trainable/learnable, this is useful to build neural networks for
+        inference only. In this way, the unknown facts will be treated as
+        zeros, instead of being randomly initialized
+        :type train: bool
         :param program: the NeuralLog program
         :type program: NeuralLogProgram
         """
@@ -189,7 +196,7 @@ class LayerFactory:
         self.constant_size = len(self.program.iterable_constants)
         # noinspection PyUnresolvedReferences
         self.function = self.tensor_function.functions
-
+        self.train = train
         # Layer Properties
         self.layer_name_format = layer_name_format
 
@@ -228,7 +235,8 @@ class LayerFactory:
                     term_types.append(FactoryTermType.CONSTANT)
             else:
                 term_types.append(FactoryTermType.VARIABLE)
-        trainable = atom.predicate in self.program.trainable_predicates
+        trainable = self.train and \
+                    atom.predicate in self.program.trainable_predicates
         key = TensorFunctionKey(atom.arity(),
                                 self.program.get_true_arity(atom.predicate),
                                 trainable, *term_types)

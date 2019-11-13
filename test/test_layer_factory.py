@@ -270,7 +270,7 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((), evaluated.shape)
+        self.assertEqual((1, 1), evaluated.shape)
         self.assertAlmostEqual(atom.weight, evaluated, places=EQUAL_DELTA)
 
     def test_arity_1_1_trainable_variable(self):
@@ -645,8 +645,8 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((), evaluated.shape)
-        self.assertAlmostEqual(atom.weight * value, evaluated,
+        self.assertEqual((1, 1), evaluated.shape)
+        self.assertAlmostEqual(atom.weight * value, evaluated[0, 0],
                                places=EQUAL_DELTA)
 
     def test_arity_2_1_not_trainable_iterable_constant_number_variable(self):
@@ -662,8 +662,8 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((), evaluated.shape)
-        self.assertAlmostEqual(atom.weight * expected, evaluated,
+        self.assertEqual((1, 1), evaluated.shape)
+        self.assertAlmostEqual(atom.weight * expected, evaluated[0, 0],
                                places=EQUAL_DELTA)
 
     def test_arity_2_1_not_trainable_variable_number(self):
@@ -839,7 +839,7 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((), evaluated.shape)
+        self.assertEqual((1, 1), evaluated.shape)
         self.assertAlmostEqual(atom.weight * value, evaluated,
                                places=EQUAL_DELTA)
 
@@ -856,7 +856,7 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((), evaluated.shape)
+        self.assertEqual((1, 1), evaluated.shape)
         self.assertAlmostEqual(atom.weight * expected, evaluated,
                                places=EQUAL_DELTA)
 
@@ -1040,7 +1040,7 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((), evaluated.shape)
+        self.assertEqual((1, 1), evaluated.shape)
         self.assertAlmostEqual(atom.weight * value, evaluated,
                                places=EQUAL_DELTA)
 
@@ -1057,7 +1057,7 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((), evaluated.shape)
+        self.assertEqual((1, 1), evaluated.shape)
         self.assertAlmostEqual(atom.weight * expected, evaluated,
                                places=EQUAL_DELTA)
 
@@ -1237,7 +1237,7 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((), evaluated.shape)
+        self.assertEqual((1, 1), evaluated.shape)
         self.assertAlmostEqual(atom.weight * value, evaluated,
                                places=EQUAL_DELTA)
 
@@ -1254,7 +1254,7 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((), evaluated.shape)
+        self.assertEqual((1, 1), evaluated.shape)
         self.assertAlmostEqual(atom.weight * expected, evaluated,
                                places=EQUAL_DELTA)
 
@@ -1733,7 +1733,7 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((), evaluated.shape)
+        self.assertEqual((1, 1), evaluated.shape)
         self.assertAlmostEqual(atom.weight, evaluated, places=EQUAL_DELTA)
 
     def test_arity_2_2_trainable_constant_variable(self):
@@ -1812,7 +1812,7 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((1,), evaluated.shape)
+        self.assertEqual((1, 1), evaluated.shape)
         self.assertAlmostEqual(atom.weight, evaluated[0], places=EQUAL_DELTA)
 
     def test_arity_2_2_trainable_iterable_constant_variable(self):
@@ -1913,7 +1913,8 @@ class TestLayerFactory(unittest.TestCase):
             layer_factory.arity_2_2_trainable_variable_iterable_constant.
                 __func__,
             layer_factory.function[key])
-        tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
+        input_value = tf.eye(layer_factory.constant_size)
+        tensor = layer_factory.build_atom(atom)(input_value)
 
         evaluated = tensor.numpy()
         self.assertEqual((layer_factory.constant_size, 1), evaluated.shape)

@@ -6,7 +6,6 @@ import logging
 import os
 import sys
 
-
 def configure_log():
     """
     Configures the log handler, message format and log level
@@ -25,8 +24,9 @@ def configure_log():
         handlers=handlers
     )
 
-
 configure_log()
+logger = logging.getLogger()
+
 
 from antlr4 import *
 
@@ -197,10 +197,10 @@ def main(argv):
     # writer = tf.summary.create_file_writer(log_dir)
     # tf.summary.trace_on(graph=True, profiler=True)
     model = NeuralLogNetwork(neural_program)
+    model.build_layers()
     # optimizer = tf.keras.optimizers.SGD(learning_rate=0.1)
     optimizer = tf.keras.optimizers.Adagrad(learning_rate=0.1)
     model.compile(loss="mse", optimizer=optimizer, metrics=["mse"])
-    model.build(None)
     model.run_eagerly = True
 
     model.update_program()
@@ -222,9 +222,10 @@ def main(argv):
     predict(model, neural_program, dense_feature_1)
     predict(model, neural_program, dense_feature_2)
     epochs = 10
-    verbose = 0
-    dataset = tf.data.Dataset.from_tensor_slices((features_1, labels_1))
-    dataset = dataset.map(DatasetMap(model.constant_size))
+    verbose = 1
+    # dataset = tf.data.Dataset.from_tensor_slices((features_1, labels_1))
+    # dataset = dataset.map(DatasetMap(model.constant_size))
+    dataset = neural_dataset.get_dataset("examples_1")
     dataset = dataset.batch(1)
     model.fit(dataset, epochs=epochs, callbacks=[tensorboard_callback],
               verbose=verbose)
@@ -236,8 +237,9 @@ def main(argv):
     predict(model, neural_program, dense_feature_1)
     predict(model, neural_program, dense_feature_2)
 
-    dataset = tf.data.Dataset.from_tensor_slices((features_2, labels_2))
-    dataset = dataset.map(DatasetMap(model.constant_size))
+    # dataset = tf.data.Dataset.from_tensor_slices((features_2, labels_2))
+    # dataset = dataset.map(DatasetMap(model.constant_size))
+    dataset = neural_dataset.get_dataset("examples_2")
     dataset = dataset.batch(1)
     model.fit(dataset, epochs=epochs, callbacks=[tensorboard_callback],
               verbose=verbose)
@@ -248,6 +250,8 @@ def main(argv):
     output.close()
     predict(model, neural_program, dense_feature_1)
     predict(model, neural_program, dense_feature_2)
+
+    logger.warning("Test")
 
     # neural_dataset = NeuralLogDataset(model)
     # features, labels = neural_dataset.build()
@@ -312,5 +316,4 @@ def _print_prediction(neural_program, prediction, predicates):
 
 
 if __name__ == "__main__":
-    configure_log()
     main(sys.argv)
