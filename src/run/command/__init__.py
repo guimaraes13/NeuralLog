@@ -10,6 +10,9 @@ from utils.data_utils import build_parent_dir
 
 logger = logging.getLogger()
 
+TRAIN_SET_NAME = "train_set"
+VALIDATION_SET_NAME = "validation_set"
+TEST_SET_NAME = "test_set"
 
 def make_command():
     """
