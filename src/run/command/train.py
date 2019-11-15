@@ -4,7 +4,6 @@ Train the model command.
 
 import argparse
 import logging
-import re
 import time
 
 from antlr4 import FileStream
@@ -22,8 +21,6 @@ from src.network.callbacks import LinkPredictionCallback
 from src.network.network import NeuralLogNetwork, NeuralLogDataset
 from src.run.command import Command, command, print_args, create_log_file, \
     TRAIN_SET_NAME, VALIDATION_SET_NAME, TEST_SET_NAME
-
-OUTPUT_MATCH = re.compile(r"output_[0-9]+")
 
 DEFAULT_LOSS = "mean_squared_error"
 DEFAULT_OPTIMIZER = "sgd"
@@ -213,7 +210,7 @@ class Train(Command):
 
         :param output_map: the map of the outputs of the neural network by the
         predicate
-        :type output_map: BiDict[Predicate, int]
+        :type output_map: BiDict[tuple(Predicate, bool), str]
         :return: the loss function for each output
         :rtype: str or dict[str, str]
         """
@@ -225,7 +222,7 @@ class Train(Command):
                 key = get_predicate_from_string(key)
                 has_not_match = True
                 for predicate, output in output_map.items():
-                    if key.equivalent(predicate):
+                    if key.equivalent(predicate[0]):
                         results.setdefault(output, value)
                         has_not_match = False
                 if has_not_match:
@@ -244,7 +241,7 @@ class Train(Command):
 
         :param output_map: the map of the outputs of the neural network by the
         predicate
-        :type output_map: BiDict[Predicate, int]
+        :type output_map: BiDict[tuple(Predicate, bool), str]
         :return: the loss function for each output
         :rtype: str or dict[str, str]
         """
@@ -263,7 +260,7 @@ class Train(Command):
                 key = get_predicate_from_string(key)
                 has_not_match = True
                 for predicate, output in output_map.items():
-                    if key.equivalent(predicate):
+                    if key.equivalent(predicate[0]):
                         metric = results.get(output, [])
                         results[output] = metric + values
                         has_not_match = False
@@ -277,7 +274,10 @@ class Train(Command):
                 results[key] = [default_loss] + all_metrics + values
             return results
         elif metrics is None:
-            return loss
+            if isinstance(loss, dict):
+                return loss
+            else:
+                return [loss]
         else:
             if isinstance(loss, dict):
                 results = dict()
@@ -385,7 +385,7 @@ class Train(Command):
         logger.info("Model building time:\t%0.3fs", end_func - start_func)
 
     def _get_output_map(self):
-        output_map = BiDict()  # type: BiDict[Predicate, int]
+        output_map = BiDict()  # type: BiDict[Predicate, str]
         count = 1
         for predicate in self.model.predicates.keys():
             output_map[predicate] = "output_{}".format(count)
@@ -402,6 +402,8 @@ class Train(Command):
                         new_value = dict()
                         for k, v in value.items():
                             k = map_dict.get(k, k)
+                            if isinstance(k, tuple):
+                                k = k[0].__str__() + (" (inv)" if k[1] else "")
                             new_value[k] = v
                         parameters[key] = new_value
             print_args(parameters)
@@ -422,7 +424,7 @@ class Train(Command):
             epochs=epochs,
             validation_data=self.validation_set,
             validation_freq=validation_period,
-            callbacks=callbacks,
+            callbacks=callbacks
         )
         end_func = time.process_time()
         logger.info("Total model training time:\t%0.3fs", end_func - start_func)
@@ -430,6 +432,7 @@ class Train(Command):
         return history
 
     def _get_callbacks(self, number_of_epochs=None):
+        # TODO: allow the user to specify the callbacks
         # TODO: create the callbacks for evaluation and save points
         callbacks = []
         if self.tensor_board is not None:
@@ -437,10 +440,10 @@ class Train(Command):
 
         callbacks.append(LinkPredictionCallback(self, TRAIN_SET_NAME,
                                                 filtered=False,
-                                                rank_method="pessimistic"))
+                                                rank_method="pessimistic",
+                                                top_k=3))
 
-        # TODO: print the metrics with the name of the predicate
-        callbacks.append(EpochLogger(number_of_epochs))
+        callbacks.append(EpochLogger(number_of_epochs, self.output_map.inverse))
         return callbacks
 
     def _build_train_set(self):
@@ -470,10 +473,9 @@ class Train(Command):
             history = self.fit()
             logger.info(history)
 
-        # TODO: to learn both from the direct relation and its inverse
-        # TODO: to save the model
-        # TODO: to evaluate the model
-        # TODO: to save the predictions
+        # TODO: save the model
+        # TODO: evaluate the model
+        # TODO: save the predictions
 
         #     if self.weights_path is not None:
         #         logger.info('saving model...')

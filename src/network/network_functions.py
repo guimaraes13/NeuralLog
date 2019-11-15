@@ -147,9 +147,25 @@ class InvertedFactLayer(FactLayer):
         :param kwargs: additional arguments
         :type kwargs: dict[str, Any]
         """
+        # TODO: fix for the case of inverted literal with constant
+        #  - move the solution to the creation of the layer;
+        #  - generalize the solution for any combining function;
+        #  - keep using sparse tensor whenever possible.
         name = fact_layer.name + "_inv"
-        kernel = inverted_function(fact_layer.get_kernel())
         fact_combining_function = fact_layer.fact_combining_function
+        kernel = fact_layer.get_kernel()
+        if kernel.shape.rank == 1:
+            if isinstance(kernel, tf.SparseTensor):
+                kernel = tf.sparse.to_dense(kernel)
+            fact_combining_function = tf.matmul
+            kernel = tf.reshape(kernel, [1, -1])
+        kernel = inverted_function(kernel)  # type: tf.Tensor
+        if kernel.shape.rank == 2 and kernel.shape[0] == 1:
+            if isinstance(kernel, tf.SparseTensor):
+                kernel = tf.sparse.to_dense(kernel)
+            fact_combining_function = tf.math.multiply
+            kernel = tf.reshape(kernel, [-1])
+
         super(InvertedFactLayer, self).__init__(
             name, kernel, fact_combining_function, **kwargs)
 

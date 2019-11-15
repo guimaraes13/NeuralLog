@@ -2,6 +2,7 @@
 File to store useful callback implementations.
 """
 import logging
+import re
 from typing import Any, List, Dict, Set
 
 import numpy as np
@@ -13,6 +14,9 @@ from src.language.language import Predicate, Atom
 from src.network.network import NeuralLogNetwork
 from src.run.command import TRAIN_SET_NAME, VALIDATION_SET_NAME, TEST_SET_NAME
 
+METRIC_LOG_PATTERN = "\t{:.5f}:\t{}\n"
+OUTPUT_MATCH = re.compile(r"output_[0-9]+")
+
 MEAN_RANK_METRIC_FORMAT = "mean_rank_{}"
 MEAN_RECIPROCAL_RANK_METRIC_FORMAT = "mean_reciprocal_rank_{}"
 TOP_K_RANK_METRIC_FORMAT = "top_k_rank_{}"
@@ -20,28 +24,6 @@ TOP_K_RANK_METRIC_FORMAT = "top_k_rank_{}"
 LOG_FORMAT = "output_{}_{}"
 
 logger = logging.getLogger()
-
-
-def format_metrics_for_epoch(metrics, epoch=None):
-    """
-    Formats the metrics on `metrics` for the given epoch.
-
-    :param metrics: a dictionary with the metrics names and values.
-    The value can be either the metric itself or a list of values for each
-    epochs
-    :type metrics: dict[str, float], dict[str, list[float]]
-    :param epoch: the epoch of the correspondent value, in case the value be
-    :type epoch: int
-    :return: the formatted message
-    :rtype: str
-    """
-    message = ""
-    for k, v in metrics.items():
-        if epoch is None:
-            message += " - {}: {:.5f}".format(k, v)
-        else:
-            message += " - {}: {:.5f}".format(k, v[epoch])
-    return message
 
 
 def get_bigger_and_equals_counts(y_score, object_index, filtered_objects):
@@ -110,15 +92,50 @@ class EpochLogger(Callback):
     Callback to log the measures of the model after each epoch.
     """
 
-    def __init__(self, number_of_epochs):
+    def __init__(self, number_of_epochs, output_map=None):
         """
         Callback to log the measures of the model after each epoch.
 
         :param number_of_epochs: the total number of epochs of the training
         :type number_of_epochs: int or None
+        :param output_map: the map of the outputs of the neural network by the
+        predicate
+        :type output_map: dict[str, tuple(Predicate, bool)] or None
         """
         super(Callback, self).__init__()
         self.number_of_epochs = str(number_of_epochs) or "Unknown"
+        self.output_map = output_map
+
+    def format_metrics_for_epoch(self, metrics, epoch=None):
+        """
+        Formats the metrics on `metrics` for the given epoch.
+
+        :param metrics: a dictionary with the metrics names and values.
+        The value can be either the metric itself or a list of values for each
+        epochs
+        :type metrics: dict[str, float], dict[str, list[float]]
+        :param epoch: the epoch of the correspondent value, in case the value be
+        :type epoch: int
+        :return: the formatted message
+        :rtype: str
+        """
+        message = ":\n"
+        for k, v in metrics.items():
+            if self.output_map is not None:
+                match = OUTPUT_MATCH.match(k)
+                if match is not None:
+                    suffix = k[match.end():]
+                    output_key = match.group()
+                    predicate, inverted = \
+                        self.output_map.get(output_key, (output_key, False))
+                    k = str(predicate).replace("/", "_")
+                    k += "_inv" if inverted else ""
+                    k += suffix
+            if epoch is None:
+                message += METRIC_LOG_PATTERN.format(v, k)
+            else:
+                message += METRIC_LOG_PATTERN.format(v[epoch], k)
+        return message
 
     def on_epoch_end(self, epoch, logs=None):
         """
@@ -130,7 +147,7 @@ class EpochLogger(Callback):
         :type logs: dict
         """
         logger.info("Epochs %d/%s%s", epoch + 1, self.number_of_epochs,
-                    format_metrics_for_epoch(logs))
+                    self.format_metrics_for_epoch(logs))
 
 
 class LinkPredictionCallback(Callback):
@@ -185,7 +202,7 @@ class LinkPredictionCallback(Callback):
         self.rank_function = get_rank_function(rank_method)
         self.epochs_since_last_save = 0
         self.output_indices = []  # type: List[int]
-        self.output_predicates = []  # type: List[Predicate]
+        self.output_predicates = []  # type: List[tuple(Predicate, bool)]
         self.filtered_objects = []  # type: List[Dict[int, Set[int]]]
         self.dataset = self._get_dataset()
         if suffix is None:
@@ -212,22 +229,24 @@ class LinkPredictionCallback(Callback):
         self.output_indices = []
         self.output_predicates = []
         self.filtered_objects = []
-        for predicate in self.model.predicates:
+        for predicate, inverted in self.model.predicates:
             if predicate.arity != 2:
                 continue
             self.output_indices.append(index)
-            self.output_predicates.append(predicate)
-            filtered_entities = self._get_filtered_entities(predicate)
+            self.output_predicates.append((predicate, inverted))
+            filtered_entities = self._get_filtered_entities(predicate, inverted)
             self.filtered_objects.append(filtered_entities)
             index += 1
 
-    def _get_filtered_entities(self, predicate):
+    def _get_filtered_entities(self, predicate, inverted):
         """
         Gets a dictionary with the set of filtered entities for the target
         entity, for the predicate.
 
         :param predicate: the predicate
         :type predicate: Predicate
+        :param inverted: if the predicate is inverted
+        :type inverted: bool
         :return: the dictionary
         :rtype: dict[int, set[int]]
         """
@@ -236,8 +255,10 @@ class LinkPredictionCallback(Callback):
             examples = self.program.examples.get(dataset, dict())
             examples = examples.get(predicate, dict())  # type: Dict[Any, Atom]
             for example in examples.values():
-                sub_index = self.program.index_for_constant(example.terms[0])
-                obj_index = self.program.index_for_constant(example.terms[-1])
+                sub_index = self.program.index_for_constant(
+                    example.terms[-1 if inverted else 0])
+                obj_index = self.program.index_for_constant(
+                    example.terms[0 if inverted else -1])
                 filtered_entities.setdefault(sub_index, set()).add(obj_index)
 
         return filtered_entities
@@ -284,7 +305,8 @@ class LinkPredictionCallback(Callback):
                     x = feature.numpy()
                     y_score = y_score.numpy()
                     subject_index = np.argmax(x)
-                    positive_objects = np.argwhere(y_true > 0.0).squeeze()
+                    # positive_objects = np.argwhere(y_true > 0.0).squeeze()
+                    positive_objects = np.reshape(np.argwhere(y_true > 0.0), -1)
                     if len(positive_objects) == 0:
                         continue
                     filtered_objects = \

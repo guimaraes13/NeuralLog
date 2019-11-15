@@ -440,18 +440,23 @@ class NeuralLogNetwork(keras.Model):
     def build_layers(self):
         for example_set in self.program.examples.values():
             for predicate in example_set:
-                if predicate in self.predicates.keys():
-                    continue
-                predicate_layer = self._build_literal(
-                    Literal(
-                        Atom(predicate, *list(map(lambda x: "X{}".format(x),
-                                                  range(predicate.arity))))))
-                if predicate.arity == 1:
-                    combining_func = \
-                        self.get_unary_literal_extraction_function(predicate)
-                    predicate_layer = ExtractUnaryLiteralLayer(predicate_layer,
-                                                               combining_func)
-                self.predicates[predicate] = predicate_layer
+                literal = Literal(Atom(predicate,
+                                       *list(map(lambda x: "X{}".format(x),
+                                                 range(predicate.arity)))))
+                if (predicate, False) not in self.predicates.keys():
+                    predicate_layer = self._build_literal(literal)
+                    if predicate.arity == 1:
+                        combining_func = \
+                            self.get_unary_literal_extraction_function(
+                                predicate)
+                        predicate_layer = ExtractUnaryLiteralLayer(
+                            predicate_layer, combining_func)
+                    self.predicates[(predicate, False)] = predicate_layer
+                if predicate.arity == 2 and \
+                        (predicate, True) not in self.predicates.keys():
+                    predicate_layer = self._build_literal(literal,
+                                                          inverted=True)
+                    self.predicates[(predicate, True)] = predicate_layer
 
     def get_unary_literal_extraction_function(self, predicate):
         """
@@ -855,9 +860,9 @@ class NeuralLogDataset:
         labels_indices = []
         index = 0
         examples = self.network.program.examples.get(example_set, OrderedDict())
-        for predicate in self.network.predicates.keys():
+        for predicate, inverted in self.network.predicates.keys():
             # for facts in examples.get(predicate, dict()).values():
-            predicates.append(predicate)
+            predicates.append((predicate, inverted))
             # facts = facts.values()
             facts = examples.get(predicate, dict()).values()
             values = []
@@ -866,7 +871,7 @@ class NeuralLogDataset:
                 weight = fact.weight
                 if weight == 0.0:
                     continue
-                input_term = fact.terms[0]
+                input_term = fact.terms[-1 if inverted else 0]
                 term_index = index_by_term.get(input_term, None)
                 if term_index is None:
                     term_index = index
@@ -876,7 +881,7 @@ class NeuralLogDataset:
                 if predicate.arity == 1:
                     indices.append([term_index])
                 else:
-                    output_term = fact.terms[-1]
+                    output_term = fact.terms[0 if inverted else -1]
                     indices.append(
                         [term_index,
                          self.network.program.index_for_constant(
@@ -886,7 +891,7 @@ class NeuralLogDataset:
 
         labels = []
         for i in range(len(predicates)):
-            if predicates[i].arity == 1:
+            if predicates[i][0].arity == 1:
                 dense_shape = [constant_size]
                 empty_index = [[0]]
             else:

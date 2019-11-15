@@ -277,42 +277,20 @@ def predict(model, neural_program, x):
     x_numpy = x.numpy()
     print("*" * 10, "predictions", "*" * 10)
     for i in range(len(predicates)):
-        # print(predicates[i])
         for j in range(len(predictions[i])):
             indices = np.where(model.predict(x)[i][j] != 0.0)[0]
             if len(indices) == 0:
                 continue
             term = neural_program.iterable_constants[np.argmax(x_numpy[j])]
-            print(predicates[i].name, "(", term, ", X0):", sep="")
+            name = predicates[i][0].name
+            if predicates[i][1]:
+                name += "^{-1}"
+            print(name, "(", term, ", X0):", sep="")
             for index in indices:
                 print(predictions[i][j][index],
                       neural_program.iterable_constants[index], sep=":\t")
             print()
     print()
-
-def predict_old(model, neural_program, x):
-    prediction = model.predict(x)
-    print(type(prediction))
-    print(prediction)
-    x_numpy = x.numpy()
-    predicates = list(model.predicates.keys())
-    if isinstance(prediction, list):
-        for i in range(len(prediction)):
-            print(predicates[i])
-            for j in range(len(prediction[0])):
-                print(neural_program.iterable_constants[np.argmax(x_numpy[i])])
-                _print_prediction(neural_program, prediction[i], predicates)
-    else:
-        _print_prediction(neural_program, prediction, predicates)
-
-
-def _print_prediction(neural_program, prediction, predicates):
-    for i in range(prediction.shape[0]):
-        values = np.where(prediction[i] != 0.0)[0]
-        for j in values:
-            print(prediction[i][j], neural_program.iterable_constants[j],
-                  sep=":\t")
-        print()
 
 
 if __name__ == "__main__":

@@ -711,7 +711,7 @@ class LayerFactory:
         """
         name = self._get_layer_name(atom)
         sparse = isinstance(kernel, tf.SparseTensor)
-        if tf.rank(kernel).numpy() == 2:
+        if kernel.shape.rank == 2:
             combining_func = self.get_edge_combining_function_2d(
                 atom.predicate, sparse)
         else:
