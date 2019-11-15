@@ -20,6 +20,7 @@ from src.network.network_functions import get_literal_function, \
     InvertedFactLayer, SpecificFactLayer
 
 # Network part
+# IMPROVE: to try a LALR(1) parser to improve performance
 # QUESTION: Should we move the functional symbols to the end of the path?
 #  if we do, the rule will have the same behaviour, independent of the
 #  order of the literals. If we do not, we will be able to choose the intended
@@ -471,14 +472,10 @@ class NeuralLogNetwork(keras.Model):
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, training=None, mask=None):
-        # results = []
-        # for predicate_layer in self.predicates.values():
-        #     results.append(predicate_layer(inputs))
-        # return tuple(results)
-        results = {}
-        for predicate, predicate_layer in self.predicates.items():
-            results[predicate.__str__()] = (predicate_layer(inputs))
-        return results
+        results = []
+        for predicate_layer in self.predicates.values():
+            results.append(predicate_layer(inputs))
+        return tuple(results)
 
     # noinspection PyMissingOrEmptyDocstring
     def compute_output_shape(self, input_shape):
