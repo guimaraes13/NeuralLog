@@ -2,17 +2,20 @@
 Compiles the language into a neural network.
 """
 import logging
+import sys
 from collections import OrderedDict
 from typing import Dict, Set, List, Tuple
 
+import numpy as np
 import tensorflow as tf
 from tensorflow.python import keras
+from tensorflow.python.training.tracking import data_structures
 
 from src.knowledge.program import NeuralLogProgram, NO_EXAMPLE_SET, \
     ANY_PREDICATE_NAME, find_clause_paths
 from src.language.language import Atom, Term, HornClause, Literal, \
     get_renamed_literal, get_substitution, TooManyArgumentsFunction, \
-    get_variable_indices, Predicate, get_renamed_atom
+    get_variable_indices, Predicate, get_renamed_atom, AtomClause
 from src.network.layer_factory import LayerFactory, \
     get_standardised_name
 from src.network.network_functions import get_literal_function, \
@@ -30,6 +33,46 @@ from src.network.network_functions import get_literal_function, \
 # WARNING: Do not support literals with constant numbers in the rules.
 
 logger = logging.getLogger()
+
+
+def print_neural_log_predictions(model, neural_program, dataset,
+                                 writer=sys.stdout):
+    """
+    Prints the predictions of `model` to `writer`.
+
+    :param model: the model
+    :type model: NeuralLogNetwork
+    :param neural_program: the neural program
+    :type neural_program: NeuralLogProgram
+    :param dataset: the dataset
+    :type dataset: tf.data.Dataset
+    :param writer: the writer. Default is to print to the standard output
+    """
+    for features, _ in dataset:
+        y_scores = model.predict(features)
+        for i in range(len(y_scores)):
+            predicate, inverted = model.predicates[i]
+            if inverted:
+                continue
+            for feature, y_score in zip(features, y_scores[i]):
+                x = features.numpy()
+                subject_index = np.argmax(x)
+                subject = neural_program.iterable_constants[subject_index]
+                if predicate.arity == 1:
+                    clause = AtomClause(Atom(predicate, subject,
+                                             weight=float(y_score)))
+                    print(clause, file=writer)
+                else:
+                    clause = AtomClause(Atom(predicate, subject, "X"))
+                    print("%%", clause, file=writer, sep=" ")
+                    for index in range(len(y_score)):
+                        object_term = neural_program.iterable_constants[index]
+                        clause = AtomClause(Atom(predicate,
+                                                 subject, object_term,
+                                                 weight=float(y_score[index])))
+                        print(clause, file=writer)
+            print(file=writer)
+        print(file=writer)
 
 
 def is_cyclic(atom, previous_atoms):
@@ -349,6 +392,8 @@ class NeuralLogNetwork(keras.Model):
     program: NeuralLogProgram
     "The NeuralLog program"
 
+    predicates: List[Tuple[Predicate, bool]]
+
     def __init__(self, program, train=True):
         """
         Creates a NeuralLogNetwork.
@@ -365,10 +410,10 @@ class NeuralLogNetwork(keras.Model):
         self.program = program
         self.constant_size = len(self.program.iterable_constants)
         self.layer_factory = LayerFactory(self.program, train=train)
-        self.predicates = OrderedDict()
-
+        # noinspection PyTypeChecker
+        self.predicates = data_structures.NoDependency(list())
+        self.predicate_layers = list()
         self.neutral_element = self._get_edge_neutral_element()
-        # self.any_literal_layer = self._get_any_literal()
 
     def get_literal_negation_function(self, predicate):
         """
@@ -443,7 +488,7 @@ class NeuralLogNetwork(keras.Model):
                 literal = Literal(Atom(predicate,
                                        *list(map(lambda x: "X{}".format(x),
                                                  range(predicate.arity)))))
-                if (predicate, False) not in self.predicates.keys():
+                if (predicate, False) not in self.predicates:
                     predicate_layer = self._build_literal(literal)
                     if predicate.arity == 1:
                         combining_func = \
@@ -451,12 +496,14 @@ class NeuralLogNetwork(keras.Model):
                                 predicate)
                         predicate_layer = ExtractUnaryLiteralLayer(
                             predicate_layer, combining_func)
-                    self.predicates[(predicate, False)] = predicate_layer
-                if predicate.arity == 2 and \
-                        (predicate, True) not in self.predicates.keys():
+                    self.predicates.append((predicate, False))
+                    self.predicate_layers.append(predicate_layer)
+                key = (predicate, True)
+                if predicate.arity == 2 and key not in self.predicates:
                     predicate_layer = self._build_literal(literal,
                                                           inverted=True)
-                    self.predicates[(predicate, True)] = predicate_layer
+                    self.predicates.append(key)
+                    self.predicate_layers.append(predicate_layer)
 
     def get_unary_literal_extraction_function(self, predicate):
         """
@@ -478,7 +525,7 @@ class NeuralLogNetwork(keras.Model):
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, training=None, mask=None):
         results = []
-        for predicate_layer in self.predicates.values():
+        for predicate_layer in self.predicate_layers:
             results.append(predicate_layer(inputs))
         return tuple(results)
 
@@ -854,7 +901,7 @@ class NeuralLogDataset:
         labels_indices = []
         index = 0
         examples = self.network.program.examples.get(example_set, OrderedDict())
-        for predicate, inverted in self.network.predicates.keys():
+        for predicate, inverted in self.network.predicates:
             # for facts in examples.get(predicate, dict()).values():
             predicates.append((predicate, inverted))
             # facts = facts.values()
@@ -873,7 +920,7 @@ class NeuralLogDataset:
                     index += 1
                 values.append(weight)
                 if predicate.arity == 1:
-                    indices.append([term_index])
+                    indices.append([term_index, 0])
                 else:
                     output_term = fact.terms[0 if inverted else -1]
                     indices.append(
@@ -886,8 +933,8 @@ class NeuralLogDataset:
         labels = []
         for i in range(len(predicates)):
             if predicates[i][0].arity == 1:
-                dense_shape = [constant_size]
-                empty_index = [[0]]
+                dense_shape = [len(index_by_term), 1]
+                empty_index = [[0, 0]]
             else:
                 dense_shape = [len(index_by_term), constant_size]
                 empty_index = [[0, 0]]

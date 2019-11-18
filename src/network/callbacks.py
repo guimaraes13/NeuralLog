@@ -7,12 +7,16 @@ from typing import Any, List, Dict, Set, Tuple
 
 import numpy as np
 import tensorflow as tf
+import tensorflow.keras.callbacks as keras_callbacks
 from tensorflow.keras.callbacks import Callback
 
 from src.knowledge.program import NeuralLogProgram
 from src.language.language import Predicate, Atom
+from src.network import registry
 from src.network.network import NeuralLogNetwork
 from src.run.command import TRAIN_SET_NAME, VALIDATION_SET_NAME, TEST_SET_NAME
+
+FALSE_VALUES = ["false", "no", "n", 0, 0.0]
 
 METRIC_LOG_PATTERN = "\t{:.5f}:\t{}\n"
 OUTPUT_MATCH = re.compile(r"output_[0-9]+")
@@ -24,6 +28,36 @@ TOP_K_RANK_METRIC_FORMAT = "top_k_rank_{}"
 LOG_FORMAT = "output_{}_{}"
 
 logger = logging.getLogger()
+
+callbacks = dict()
+
+
+def neural_log_callback(identifier):
+    """
+    A decorator for NeuralLog callbacks.
+
+    :param identifier: the identifier of the callback
+    :type identifier: str
+    :return: the decorated function
+    :rtype: function
+    """
+    return lambda x: registry(x, identifier, callbacks)
+
+
+def get_neural_log_callback(identifier):
+    """
+    Gets the callback from `identifier`.
+
+    :param identifier: the identifier
+    :type identifier: str
+    :raise ValueError: if the callback is not found
+    :return: the callback
+    :rtype: type
+    """
+    callback = callbacks.get(identifier, None)
+    if callback is None:
+        callback = getattr(keras_callbacks, identifier, None)
+    return callback
 
 
 def get_bigger_and_equals_counts(y_score, object_index, filtered_objects):
@@ -87,6 +121,33 @@ def get_rank_function(rank_method):
         return lambda bigger_than, equals_to: bigger_than + 1
 
 
+def get_formatted_name(name, output_map):
+    """
+    Gets the formatted output name.
+
+    :param name: the output name
+    :type name: str
+    :param output_map: the map of the outputs of the neural network by the
+    predicate
+    :type output_map: dict[str, tuple(Predicate, bool)] or None
+    :return: the formatted name or `name`
+    :rtype: str
+    """
+    if output_map is None:
+        return name
+
+    match = OUTPUT_MATCH.match(name)
+    if match is not None:
+        suffix = name[match.end():]
+        output_key = match.group()
+        predicate, inverted = output_map.get(output_key,
+                                             (output_key, False))
+        name = str(predicate).replace("/", "_")
+        name += "_inv" if inverted else ""
+        name += suffix
+    return name
+
+
 class EpochLogger(Callback):
     """
     Callback to log the measures of the model after each epoch.
@@ -121,16 +182,7 @@ class EpochLogger(Callback):
         """
         message = ":\n"
         for k, v in metrics.items():
-            if self.output_map is not None:
-                match = OUTPUT_MATCH.match(k)
-                if match is not None:
-                    suffix = k[match.end():]
-                    output_key = match.group()
-                    predicate, inverted = \
-                        self.output_map.get(output_key, (output_key, False))
-                    k = str(predicate).replace("/", "_")
-                    k += "_inv" if inverted else ""
-                    k += suffix
+            k = get_formatted_name(k, self.output_map)
             if epoch is None:
                 message += METRIC_LOG_PATTERN.format(v, k)
             else:
@@ -150,7 +202,24 @@ class EpochLogger(Callback):
                     self.format_metrics_for_epoch(logs))
 
 
-class LinkPredictionCallback(Callback):
+class AbstractNeuralLogCallback(Callback):
+    """
+    Defines an abstract NeuralLog callback.
+    """
+
+    def __init__(self, train_command):
+        """
+        Creates an abstract NeuralLog callback.
+
+        :param train_command: the train command
+        :type train_command: Train
+        """
+        super(AbstractNeuralLogCallback, self).__init__()
+        self.train_command = train_command
+
+
+@neural_log_callback("link_prediction_callback")
+class LinkPredictionCallback(AbstractNeuralLogCallback):
     """
     Evaluates the model against the link predictions metrics: the mean
     reciprocal, the mean reciprocal rank and the hit at top k accuracy.
@@ -159,19 +228,20 @@ class LinkPredictionCallback(Callback):
     callbacks may use it.
     """
 
-    def __init__(self, train_command, dataset_name, top_k=10, filtered=True,
-                 period=1, rank_method="optimistic", suffix=None):
+    # noinspection PyUnusedLocal
+    def __init__(self, train_command, dataset, top_k=10, filtered=True,
+                 period=1, rank_method="optimistic", suffix=None, **kwargs):
         """
         Evaluates the model against the link prediction metrics.
 
         :param train_command: the train command instance
         :type train_command: Train
-        :param dataset_name: the name of the data set: train, valid or test
-        :type dataset_name: str
+        :param dataset: the name of the data set: train, valid or test
+        :type dataset: str
         :param top_k: the top elements of the rank to measure the top k
         accuracy. The default is `10`
         :type top_k: int
-        :param filtered: it `True`, the true examples from the previous sets (
+        :param filtered: if `true`, the true examples from the previous sets (
         considering the order: train, valid and test) will not be considered in
         the count of the rank. The default value is `True`
         :type filtered: bool
@@ -190,15 +260,18 @@ class LinkPredictionCallback(Callback):
         If `None` the `dataset_name` will be used instead.
         :type suffix: str or None
         """
-        super(LinkPredictionCallback, self).__init__()
-        self.train_command = train_command
+        super(LinkPredictionCallback, self).__init__(train_command)
+        self.dataset_name = dataset
         self.model = self.train_command.model  # type: NeuralLogNetwork
         self.program = self.model.program  # type: NeuralLogProgram
-        self.dataset_name = dataset_name
         self.top_k = top_k
+        # if isinstance(filtered, str):
+        #     filtered = filtered.lower()
+        # self.filtered = filtered not in FALSE_VALUES
         self.filtered = filtered
         self.filter_datasets = self._get_filter_datasets()
         self.period = period
+        self.rank_method = rank_method
         self.rank_function = get_rank_function(rank_method)
         self.epochs_since_last_save = 0
         self.output_indices = []  # type: List[int]
@@ -206,7 +279,7 @@ class LinkPredictionCallback(Callback):
         self.filtered_objects = []  # type: List[Dict[int, Set[int]]]
         self.dataset = self._get_dataset()
         if suffix is None:
-            suffix = dataset_name
+            suffix = dataset
         self.mean_rank_name = MEAN_RANK_METRIC_FORMAT.format(suffix)
         self.mean_reciprocal_rank_name = \
             MEAN_RECIPROCAL_RANK_METRIC_FORMAT.format(suffix)
@@ -300,10 +373,10 @@ class LinkPredictionCallback(Callback):
             y_scores = self.model.predict(features)
             for i in range(len(self.output_indices)):
                 index = self.output_indices[i]
-                for feature, y_score, y_true in \
+                for feature, y_true, y_score in \
                         zip(features, labels[index], y_scores[index]):
                     x = feature.numpy()
-                    y_score = y_score.numpy()
+                    y_true = y_true.numpy()
                     subject_index = np.argmax(x)
                     positive_objects = np.reshape(np.argwhere(y_true > 0.0), -1)
                     if len(positive_objects) == 0:
@@ -325,7 +398,7 @@ class LinkPredictionCallback(Callback):
         mean_reciprocal_rank = reciprocal_rank / total_count
         top_hits_accuracy = top_hits / total_count
 
-        return mean_rank, mean_reciprocal_rank, top_hits_accuracy
+        return mean_rank, mean_reciprocal_rank, top_hits_accuracy, total_count
 
     def on_epoch_end(self, epoch, logs=None):
         """
@@ -337,9 +410,17 @@ class LinkPredictionCallback(Callback):
         :type logs: dict
         """
         self.epochs_since_last_save += 1
-        if self.epochs_since_last_save >= self.period:
-            mean_rank, mean_reciprocal_rank, top_k_rank = self.evaluate()
+        if logs is None:
+            return
+
+        if self.epochs_since_last_save >= self.period or \
+                self.train_command.epochs == epoch + 1:
             self.epochs_since_last_save = 0
+            metrics = self.evaluate()
+            mean_rank = metrics[0]
+            mean_reciprocal_rank = metrics[1]
+            top_k_rank = metrics[2]
+            total_count = metrics[3]
             for i in range(len(self.output_indices)):
                 out = self.output_indices[i] + 1
                 mean_key = LOG_FORMAT.format(out, self.mean_rank_name)
@@ -349,3 +430,11 @@ class LinkPredictionCallback(Callback):
                 logs[mean_key] = mean_rank[i]
                 logs[mrr_key] = mean_reciprocal_rank[i]
                 logs[top_key] = top_k_rank[i]
+
+            total = np.sum(total_count)
+            weighted_mean_rank = np.sum(mean_rank * total_count) / total
+            weighted_mrr = np.sum(mean_reciprocal_rank * total_count) / total
+            weighted_top_k = np.sum(top_k_rank * total_count) / total
+            logs[self.mean_rank_name] = weighted_mean_rank
+            logs[self.mean_reciprocal_rank_name] = weighted_mrr
+            logs[self.top_k_rank_name] = weighted_top_k

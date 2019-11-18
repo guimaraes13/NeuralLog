@@ -7,6 +7,7 @@ import tensorflow.keras
 from tensorflow_core.python import keras
 import src.network.layer_factory
 from src.language.language import Predicate
+from src.network import registry
 
 TENSOR_FLOAT32_MAX = tf.constant(tf.float32.max)
 
@@ -315,23 +316,6 @@ class AttributeFactLayer(FactLayer):
     # noinspection PyMissingOrEmptyDocstring
     def get_kernel(self):
         return self.weight_combining_function(self.kernel, self.values)
-
-
-def registry(func, identifier, func_dict):
-    """
-    Registries the function or class.
-
-    :param func: the function
-    :type func: function
-    :param identifier: the function identifier
-    :type identifier: str
-    :param func_dict: the dictionary to registry the function in
-    :type func_dict: dict[str, Any]
-    :return: the function
-    :rtype: function
-    """
-    func_dict[identifier] = func
-    return func
 
 
 def neural_log_literal_function(identifier):

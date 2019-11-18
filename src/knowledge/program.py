@@ -1314,7 +1314,12 @@ class NeuralLogProgram:
         for i in range(arity - 2):
             parameter_dict = parameter_dict.setdefault(
                 atom.terms[i].value, dict())
-        parameter_dict[atom.terms[-2].value] = atom.terms[-1].value
+        value = atom.terms[-1].value
+        if value == "True":
+            value = True
+        elif value == "False":
+            value = False
+        parameter_dict[atom.terms[-2].value] = value
 
     # noinspection PyUnusedLocal
     @builtin("set_predicate_parameter")

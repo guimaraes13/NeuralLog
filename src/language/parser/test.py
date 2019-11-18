@@ -272,8 +272,13 @@ class DatasetMap:
     __call__ = call
 
 def predict(model, neural_program, x):
+    """
+
+    :param model: the model
+    :type model: NeuralLogNetwork
+    """
     predictions = model.predict(x)  # type: List[np.ndarray]
-    predicates = list(model.predicates.keys())
+    predicates = list(model.predicates)
     x_numpy = x.numpy()
     print("*" * 10, "predictions", "*" * 10)
     for i in range(len(predicates)):
