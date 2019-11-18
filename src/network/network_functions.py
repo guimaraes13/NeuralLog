@@ -5,6 +5,8 @@ File to define custom functions to use in the network.
 import tensorflow as tf
 import tensorflow.keras
 from tensorflow_core.python import keras
+import src.network.layer_factory
+from src.language.language import Predicate
 
 TENSOR_FLOAT32_MAX = tf.constant(tf.float32.max)
 
@@ -135,39 +137,54 @@ class InvertedFactLayer(FactLayer):
     Represents a inverted fact layer.
     """
 
-    def __init__(self, fact_layer, inverted_function, **kwargs):
+    def __init__(self, fact_layer, layer_factory, predicate, **kwargs):
         """
         Creates a InvertedFactLayer.
 
         :param fact_layer: the fact layer
         :type fact_layer: FactLayer
-        :param inverted_function: the fact inversion function. The function to
-        extract the inverse of the facts
-        :type inverted_function: function
+        :param layer_factory: the layer factory
+        :type inverted_function: src.network.layer_factory.LayerFactory
+        :param predicate: the atom's predicate
+        :type predicate: Predicate
         :param kwargs: additional arguments
         :type kwargs: dict[str, Any]
         """
-        # TODO: fix for the case of inverted literal with constant
-        #  - move the solution to the creation of the layer;
-        #  - generalize the solution for any combining function;
-        #  - keep using sparse tensor whenever possible.
         name = fact_layer.name + "_inv"
-        fact_combining_function = fact_layer.fact_combining_function
-        kernel = fact_layer.get_kernel()
-        if kernel.shape.rank == 1:
-            if isinstance(kernel, tf.SparseTensor):
-                kernel = tf.sparse.to_dense(kernel)
-            fact_combining_function = tf.matmul
-            kernel = tf.reshape(kernel, [1, -1])
-        kernel = inverted_function(kernel)  # type: tf.Tensor
-        if kernel.shape.rank == 2 and kernel.shape[0] == 1:
-            if isinstance(kernel, tf.SparseTensor):
-                kernel = tf.sparse.to_dense(kernel)
-            fact_combining_function = tf.math.multiply
-            kernel = tf.reshape(kernel, [-1])
-
+        self.kernel = fact_layer.get_kernel()
+        self.fact_combining_function = fact_layer.fact_combining_function
+        self._adjust_for_inverted_fact(layer_factory, predicate)
         super(InvertedFactLayer, self).__init__(
-            name, kernel, fact_combining_function, **kwargs)
+            name, self.kernel, self.fact_combining_function, **kwargs)
+
+    def _adjust_for_inverted_fact(self, factory, predicate):
+        """
+        Adjusts the kernel and combining function to address the inverse
+        predicate with constants in it.
+
+        :param factory: the layer factory
+        :type factory: src.network.layer_factory.LayerFactory
+        :param predicate: the atom's predicate
+        :type predicate: Predicate
+        """
+        sparse = isinstance(self.kernel, tf.SparseTensor)
+        if self.kernel.shape.rank == 1:
+            self.fact_combining_function = \
+                factory.get_edge_combining_function_2d(predicate, sparse)
+            if sparse:
+                self.kernel = tf.sparse.reshape(self.kernel, [1, -1])
+            else:
+                self.kernel = tf.reshape(self.kernel, [1, -1])
+
+        inverted_func = factory.get_invert_fact_function(predicate, sparse)
+        self.kernel = inverted_func(self.kernel)  # type: tf.Tensor
+
+        if self.kernel.shape.rank == 2 and self.kernel.shape[0] == 1:
+            if sparse:
+                self.kernel = tf.sparse.to_dense(self.kernel)
+            self.fact_combining_function = \
+                factory.get_edge_combining_function(predicate)
+            self.kernel = tf.reshape(self.kernel, [-1])
 
 
 class SpecificFactLayer(AbstractFactLayer):

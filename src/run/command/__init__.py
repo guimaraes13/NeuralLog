@@ -14,6 +14,7 @@ TRAIN_SET_NAME = "train_set"
 VALIDATION_SET_NAME = "validation_set"
 TEST_SET_NAME = "test_set"
 
+
 def make_command():
     """
     Makes a command from Command class.

@@ -3,7 +3,7 @@ File to store useful callback implementations.
 """
 import logging
 import re
-from typing import Any, List, Dict, Set
+from typing import Any, List, Dict, Set, Tuple
 
 import numpy as np
 import tensorflow as tf
@@ -202,7 +202,7 @@ class LinkPredictionCallback(Callback):
         self.rank_function = get_rank_function(rank_method)
         self.epochs_since_last_save = 0
         self.output_indices = []  # type: List[int]
-        self.output_predicates = []  # type: List[tuple(Predicate, bool)]
+        self.output_predicates = []  # type: List[Tuple[Predicate, bool]]
         self.filtered_objects = []  # type: List[Dict[int, Set[int]]]
         self.dataset = self._get_dataset()
         if suffix is None:
@@ -305,7 +305,6 @@ class LinkPredictionCallback(Callback):
                     x = feature.numpy()
                     y_score = y_score.numpy()
                     subject_index = np.argmax(x)
-                    # positive_objects = np.argwhere(y_true > 0.0).squeeze()
                     positive_objects = np.reshape(np.argwhere(y_true > 0.0), -1)
                     if len(positive_objects) == 0:
                         continue

@@ -720,14 +720,8 @@ class NeuralLogNetwork(keras.Model):
         if fact_layer is None:
             fact_layer = self.layer_factory.build_atom(renamed_atom)
             if inverted:
-                sparse = False
-                if isinstance(fact_layer, FactLayer):
-                    sparse = isinstance(fact_layer.get_kernel(),
-                                        tf.SparseTensor)
-                inverted_function = self.layer_factory.get_invert_fact_function(
-                    atom.predicate, sparse)
-                fact_layer = InvertedFactLayer(fact_layer, inverted_function)
-            # fact_layer = FactLayer(layer_name, tensor, edge_function)
+                fact_layer = InvertedFactLayer(
+                    fact_layer, self.layer_factory, atom.predicate)
             self._fact_layers[key] = fact_layer
 
         return fact_layer

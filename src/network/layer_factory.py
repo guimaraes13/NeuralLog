@@ -1265,11 +1265,7 @@ class LayerFactory:
         name = self._get_layer_name(atom)
         fact_layer = self.build_atom(variable_atom)
         predicate = atom.predicate
-        sparse = False
-        if isinstance(fact_layer, FactLayer):
-            sparse = isinstance(fact_layer.get_kernel(), tf.SparseTensor)
-        inverted_function = self.get_invert_fact_function(predicate, sparse)
-        fact_layer = InvertedFactLayer(fact_layer, inverted_function)
+        fact_layer = InvertedFactLayer(fact_layer, self, predicate)
         fact_combining_function = self.get_edge_combining_function_2d(predicate)
         output_constant = self.get_one_hot_tensor(atom.terms[1])
         return InvertedSpecificFactLayer(
