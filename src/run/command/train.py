@@ -1,15 +1,16 @@
 """
-Train the model command.
+Command Line Interface command to train the model.
 """
 
 import argparse
 import logging
 import os
 import time
+from typing import Dict
 
 import numpy as np
-import tensorflow as tf
 from antlr4 import FileStream
+from tensorflow.keras.callbacks import ModelCheckpoint
 from tensorflow.python.keras.callbacks import TensorBoard
 
 from src.knowledge.program import NeuralLogProgram, BiDict, \
@@ -27,9 +28,7 @@ from src.run.command import Command, command, print_args, create_log_file, \
     TRAIN_SET_NAME, VALIDATION_SET_NAME, TEST_SET_NAME
 
 METRIC_FILE_PREFIX = "metric_"
-TRAIN_PREDICTION_FILE = "train_predictions.pl"
-VALIDATION_PREDICTION_FILE = "validation_predictions.pl"
-TEST_PREDICTION_FILE = "test_predictions.pl"
+LOGIC_PROGRAM_EXTENSION = ".pl"
 
 DEFAULT_LOSS = "mean_squared_error"
 DEFAULT_OPTIMIZER = "sgd"
@@ -111,14 +110,45 @@ def format_arguments(message, arguments):
     return formatted
 
 
+def find_best_model(checkpoint, history):
+    """
+    Finds the best model saved by the checkpoint.
+
+    :param checkpoint: the checkpoint
+    :type checkpoint: ModelCheckpoint
+    :param history: a dictionary with the metrics and their values for
+    each epoch.
+    :type history: dict[str, np.ndarray]
+    :return: the path of the best model
+    :rtype: str or None
+    """
+    if checkpoint.save_best_only:
+        return checkpoint.filepath
+
+    period = checkpoint.period
+    monitor = checkpoint.monitor
+    # QUESTION: Why the best value is always inf?
+    best = checkpoint.best
+
+    values = history.get(monitor, None)
+    if values is None:
+        return None
+    i = 0
+    for i in range(len(values)):
+        if values[i] == best:
+            break
+
+    return checkpoint.filepath.format(epoch=(i + 1) * period)
+
+
 @command(COMMAND_NAME)
 class Train(Command):
     """
     Trains the neural network.
     """
 
-    def __init__(self, program, args):
-        super().__init__(program, args)
+    def __init__(self, program, args, direct=False):
+        super().__init__(program, args, direct)
         self.neural_program = NeuralLogProgram()
         self.parameters = None
         self.train_set = None
@@ -129,13 +159,19 @@ class Train(Command):
         self.validation_period = DEFAULT_VALIDATION_PERIOD
         self.epochs = 1
         self.callbacks = []
+        self.best_models = dict()  # type: Dict[str, ModelCheckpoint]
 
     # noinspection PyMissingOrEmptyDocstring
     def build_parser(self) -> argparse.ArgumentParser:
+        program = self.program
+        if not self.direct:
+            program += " {}".format(COMMAND_NAME)
         parser = argparse.ArgumentParser(
-            prog=self.program + " {}".format(COMMAND_NAME),
+            prog=program,
             description=self.get_command_description(),
             formatter_class=argparse.RawDescriptionHelpFormatter)
+
+        # Input
         parser.add_argument('--program', '-p', metavar='program',
                             type=str, required=True, nargs="+",
                             help="The program file(s)")
@@ -148,24 +184,35 @@ class Train(Command):
         parser.add_argument('--test', '-test', metavar='test',
                             type=str, required=False, nargs="+", default=[],
                             help="The test file(s)")
+        parser.add_argument('--loadModel', '-l', metavar='loadModel',
+                            type=str, default=None, required=False,
+                            help="If set, loads the model from the path and "
+                                 "continues from the loaded model")
 
         # Output
-        parser.add_argument("--outputPath", "-out", metavar='model',
+        parser.add_argument("--outputPath", "-o", metavar='outputPath',
                             type=str, default=None, required=False,
                             help="The path to save the outputs")
-        parser.add_argument("--modelName", "-m", metavar='model',
-                            type=str, default="last_model", required=False,
-                            help="The name of the file to save the last "
-                                 "learned model")
-        parser.add_argument("--outputProgram", "-o", metavar='program',
+        parser.add_argument("--lastModel", "-lm", metavar='lastModel',
                             type=str, default=None, required=False,
-                            help="The name of the file to save the learned "
-                                 "program")
-        parser.add_argument("--savePredictions", "-s",
-                            action="store_true",
-                            help="If set, saves the predictions to the output "
-                                 "path.")
+                            help="The path to save the last learned model. "
+                                 "If `outputPath` is given, "
+                                 "this path will be relative to it")
+        parser.add_argument("--lastProgram", "-lp", metavar='lastProgram',
+                            type=str, default=None, required=False,
+                            help="The name of the file to save the last "
+                                 "learned program. If `outputPath` is given, "
+                                 "this path will be relative to it")
+        parser.add_argument("--lastInference", "-li", metavar='lastInference',
+                            type=str, default=None, required=False,
+                            help="The prefix of the file to save the "
+                                 "inferences of the last learned program. "
+                                 "The name of the dataset and the `.pl` "
+                                 "extension will be appended to it. "
+                                 "If `outputPath` is given, this path will "
+                                 "be relative to it")
         parser.set_defaults(savePredictions=False)
+
         # Log
         parser.add_argument("--logFile", "-log", metavar='file',
                             type=str, default=None,
@@ -174,12 +221,6 @@ class Train(Command):
                             type=str, default=None,
                             help="Creates a log event for the TensorBoard "
                                  "on the given path")
-        # Validation
-        # parser.add_argument('--filterFiles', '-filters', metavar='filter',
-        #                     type=str, nargs='*', default=[],
-        #                     help="The logic file, with the known positive "
-        #                          "examples, other than the testing examples,"
-        #                          " to be filtered from the evaluation")
 
         return parser
 
@@ -213,6 +254,13 @@ class Train(Command):
                                   "{}".format(DEFAULT_VALIDATION_PERIOD)),
             ("callback", "a dictionary of callbacks to be used on training. "
                          "The default value is `None`"),
+            ("best_model", "a dictionary with keys matching pointing to "
+                           "`ModelCheckpoints` in the callback dictionary."
+                           "For each entry, it will save the program and "
+                           "inference files (with the value of the entry as "
+                           "prefix) based on the best model saved by the "
+                           "checkpoint defined by the key. "
+                           "The default value is `None`"),
         ]
         return format_arguments(message, arguments)
 
@@ -315,24 +363,28 @@ class Train(Command):
 
     # noinspection PyMissingOrEmptyDocstring,PyAttributeOutsideInit
     def parse_args(self):
+        # Log
         args = self.parser.parse_args(self.args)
         log_file = args.logFile
         create_log_file(log_file)
         print_args(args)
+        self.tensor_board = args.tensorBoard
 
+        # Input
         self.program_files = args.program
         self.train_files = args.train
         self.validation_files = args.validation
         self.test_files = args.test
+        self.load_model = args.loadModel
         self.train = len(self.train_files) > 0
         self.valid = len(self.validation_files) > 0
         self.test = len(self.test_files) > 0
 
-        self.tensor_board = args.tensorBoard
+        # Output
         self.output_path = args.outputPath
-        self.model_name = args.modelName
-        self.output_program = args.outputProgram
-        self.save_predictions = args.savePredictions
+        self.last_model = args.lastModel
+        self.last_program = args.lastProgram
+        self.last_inference = args.lastInference
 
     def build(self):
         """
@@ -396,6 +448,8 @@ class Train(Command):
         logger.info("Building model...")
         self.model = NeuralLogNetwork(self.neural_program, train=self.train)
         self.model.build_layers()
+        if self.load_model is not None:
+            self.model.load_weights(self.load_model)
         self.output_map = self._get_output_map()
         self._read_parameters(self.output_map)
         self._log_parameters(
@@ -476,6 +530,7 @@ class Train(Command):
         if callbacks_parameters is None:
             return
 
+        best_model_parameters = self.parameters.get("best_model", dict())
         for name, identifier in callbacks_parameters.items():
             if isinstance(identifier, dict):
                 class_name = identifier["class_name"]
@@ -488,20 +543,22 @@ class Train(Command):
                 continue
             config = self._adjust_config_for_callback(config, callback_class)
             callback = callback_class(**config)
+            if isinstance(callback, ModelCheckpoint):
+                best_model_name = best_model_parameters.get(name, None)
+                if best_model_name is not None:
+                    self.best_models[best_model_name] = callback
             callbacks.append(callback)
 
     def _adjust_config_for_callback(self, config, callback_class):
         config.setdefault("period", self.validation_period)
         if issubclass(callback_class, AbstractNeuralLogCallback):
             config["train_command"] = self
-        elif issubclass(callback_class, tf.keras.callbacks.ModelCheckpoint):
+        elif issubclass(callback_class, ModelCheckpoint):
             config.setdefault("save_best_only", True)
             config.setdefault("save_weights_only", True)
             has_no_filepath = "filepath" not in config
             config.setdefault("filepath", config["monitor"])
-            if self.output_path is not None:
-                suffix = config["filepath"]
-                config["filepath"] = os.path.join(self.output_path, suffix)
+            config["filepath"] = self._get_output_path(config["filepath"])
             if not config["save_best_only"]:
                 config["filepath"] = config["filepath"] + "_{epoch}"
             elif has_no_filepath:
@@ -535,6 +592,7 @@ class Train(Command):
     # noinspection PyMissingOrEmptyDocstring
     def run(self):
         self.build()
+        history = None
         if self.train:
             self._build_train_set()
             history = self.fit()
@@ -545,9 +603,9 @@ class Train(Command):
                         x[0], self.output_map.inverse), x[1]), hist.items()))
                 logger.info(hist)
 
-            if self.output_path is not None:
+            if self.last_model is not None:
                 logger.info("Saving the model...")
-                filepath = os.path.join(self.output_path, self.model_name)
+                filepath = self._get_output_path(self.last_model)
                 self.model.save_weights(filepath)
                 for metric in history.history:
                     array = np.array(history.history[metric])
@@ -558,33 +616,77 @@ class Train(Command):
                                                "{}.txt".format(metric))
                     np.savetxt(metric_path, array, fmt="%0.8f")
 
-            if self.output_program is not None:
-                self.model.update_program()
-                output_program = os.path.join(
-                    self.output_path, self.output_program)
-                output = open(output_program, "w")
-                print_neural_log_program(self.neural_program, output)
-                output.close()
+        self.save_program(self.last_program)
+        self.save_inferences(self.last_inference)
 
-        if self.output_program is not None and self.save_predictions:
+        if history is not None:
+            for key, value in self.best_models.items():
+                best_model_path = find_best_model(value, history.history)
+                if best_model_path is None:
+                    continue
+                self.model.load_weights(best_model_path)
+                self.save_program(key + "program.pl")
+                self.save_inferences(key)
+
+    def save_program(self, program_path):
+        """
+        Saves the program of the current model.
+
+        :param program_path: the path to save the program
+        :type program_path: str
+        """
+        if program_path is not None:
+            self.model.update_program()
+            output_program = self._get_output_path(program_path)
+            output_file = open(output_program, "w")
+            print_neural_log_program(self.neural_program, output_file)
+            output_file.close()
+
+    def save_inferences(self, inference_prefix):
+        """
+        Saves the inferences of the current model of the different datasets.
+
+        :param inference_prefix: the prefix of the path to be appended with
+        the dataset's name
+        :type inference_prefix: str
+        """
+        if inference_prefix is not None:
             if self.train:
-                output = open(os.path.join(
-                    self.output_path, TRAIN_PREDICTION_FILE), "w")
-                print_neural_log_predictions(self.model, self.neural_program,
-                                             self.train_set, writer=output)
-                output.close()
+                output = self._get_inference_filename(inference_prefix,
+                                                      TRAIN_SET_NAME)
+                output_file = open(output, "w")
+                print_neural_log_predictions(self.model,
+                                             self.neural_program,
+                                             self.train_set,
+                                             writer=output_file)
+                output_file.close()
             if self.valid:
-                output = open(os.path.join(
-                    self.output_path, VALIDATION_SET_NAME), "w")
-                print_neural_log_predictions(self.model, self.neural_program,
-                                             self.validation_set, writer=output)
-                output.close()
+                output = self._get_inference_filename(inference_prefix,
+                                                      VALIDATION_SET_NAME)
+                output_file = open(output, "w")
+                print_neural_log_predictions(self.model,
+                                             self.neural_program,
+                                             self.validation_set,
+                                             writer=output_file)
+                output_file.close()
 
             if self.test:
-                output = open(os.path.join(
-                    self.output_path, TEST_PREDICTION_FILE), "w")
-                self.test_set = self.neural_dataset.get_dataset(TEST_SET_NAME)
+                self.test_set = \
+                    self.neural_dataset.get_dataset(TEST_SET_NAME)
                 self.test_set = self.validation_set.batch(self.batch_size)
-                print_neural_log_predictions(self.model, self.neural_program,
-                                             self.test_set, writer=output)
-                output.close()
+                output = self._get_inference_filename(inference_prefix,
+                                                      TEST_SET_NAME)
+                output_file = open(output, "w")
+                print_neural_log_predictions(self.model,
+                                             self.neural_program,
+                                             self.test_set,
+                                             writer=output_file)
+                output_file.close()
+
+    def _get_inference_filename(self, prefix, dataset):
+        return self._get_output_path(prefix + dataset + LOGIC_PROGRAM_EXTENSION)
+
+    def _get_output_path(self, suffix):
+        if self.output_path is not None:
+            return os.path.join(self.output_path, suffix)
+        return suffix

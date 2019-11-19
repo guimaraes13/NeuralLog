@@ -6,6 +6,8 @@ import logging
 import os
 import sys
 
+
+# noinspection DuplicatedCode
 def configure_log():
     """
     Configures the log handler, message format and log level
@@ -24,9 +26,9 @@ def configure_log():
         handlers=handlers
     )
 
+
 configure_log()
 logger = logging.getLogger()
-
 
 from antlr4 import *
 
@@ -62,7 +64,7 @@ def main(argv):
     examples_1 = get_clauses(os.path.join(resources, "kinship_examples1.pl"))
     examples_2 = get_clauses(os.path.join(resources, "kinship_examples2.pl"))
 
-    neural_program = NeuralLogProgram() # type: NeuralLogProgram
+    neural_program = NeuralLogProgram()  # type: NeuralLogProgram
     neural_program.add_clauses(program)
     neural_program.add_clauses(examples_1, example_set="examples_1")
     neural_program.add_clauses(examples_2, example_set="examples_2")
@@ -270,6 +272,7 @@ class DatasetMap:
         return features, labels
 
     __call__ = call
+
 
 def predict(model, neural_program, x):
     """

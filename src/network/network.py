@@ -47,6 +47,7 @@ def print_neural_log_predictions(model, neural_program, dataset,
     :param dataset: the dataset
     :type dataset: tf.data.Dataset
     :param writer: the writer. Default is to print to the standard output
+    :type writer: Any
     """
     for features, _ in dataset:
         y_scores = model.predict(features)

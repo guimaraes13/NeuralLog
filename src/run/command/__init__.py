@@ -77,7 +77,7 @@ class Command:
     Template class for the commands to appear at the Command Line Interface.
     """
 
-    def __init__(self, program, args):
+    def __init__(self, program, args, direct=False):
         """
         Template class for the commands to appear at the Command Line Interface.
 
@@ -87,7 +87,10 @@ class Command:
             the program command
         args : list[str]
             the command line arguments to be parsed
+        direct : bool
+            if the command is directly called or if it is under another CLI
         """
+        self.direct = direct
         self.program = program
         self.args = args
         self.parser = self.build_parser()
