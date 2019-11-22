@@ -8,6 +8,7 @@ processing data, training, evaluation and analyses of learned models.
 import logging
 import sys
 
+# noinspection DuplicatedCode
 logger = logging.getLogger()
 
 
@@ -19,7 +20,7 @@ def configure_log():
     level = logging.INFO
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(level)
-    h1.addFilter(lambda record: record.levelno <= level)
+    # h1.addFilter(lambda record: record.levelno <= level)
     h2 = logging.StreamHandler(sys.stderr)
     h2.setLevel(logging.WARNING)
     handlers = [h1, h2]

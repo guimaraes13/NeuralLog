@@ -382,6 +382,10 @@ class Variable(Term):
         super().__init__(value)
 
     # noinspection PyMissingOrEmptyDocstring
+    def key(self):
+        return Variable, self.value
+
+    # noinspection PyMissingOrEmptyDocstring
     def is_constant(self):
         return False
 
@@ -800,6 +804,7 @@ class HornClause(Clause):
         """
         self.head = head
         self.body = list(body)
+        self.provenance = None
 
     def __getitem__(self, item):
         if item == 0:

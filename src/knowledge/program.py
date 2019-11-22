@@ -497,6 +497,7 @@ def find_clause_paths(clause, inverted=False):
     remaining grounded literals
     :rtype: (List[RulePath], List[Literal])
     """
+    # TODO: fix for clauses h(X, Y) :- b(X, X). and h(X, Y) :- b(Y, Y).
     # Defining variables
     source = clause.head.terms[0]
     destination = clause.head.terms[-1]

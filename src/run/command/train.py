@@ -127,18 +127,20 @@ def find_best_model(checkpoint, history):
 
     period = checkpoint.period
     monitor = checkpoint.monitor
-    # QUESTION: Why the best value is always inf?
+
     best = checkpoint.best
+    monitor_op = checkpoint.monitor_op
 
     values = history.get(monitor, None)
     if values is None:
         return None
-    i = 0
+    best_epoch = 0
     for i in range(len(values)):
-        if values[i] == best:
-            break
+        if monitor_op(values[i], best):
+            best = values[i]
+            best_epoch = i
 
-    return checkpoint.filepath.format(epoch=(i + 1) * period)
+    return checkpoint.filepath.format(epoch=(best_epoch + 1) * period)
 
 
 @command(COMMAND_NAME)
@@ -479,6 +481,8 @@ class Train(Command):
         if logger.isEnabledFor(logging.INFO):
             parameters = dict(filter(lambda x: x[0] in parameter_keys,
                                      self.parameters.items()))
+            if len(parameters) == 0:
+                return
             if map_dict is not None:
                 for key, value in parameters.items():
                     if isinstance(value, dict):
@@ -603,30 +607,37 @@ class Train(Command):
                         x[0], self.output_map.inverse), x[1]), hist.items()))
                 logger.info(hist)
 
-            if self.last_model is not None:
-                logger.info("Saving the model...")
-                filepath = self._get_output_path(self.last_model)
-                self.model.save_weights(filepath)
-                for metric in history.history:
-                    array = np.array(history.history[metric])
-                    # noinspection PyTypeChecker
-                    metric = get_formatted_name(metric, self.output_map.inverse)
-                    metric = METRIC_FILE_PREFIX + metric
-                    metric_path = os.path.join(self.output_path,
-                                               "{}.txt".format(metric))
-                    np.savetxt(metric_path, array, fmt="%0.8f")
+        logger.info("Saving data...")
+        start_save = time.process_time()
+        if self.train and self.last_model is not None:
+            filepath = self._get_output_path(self.last_model)
+            self.model.save_weights(filepath)
+            logger.info("\tLast model saved at:\t{}".format(filepath))
+            for metric in history.history:
+                array = np.array(history.history[metric])
+                # noinspection PyTypeChecker
+                metric = get_formatted_name(metric, self.output_map.inverse)
+                metric = METRIC_FILE_PREFIX + metric
+                metric_path = os.path.join(self.output_path,
+                                           "{}.txt".format(metric))
+                np.savetxt(metric_path, array, fmt="%0.8f")
 
         self.save_program(self.last_program)
         self.save_inferences(self.last_inference)
 
         if history is not None:
+            logger.info("")
             for key, value in self.best_models.items():
-                best_model_path = find_best_model(value, history.history)
-                if best_model_path is None:
+                path = find_best_model(value, history.history)
+                if path is None:
                     continue
-                self.model.load_weights(best_model_path)
+                self.model.load_weights(path)
                 self.save_program(key + "program.pl")
                 self.save_inferences(key)
+                logger.info("\tBest model for {} saved at:\t{}".format(
+                    key, path))
+        end_save = time.process_time()
+        logger.info("Total data saving time:\t%0.3fs", end_save - start_save)
 
     def save_program(self, program_path):
         """
@@ -641,47 +652,49 @@ class Train(Command):
             output_file = open(output_program, "w")
             print_neural_log_program(self.neural_program, output_file)
             output_file.close()
+            logger.info("\tProgram saved at:\t{}".format(output_program))
 
-    def save_inferences(self, inference_prefix):
+    def save_inferences(self, file_prefix):
         """
         Saves the inferences of the current model of the different datasets.
 
-        :param inference_prefix: the prefix of the path to be appended with
+        :param file_prefix: the prefix of the path to be appended with
         the dataset's name
-        :type inference_prefix: str
+        :type file_prefix: str
         """
-        if inference_prefix is not None:
+        if file_prefix is not None:
+            if self.train or self.valid or self.test:
+                logger.info("\tInferences saved at:")
+
             if self.train:
-                output = self._get_inference_filename(inference_prefix,
-                                                      TRAIN_SET_NAME)
-                output_file = open(output, "w")
-                print_neural_log_predictions(self.model,
-                                             self.neural_program,
-                                             self.train_set,
-                                             writer=output_file)
-                output_file.close()
+                self._save_inference_for_dataset(file_prefix, TRAIN_SET_NAME)
+
             if self.valid:
-                output = self._get_inference_filename(inference_prefix,
-                                                      VALIDATION_SET_NAME)
-                output_file = open(output, "w")
-                print_neural_log_predictions(self.model,
-                                             self.neural_program,
-                                             self.validation_set,
-                                             writer=output_file)
-                output_file.close()
+                self._save_inference_for_dataset(
+                    file_prefix, VALIDATION_SET_NAME)
 
             if self.test:
                 self.test_set = \
                     self.neural_dataset.get_dataset(TEST_SET_NAME)
                 self.test_set = self.validation_set.batch(self.batch_size)
-                output = self._get_inference_filename(inference_prefix,
-                                                      TEST_SET_NAME)
-                output_file = open(output, "w")
-                print_neural_log_predictions(self.model,
-                                             self.neural_program,
-                                             self.test_set,
-                                             writer=output_file)
-                output_file.close()
+                self._save_inference_for_dataset(file_prefix, TEST_SET_NAME)
+
+    def _save_inference_for_dataset(self, file_prefix, dataset_name):
+        if dataset_name == TRAIN_SET_NAME:
+            dataset = self.train_set
+            tab = "\t\t"
+        elif dataset_name == VALIDATION_SET_NAME:
+            dataset = self.validation_set
+            tab = "\t"
+        else:
+            dataset = self.test_set
+            tab = "\t\t"
+        output = self._get_inference_filename(file_prefix, dataset_name)
+        logger.info("\t\t{}:{}{}".format(dataset_name, tab, output))
+        output_file = open(output, "w")
+        print_neural_log_predictions(
+            self.model, self.neural_program, dataset, writer=output_file)
+        output_file.close()
 
     def _get_inference_filename(self, prefix, dataset):
         return self._get_output_path(prefix + dataset + LOGIC_PROGRAM_EXTENSION)
