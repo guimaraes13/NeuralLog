@@ -726,12 +726,12 @@ class LayerFactory:
             atom.predicate, dict()).get(atom.simple_key(), None)
         if fact is None:
             weight = 0.0
-            if atom.context is not None:
+            if atom.provenance is not None:
                 logger.warning(
                     "Warning: there is no fact matching the atom "
                     "%s at line %d:%d, weight replaced by %d.",
-                    atom, atom.context.start.line,
-                    atom.context.start.column, weight)
+                    atom, atom.provenance.start_line,
+                    atom.provenance.start_column, weight)
             else:
                 logger.warning(
                     "Warning: there is no fact matching the atom "
@@ -833,7 +833,7 @@ class LayerFactory:
             # the other must be a numeric value, and entities and numeric
             # values are disjoint sets, the variables cannot happen to be
             # equal. Thus, it returns zero weight values for every entry.
-            if atom.context is None:
+            if atom.provenance is None:
                 logger.warning(
                     "Warning: attribute predicate with same variable in both "
                     "positions. Since the set of entities and the set of "
@@ -845,7 +845,8 @@ class LayerFactory:
                     "positions. Since the set of entities and the set of "
                     "numeric values are disjoint, it will return zero weight "
                     "for any entry for atom: %s at %d:%d.",
-                    atom, atom.context.start.line, atom.context.start.column)
+                    atom, atom.provenance.start_line,
+                    atom.provenance.start_column)
             weight = csr_matrix((self.constant_size, 1), dtype=np.float32)
             w_tensor = self._matrix_to_constant(atom, weight.todense(),
                                                 shape=shape,

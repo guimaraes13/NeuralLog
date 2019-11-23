@@ -389,7 +389,7 @@ class NeuralLogTransverse:
             predicate = clause.atom.predicate
         if not predicate.is_template() and not clause.is_template():
             self.predicates.add(predicate)
-        clause.provenance = node
+        clause.set_provenance(node)
 
     def process_atom(self, atom):
         """
@@ -423,7 +423,7 @@ class NeuralLogTransverse:
         # weighted_atom.getChild(1).getText(): "::"
         atom = self.process_atom(weighted_atom.getChild(2))
         atom.weight = weight
-        atom.context = weighted_atom
+        atom.set_provenance(weighted_atom)
         return atom
 
     def process_horn_clause(self, horn_clause):

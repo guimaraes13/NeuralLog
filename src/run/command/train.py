@@ -676,7 +676,7 @@ class Train(Command):
             if self.test:
                 self.test_set = \
                     self.neural_dataset.get_dataset(TEST_SET_NAME)
-                self.test_set = self.validation_set.batch(self.batch_size)
+                self.test_set = self.test_set.batch(self.batch_size)
                 self._save_inference_for_dataset(file_prefix, TEST_SET_NAME)
 
     def _save_inference_for_dataset(self, file_prefix, dataset_name):
