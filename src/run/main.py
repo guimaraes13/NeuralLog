@@ -5,42 +5,17 @@ It is the main entry point of the system, containing commands for
 processing data, training, evaluation and analyses of learned models.
 """
 
-import logging
-import sys
-
-# noinspection DuplicatedCode
-logger = logging.getLogger()
-
-
-# noinspection DuplicatedCode
-def configure_log():
-    """
-    Configures the log handler, message format and log level.
-    """
-    level = logging.INFO
-    h1 = logging.StreamHandler(sys.stdout)
-    h1.setLevel(level)
-    # h1.addFilter(lambda record: record.levelno <= level)
-    h2 = logging.StreamHandler(sys.stderr)
-    h2.setLevel(logging.WARNING)
-    handlers = [h1, h2]
-    # noinspection PyArgumentList
-    logging.basicConfig(
-        format='%(message)s',
-        level=level,
-        handlers=handlers
-    )
-
-
-configure_log()
-
 import argparse
+import logging
 import os
+import sys
 import time
 
 import src.run.command
 import src.run.command.train
 from utils.command_line_utils import get_command_docs, suggest_similar_commands
+
+logger = logging.getLogger()
 
 
 def main():

@@ -401,6 +401,12 @@ class NeuralLogNetwork(keras.Model):
                 if is_clause_fact(clause):
                     continue
                 if clause in input_clauses:
+                    # TODO: use the rule layer to check equivalence, instead
+                    #  of the clause itself. The clause equals method checks
+                    #  only for equality, the RuleLayer method checks for
+                    #  equivalence.
+                    # TODO: create a provenance class to isolate the parser
+                    #  from the clauses/atoms
                     log_equivalent_clause(clause, input_clauses)
                     continue
                 substitution = get_substitution(clause.head, renamed_literal)
@@ -410,7 +416,7 @@ class NeuralLogNetwork(keras.Model):
                 if rule is None:
                     continue
                 # TODO: Here we only use a generic rule to predict a specific
-                #  fact. for instance, h(X, Y) :- ... to predict h(X, a).
+                #  fact. For instance, h(X, Y) :- ... to predict h(X, a).
                 #  We should also use the other way around, use a rule
                 #  h(X, a) :- ... to predict facts h(X, Y). which will return
                 #  the values for h(X, a); and zero for every Y != a.

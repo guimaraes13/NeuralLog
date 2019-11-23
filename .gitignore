@@ -3,5 +3,6 @@
 *.java
 *.class
 /test/resources
-src/language/parser/test_word_net.py
-src/language/parser/test_numeric.py
+src/run/test_word_net.py
+src/run/test_numeric.py
+src/run/test.py

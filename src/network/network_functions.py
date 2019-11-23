@@ -785,7 +785,6 @@ class FunctionLayer(NeuralLogLayer):
     def __hash__(self):
         return hash(self.function)
 
-    # noinspection DuplicatedCode
     def __eq__(self, other):
         if not isinstance(other, FunctionLayer):
             return False
