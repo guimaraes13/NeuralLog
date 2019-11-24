@@ -15,8 +15,7 @@ from src.knowledge.program import NeuralLogProgram, NO_EXAMPLE_SET, \
     ANY_PREDICATE_NAME, find_clause_paths
 from src.language.language import Atom, Term, HornClause, Literal, \
     get_renamed_literal, get_substitution, TooManyArgumentsFunction, \
-    get_variable_indices, Predicate, get_renamed_atom, AtomClause, \
-    get_file_source
+    get_variable_indices, Predicate, get_renamed_atom, AtomClause
 from src.network.layer_factory import LayerFactory, \
     get_standardised_name
 from src.network.network_functions import get_literal_function, \
@@ -140,34 +139,34 @@ def is_clause_fact(clause):
            clause.head.terms == body.terms
 
 
-def log_equivalent_clause(clause, input_clauses):
+def log_equivalent_clause(current_clause, older_clause):
     """
     Logs the redundant clause.
-    :param clause: the clause
-    :type clause: Clause
-    :param input_clauses: the previous clauses
-    :type input_clauses: collection.Iterable[Clause]
+
+    :param current_clause: the current clause
+    :type current_clause: HornClause
+    :param older_clause: the older clause
+    :type older_clause: HornClause
     """
     if logger.isEnabledFor(logging.WARNING):
-        for older_clause in input_clauses:
-            if clause == older_clause:
-                start_line = clause.provenance.start_line
-                start_column = clause.provenance.start_column
-                clause_filename = clause.provenance.filename
+        if older_clause is None:
+            return
+        start_line = current_clause.provenance.start_line
+        start_column = current_clause.provenance.start_column
+        clause_filename = current_clause.provenance.filename
 
-                old_start_line = older_clause.provenance.start_line
-                old_start_col = older_clause.provenance.start_column
-                old_clause_filename = older_clause.provenance.filename
-                logger.warning(
-                    "Warning: clause `%s`, defined in file: %s "
-                    "at %d:%d ignored. The clause has already been "
-                    "defined in in file: %s at %d:%d",
-                    clause, clause_filename,
-                    start_line, start_column,
-                    old_clause_filename,
-                    old_start_line, old_start_col
-                )
-                break
+        old_start_line = older_clause.provenance.start_line
+        old_start_col = older_clause.provenance.start_column
+        old_clause_filename = older_clause.provenance.filename
+        logger.warning(
+            "Warning: clause `%s`, defined in file: %s "
+            "at %d:%d ignored. The clause has already been "
+            "defined in in file: %s at %d:%d",
+            current_clause, clause_filename,
+            start_line, start_column,
+            old_clause_filename,
+            old_start_line, old_start_col
+        )
 
 
 class NeuralLogNetwork(keras.Model):
@@ -376,19 +375,10 @@ class NeuralLogNetwork(keras.Model):
         """
         inputs = [self._build_fact(renamed_literal, inverted=inverted)]
         if not is_cyclic(renamed_literal, previous_atoms):
-            input_clauses = set()
+            input_clauses = dict()  # type: dict[RuleLayer, HornClause]
             for clause in self.program.clauses_by_predicate.get(
                     renamed_literal.predicate, []):
                 if is_clause_fact(clause):
-                    continue
-                if clause in input_clauses:
-                    # TODO: use the rule layer to check equivalence, instead
-                    #  of the clause itself. The clause equals method checks
-                    #  only for equality, the RuleLayer method checks for
-                    #  equivalence.
-                    # TODO: create a provenance class to isolate the parser
-                    #  from the clauses/atoms
-                    log_equivalent_clause(clause, input_clauses)
                     continue
                 substitution = get_substitution(clause.head, renamed_literal)
                 if substitution is None:
@@ -403,7 +393,10 @@ class NeuralLogNetwork(keras.Model):
                 #  the values for h(X, a); and zero for every Y != a.
                 rule = self._build_specific_rule(
                     renamed_literal, inverted, rule, substitution)
-                input_clauses.add(clause)
+                if rule in input_clauses:
+                    log_equivalent_clause(clause, input_clauses[rule])
+                    continue
+                input_clauses[rule] = clause
                 inputs.append(rule)
 
         combining_func = self.get_literal_combining_function(renamed_literal)
@@ -676,7 +669,7 @@ class NeuralLogDataset:
 
     __call__ = call
 
-    def get_dataset(self, example_set=NO_EXAMPLE_SET):
+    def get_dataset(self, example_set=NO_EXAMPLE_SET, shuffle=False):
         """
         Gets the data set for the example set.
 
@@ -689,6 +682,8 @@ class NeuralLogDataset:
                                       sparse_features=False)
         dataset = tf.data.Dataset.from_tensor_slices((features, labels))
         dataset = dataset.map(self)
+        if shuffle:
+            dataset = dataset.shuffle(features.shape[0])
         return dataset
 
     def build(self, example_set=NO_EXAMPLE_SET, sparse_features=False):

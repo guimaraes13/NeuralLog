@@ -2,17 +2,125 @@
 Package of the possible commands of the system
 """
 import logging
+import os
 from argparse import ArgumentParser
+from difflib import SequenceMatcher
 from inspect import getdoc
 
-from utils import SKIP_SIZE, INDENT_SIZE
-from utils.data_utils import build_parent_dir
+import numpy as np
+import scipy.stats
+
+SKIP_SIZE = 1
+INDENT_SIZE = 4
 
 logger = logging.getLogger()
 
 TRAIN_SET_NAME = "train_set"
 VALIDATION_SET_NAME = "validation_set"
 TEST_SET_NAME = "test_set"
+
+
+def get_command_docs(commands):
+    """
+    Gets the documentation of the commands, formatted to a help printing.
+
+    Parameters
+    ----------
+    commands : the commands
+
+    Returns
+    -------
+    out : str
+        the formatted documentation for each command
+    """
+    message = "\n"
+    max_key_length = max(map(lambda x: len(x), commands.keys()))
+    for key in sorted(commands.keys()):
+        message += " " * INDENT_SIZE
+        message += key
+        message += " " * (
+                int((max_key_length - len(key)) / SKIP_SIZE) + INDENT_SIZE)
+        values = getdoc(commands[key])
+        values = values.split("\n") if values else [""]
+        message += values[0]
+        for value in values[1:]:
+            message += "\n"
+            message += " " * (int(max_key_length / SKIP_SIZE) + 2 * INDENT_SIZE)
+            message += value
+        message += "\n\n"
+    return message
+
+
+def build_parent_dir(path):
+    """
+    Builds the parent directory of the `path`, if it does not exist.
+
+    Parameters
+    ----------
+    path : str
+        the path
+    """
+    if path is not None:
+        parent_folder = os.path.dirname(path)
+        if parent_folder != "" and not os.path.isdir(parent_folder):
+            os.makedirs(parent_folder, exist_ok=True)
+
+
+def suggest_similar_commands(selected_command, possible_commands,
+                             similarity_threshold=0.75):
+    """
+    Suggest the command(s) from the `possible_commands` which is the most
+    similar to the `selected_command`.
+
+    Parameters
+    ----------
+    possible_commands : collections.Iterable[str]
+        the possible commands
+    selected_command : str
+        the selected commands
+    similarity_threshold : float
+        the smaller similarity accepted to suggest the command.
+    Returns
+    -------
+    out : bool
+        True if at least a command is suggested, False otherwise
+    """
+
+    def similar(a, b):
+        """
+        Returns how similar string `a` is from string `b`.
+        Parameters
+        ----------
+        a : str
+            string a
+        b : str
+            string b
+        Returns
+        -------
+        out : float
+            the similarity between `a` and `b`
+        """
+        return SequenceMatcher(a=a, b=b).ratio()
+
+    options = np.array(possible_commands)
+    similarities = [similar(selected_command, x) for x in possible_commands]
+    similarities = -np.array(similarities)
+
+    if -similarities.min() < similarity_threshold:
+        return False
+
+    rank = scipy.stats.rankdata(similarities, method="dense")
+    similar = np.argwhere(rank == 1)
+    similar_options = options[similar]
+    if similar_options.shape[0] == 1:
+        logger.error("Did you mean %s?", similar_options[0, 0])
+    else:
+        similar_options = options[similar].squeeze()
+        logger.error("Did you mean %s or %s?",
+                     ", ".join(similar_options[:-1]), similar_options[-1])
+
+    logger.info("")
+    return True
 
 
 def make_command():

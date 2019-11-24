@@ -13,7 +13,6 @@ import time
 
 import src.run.command
 import src.run.command.train
-from utils.command_line_utils import get_command_docs, suggest_similar_commands
 
 logger = logging.getLogger()
 
@@ -32,7 +31,7 @@ def main():
     usage += "This class can be used to data processing " + \
              "and to perform experiments.\n\n"
     usage += "The possible commands are:\n\n"
-    usage += get_command_docs(commands)
+    usage += src.run.command.get_command_docs(commands)
     usage += "\n\n"
     parser = argparse.ArgumentParser(
         usage=usage,
@@ -44,8 +43,8 @@ def main():
     args_command = args.command.lower()
     if args_command not in commands:
         logger.error('Unrecognized command %s', args_command)
-        if not suggest_similar_commands(args_command,
-                                        list(commands.keys())):
+        if not src.run.command.suggest_similar_commands(args_command,
+                                                        list(commands.keys())):
             parser.print_help()
         exit(1)
     args = sys.argv[2:]

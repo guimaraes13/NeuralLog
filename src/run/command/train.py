@@ -143,6 +143,9 @@ def find_best_model(checkpoint, history):
     return checkpoint.filepath.format(epoch=(best_epoch + 1) * period)
 
 
+# TODO: print default parameters from the program on the help
+# TODO: say at the README that the default parameters can be found in the help
+
 @command(COMMAND_NAME)
 class Train(Command):
     """
@@ -234,10 +237,16 @@ class Train(Command):
         arguments = [
             ("loss_function", "the loss function of the neural network and, "
                               "possibly, its options. The default value is: "
-                              "{}".format(DEFAULT_LOSS.replace("_", " "))),
+                              "{}. It can be individually specified for each "
+                              "predicate, just put another term with the name "
+                              "of the predicate"
+                              "".format(DEFAULT_LOSS.replace("_", " "))),
             ("metrics", "the metric functions to eval the neural network and, "
                         "possibly, its options. The default value is the loss"
-                        "function, which is always appended to the metrics"),
+                        "function, which is always appended to the metrics. "
+                        "It can be individually specified for each "
+                        "predicate, just put another term with the name of "
+                        "the predicate"),
             ("optimizer", "the optimizer for the training and, "
                           "possibly, its options. The default value is: "
                           "{}".format(DEFAULT_OPTIMIZER)),
@@ -455,7 +464,7 @@ class Train(Command):
         self.output_map = self._get_output_map()
         self._read_parameters(self.output_map)
         self._log_parameters(
-            ["loss_function", "optimizer", "regularizer", "metrics"],
+            ["loss_function", "optimizer", "regularizer", "metrics", "shuffle"],
             self.output_map.inverse
         )
         self.model.compile(
@@ -577,7 +586,9 @@ class Train(Command):
     def _build_train_set(self):
         start_func = time.process_time()
         logger.info("Creating training dataset...")
-        self.train_set = self.neural_dataset.get_dataset(TRAIN_SET_NAME)
+        shuffle = self.neural_program.parameters.get("shuffle", False)
+        self.train_set = self.neural_dataset.get_dataset(TRAIN_SET_NAME,
+                                                         shuffle=shuffle)
         self.train_set = self.train_set.batch(self.batch_size)
         end_train = time.process_time()
         end_func = end_train

@@ -774,6 +774,7 @@ class NeuralLogProgram:
         """
         Builds the program after all the clauses had been added.
         """
+        self._expand_clauses()
         self._get_constants()
         self._add_default_parameters()
 
@@ -804,6 +805,7 @@ class NeuralLogProgram:
             else:
                 raise ClauseMalformedException()
 
+    def _expand_clauses(self):
         expanded_trainable = set()
         for predicate in self.predicates.keys():
             for trainable in self.trainable_predicates:
@@ -1355,11 +1357,14 @@ class NeuralLogProgram:
                                    "literal_negation_function")
         self.parameters.setdefault("literal_negation_function:sparse",
                                    "literal_negation_function:sparse")
+        # function to get the value of a negated literal from the non-negated
+        # one
 
         self.parameters.setdefault("literal_combining_function", "tf.math.add")
         # function to combine the different proves of a literal
         # (FactLayers and RuleLayers). The default is to sum all the
-        # proves, element-wise, by applying the `tf.math.add_n` function
+        # proves, element-wise, by applying the `tf.math.add` function to
+        # reduce the layers outputs
 
         self.parameters.setdefault("and_combining_function",
                                    "tf.math.multiply")
@@ -1374,12 +1379,6 @@ class NeuralLogProgram:
         # is to multiply all the paths, element-wise, by applying the
         # `tf.math.multiply` function
 
-        self.parameters.setdefault("edge_combining_function",
-                                   "tf.math.multiply")
-        # function to extract the value of the fact based on the input.
-        # The default is the element-wise multiplication implemented by the
-        # `tf.math.multiply` function
-
         self.parameters.setdefault("edge_neutral_element",
                                    {
                                        "class_name": "tf.constant",
@@ -1389,6 +1388,12 @@ class NeuralLogProgram:
         # in a rule. The default edge combining function is the element-wise
         # multiplication. Thus, the neutral element is `1.0`, represented by
         # `tf.constant(1.0)`.
+
+        self.parameters.setdefault("edge_combining_function",
+                                   "tf.math.multiply")
+        # function to extract the value of the fact based on the input.
+        # The default is the element-wise multiplication implemented by the
+        # `tf.math.multiply` function
 
         self.parameters.setdefault("edge_combining_function_2d", "tf.matmul")
         self.parameters.setdefault("edge_combining_function_2d:sparse",
