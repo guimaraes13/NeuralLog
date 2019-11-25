@@ -1278,11 +1278,14 @@ class NeuralLogProgram:
         key = atom.simple_key()
         old_atom = example_dict.get(key, None)
         if old_atom is not None:
-            logger.warning("Warning: example %s defined at line %d:%d "
-                           "replaced by Example %s defined at line %d:%d.",
-                           old_atom, old_atom.provenance.start_line,
+            logger.warning("Warning: example %s defined in file %s at line "
+                           "%d:%d replaced by Example %s defined in file %s at "
+                           "line %d:%d.",
+                           old_atom, old_atom.provenance.filename,
+                           old_atom.provenance.start_line,
                            old_atom.provenance.start_column,
-                           atom, atom.provenance.start_line,
+                           atom, atom.provenance.filename,
+                           atom.provenance.start_line,
                            atom.provenance.start_column)
         example_dict[key] = atom
 

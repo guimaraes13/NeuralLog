@@ -616,7 +616,10 @@ class Train(Command):
                 hist = dict(map(
                     lambda x: (get_formatted_name(
                         x[0], self.output_map.inverse), x[1]), hist.items()))
-                logger.info(hist)
+                logger.info("\nHistory:")
+                for key, value in hist.items():
+                    logger.info("%s: %s", key, value)
+                logger.info("")
 
         logger.info("Saving data...")
         start_save = time.process_time()

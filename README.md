@@ -4,8 +4,8 @@ NeuralLog is a system to compile logic programs into Artificial Neural Networks.
 
 ## Dependencies
 - python3;
-- antlr4;
 - tensorflow 2.0;
+- antlr4-python3-runtime;
 
 ### Logic Syntax
 
@@ -39,3 +39,4 @@ forming its body, ending with a period, for instance:
 The main file is src/run/neurallog.py.
 
 # TODO: create a run example.
+# TODO: add reference for the kinship example.

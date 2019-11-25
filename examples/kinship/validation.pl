@@ -1,0 +1,12 @@
+1.0::example(grand_father, christopher, colin).
+1.0::example(grand_father, christopher, charlotte).
+1.0::example(grand_father, christopher, emilio).
+1.0::example(grand_father, marco, lucia).
+1.0::example(grand_mother, francesca, arthur).
+1.0::example(grand_mother, francesca, victoria).
+1.0::example(grand_mother, francesca, emilio).
+1.0::example(grand_mother, francesca, alfonso).
+1.0::example(grand_mother, francesca, sophia).
+1.0::example(grand_mother, lucia, arthur).
+1.0::example(grand_mother, lucia, victoria).
+1.0::example(grand_mother, lucia, emilio).
