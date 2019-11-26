@@ -280,6 +280,8 @@ class NeuralLogNetwork(keras.Model):
     def build_layers(self):
         for example_set in self.program.examples.values():
             for predicate in example_set:
+                logger.debug("Building output layer for predicate: %s",
+                             predicate)
                 literal = Literal(Atom(predicate,
                                        *list(map(lambda x: "X{}".format(x),
                                                  range(predicate.arity)))))
@@ -350,9 +352,11 @@ class NeuralLogNetwork(keras.Model):
         literal_layer = self._literal_layers.get(key, None)
         if literal_layer is None:
             if atom.predicate in self.program.logic_predicates:
+                logger.debug("Building layer for literal: %s", renamed_literal)
                 literal_layer = self._build_logic_literal_layer(
                     renamed_literal, previous_atoms, inverted)
             else:
+                logger.debug("Building layer for function: %s", renamed_literal)
                 literal_layer = self._build_function_layer(renamed_literal)
             self._literal_layers[key] = literal_layer
         return literal_layer
@@ -523,6 +527,7 @@ class NeuralLogNetwork(keras.Model):
         key = (clause, inverted)
         rule_layer = self._rule_layers.get(key, None)
         if rule_layer is None:
+            logger.debug("Building layer for rule: %s", clause)
             current_atoms = \
                 set() if previous_atoms is None else set(previous_atoms)
             current_atoms.add(clause.head)
@@ -572,6 +577,7 @@ class NeuralLogNetwork(keras.Model):
         key = (renamed_atom, inverted)
         fact_layer = self._fact_layers.get(key, None)
         if fact_layer is None:
+            logger.debug("Building layer for fact: %s", renamed_atom)
             fact_layer = self.layer_factory.build_atom(renamed_atom)
             if inverted:
                 fact_layer = InvertedFactLayer(

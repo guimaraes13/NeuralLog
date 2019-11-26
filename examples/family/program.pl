@@ -3,29 +3,30 @@ learn("w_f").
 learn("w_m").
 
 %% Useful parameters to evaluate the model
-%% Sets a callback to perform the link prediction evaluation on the train set
+%% Sets a callback to perform the link prediction evaluation on the validation set
 set_parameter(callback, link_prediction, class_name, link_prediction_callback).
-set_parameter(callback, link_prediction, config, dataset, train_set).
+set_parameter(callback, link_prediction, config, dataset, validation_set).
 set_parameter(callback, link_prediction, config, filtered, "False").
 set_parameter(callback, link_prediction, config, rank_method, pessimistic).
 set_parameter(callback, link_prediction, config, top_k, 3).
 
 %% Sets a checkpoint to save the best model
-set_parameter(callback, train_checkpoint, class_name, "ModelCheckpoint").
-%% The metric mean_reciprocal_rank_train_set, which is computed by the
+set_parameter(callback, validation_checkpoint, class_name, "ModelCheckpoint").
+%% The metric mean_reciprocal_rank_validation_set, which is computed by the
 %% link prediction callback defined above, will be used to decide which model
 %% is the best
-set_parameter(callback, train_checkpoint, config,
-    monitor, mean_reciprocal_rank_train_set).
-set_parameter(callback, train_checkpoint, config, save_best_only, "False").
+set_parameter(callback, validation_checkpoint, config, monitor, mean_reciprocal_rank_validation_set).
+set_parameter(callback, validation_checkpoint, config, save_best_only, "True").
 set_parameter(validation_period, 1). %% the model will be evaluated every epoch
 
 %% Setting the parameters of the model
 %% Sets the individual loss function for each predicate
+%% Default: `mean_squared_error`
 set_parameter(loss_function, grand_father, mean_squared_error).
 set_parameter(loss_function, grand_mother, mean_absolute_error).
 
 %% Sets a single loss function for the model
+%% Default: the loss function
 %% set_parameter(loss_function, binary_crossentropy).
 
 %% Defines individual metrics for each predicate
@@ -45,12 +46,12 @@ set_parameter(optimizer, sgd).
 set_parameter(regularizer, l2).
 
 %% Sets the batch size
-set_parameter(batch_size, 2).
+set_parameter(batch_size, 1).
 
-%% Sets the number of epochs
+%% Sets the number of epochs, default: `10`
 set_parameter(epochs, 5).
 
-%% If True, shuffles the train set, default: False
+%% If `True`, shuffles the train set, default: `False`
 set_parameter(shuffle, "True").
 
 %% Sets the validation period. If 1, evaluate the model on the validation set
@@ -58,10 +59,11 @@ set_parameter(shuffle, "True").
 set_parameter(validation_period, 1).
 
 %% Sets a dictionary whose keys points to ModelCheckpoint callbacks
-%% In this case, the train_checkpoint
+%% In this case, the validation_checkpoint
 %% It will save the program and inference for the best model saved by
-%% train_checkpoint, at the output directory with prefix: `best_`
-set_parameter(best_model, train_checkpoint, best_).
+%% validation_checkpoint, at the output directory with prefix: `best_`
+%% Default: `None`
+set_parameter(best_model, validation_checkpoint, best_).
 
 %% Sets the default parameters
 %% If omitted, the parameters look like follows
@@ -115,12 +117,6 @@ set_parameter(edge_combining_function, "tf.math.multiply").
 set_parameter(edge_combining_function_2d, "tf.matmul").
 set_parameter("edge_combining_function_2d:sparse",
               "edge_combining_function_2d:sparse").
-
-%% function to extract the value of the fact based on the input, for
-%% attribute facts.
-%% The default is the dot multiplication implemented by the `tf.matmul`
-%% function.
-%% set_parameter(attribute_edge_combining_function, "tf.math.multiply").
 
 %% function to extract the inverse of a facts. The default is the
 %% transpose function implemented by `tf.transpose`

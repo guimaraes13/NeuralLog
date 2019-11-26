@@ -1350,6 +1350,10 @@ class NeuralLogProgram:
         parameter_dict[atom.terms[-2].value] = atom.terms[-1].value
 
     def _add_default_parameters(self):
+        for key, value, description in DEFAULT_PARAMETERS:
+            self.parameters.setdefault(key, value)
+
+    def _add_default_parameters_old(self):
         self.parameters.setdefault(
             "initial_value", {
                 "class_name": "random_normal",
@@ -1445,3 +1449,82 @@ class NeuralLogProgram:
         # function to extract the value of unary prediction.
         # The default is the dot multiplication, implemented by the `tf.matmul`,
         # applied to the transpose of the literal prediction.
+
+
+DEFAULT_PARAMETERS = [
+    ("literal_negation_function", "literal_negation_function",
+     "function to get the value of a negated literal from the non-negated "
+     "one"),
+
+    ("literal_negation_function:sparse", "literal_negation_function:sparse",
+     "function to get the value of a negated literal from the non-negated "
+     "one"),
+
+    ("literal_combining_function", "tf.math.add",
+     "function to combine the different proves of a literal (FactLayers and "
+     "RuleLayers). The default is to sum all the proves, element-wise, by "
+     "applying the `tf.math.add` function to reduce the layers outputs"),
+
+    ("and_combining_function", "tf.math.multiply",
+     "function to combine different vector and get an `AND` behaviour between "
+     "them. The default is to multiply all the paths, element-wise, by "
+     "applying the `tf.math.multiply` function"),
+
+    ("path_combining_function", "tf.math.multiply",
+     "function to combine different path from a RuleLayer. The default "
+     "is to multiply all the paths, element-wise, by applying the "
+     "`tf.math.multiply` function"),
+
+    ("edge_neutral_element", {
+        "class_name": "tf.constant",
+        "config": {"value": 1.0}
+    },
+     "element is used to extract the tensor value of grounded literal "
+     "in a rule. The default edge combining function is the element-wise "
+     "multiplication. Thus, the neutral element is `1.0`, represented by "
+     "`tf.constant(1.0)`"),
+
+    ("edge_combining_function", "tf.math.multiply",
+     "function to extract the value of the fact based on the input. "
+     "The default is the element-wise multiplication implemented by the "
+     "`tf.math.multiply` function"),
+
+    ("edge_combining_function_2d", "tf.matmul",
+     "function to extract the value of the fact based on the input, "
+     "for 2d facts. The default is the dot multiplication implemented "
+     "by the `tf.matmul` function"),
+    ("edge_combining_function_2d:sparse", "edge_combining_function_2d:sparse",
+     "function to extract the value of the fact based on the input, "
+     "for 2d facts. The default is the dot multiplication implemented "
+     "by the `tf.matmul` function"),
+
+    ("invert_fact_function", "tf.transpose",
+     "function to extract the inverse of a facts. The default is the "
+     "transpose function implemented by `tf.transpose`"),
+
+    ("invert_fact_function:sparse", "tf.sparse.transpose",
+     "function to extract the inverse of a facts. The default is the "
+     "transpose function implemented by `tf.transpose`"),
+
+    ("any_aggregation_function", "any_aggregation_function",
+     "function to aggregate the input of an any predicate. The default "
+     "function is the `tf.reduce_sum`"),
+
+    ("attributes_combine_function", "tf.math.multiply",
+     "function to combine the numeric terms of a fact. "
+     "The default function is the `tf.math.multiply`"),
+
+    ("weighted_attribute_combining_function", "tf.math.multiply",
+     "function to combine the weights and values of the attribute facts. "
+     "The default function is the `tf.math.multiply`"),
+
+    ("output_extract_function", "tf.nn.embedding_lookup",
+     "function to extract the value of an atom with a constant at the "
+     "last term position. "
+     "The default function is the `tf.nn.embedding_lookup`"),
+
+    ("unary_literal_extraction_function", "unary_literal_extraction_function",
+     "function to extract the value of unary prediction. "
+     "The default is the dot multiplication, implemented by the `tf.matmul`, "
+     "applied to the transpose of the literal prediction")
+]

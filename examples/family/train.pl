@@ -7,5 +7,4 @@
 1.0::example(grand_father, pierro, sophia).
 1.0::example(grand_mother, maria, sophia).
 1.0::example(grand_mother, maria, angela).
-1.0::example(grand_mother, maria, angela).
 1.0::example(grand_mother, maria, marco).

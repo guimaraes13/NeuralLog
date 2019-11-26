@@ -716,7 +716,7 @@ class NeuralLogTransverse:
                     self.add_constants(new_clause)
         self.clauses = expanded_clauses
 
-    def log(self, message, *args, level=logging.DEBUG):
+    def log(self, message, *args, level=5):
         """
         Logs the current state on the AST.
 
