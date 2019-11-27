@@ -343,9 +343,7 @@ class LinkPredictionCallback(AbstractNeuralLogCallback):
         :return: the dataset or `None`
         :rtype: tf.data.Dataset or None
         """
-        dataset = self.train_command.neural_dataset.get_dataset(TRAIN_SET_NAME)
-        dataset = dataset.batch(self.train_command.batch_size)
-        return dataset
+        return getattr(self.train_command, self.dataset_name)
 
     def evaluate(self):
         """

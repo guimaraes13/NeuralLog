@@ -863,7 +863,7 @@ class RuleLayer(NeuralLogLayer):
     """
 
     def __init__(self, name, paths, grounded_layers, path_combining_function,
-                 neutral_element, constant_size, **kwargs):
+                 neutral_element, **kwargs):
         """
         Creates a RuleLayer.
 
@@ -885,7 +885,6 @@ class RuleLayer(NeuralLogLayer):
         self.grounded_layers = grounded_layers
         self.path_combining_function = path_combining_function
         self.neutral_element = neutral_element
-        self.any_neutral_element = tf.ones(constant_size, dtype=tf.float32)
         super(RuleLayer, self).__init__(name, **kwargs)
 
     # noinspection PyMissingOrEmptyDocstring

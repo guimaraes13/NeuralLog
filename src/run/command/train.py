@@ -44,8 +44,6 @@ COMMAND_NAME = "train"
 logger = logging.getLogger()
 
 
-# TODO: check the model inference without training
-
 def get_clauses(filepath):
     """
     Gets the clauses from the file in `filepath`.
@@ -591,24 +589,35 @@ class Train(Command):
                     config["mode"] = "max"
         return config
 
-    def _build_train_set(self):
+    def _build_examples_set(self):
         start_func = time.process_time()
         logger.info("Creating training dataset...")
         shuffle = self.neural_program.parameters.get("shuffle", False)
-        self.train_set = self.neural_dataset.get_dataset(TRAIN_SET_NAME,
-                                                         shuffle=shuffle)
-        self.train_set = self.train_set.batch(self.batch_size)
-        end_train = time.process_time()
-        end_func = end_train
+        end_func = time.process_time()
+        if self.train:
+            self.train_set = self.neural_dataset.get_dataset(TRAIN_SET_NAME,
+                                                             shuffle=shuffle)
+            self.train_set = self.train_set.batch(self.batch_size)
+            end_train = time.process_time()
+            logger.info("Train dataset creating time:      \t%0.3fs",
+                        end_train - start_func)
+            end_func = end_train
         if self.valid:
             self.validation_set = self.neural_dataset.get_dataset(
                 VALIDATION_SET_NAME)
             self.validation_set = self.validation_set.batch(self.batch_size)
-            end_func = time.process_time()
-            logger.info("Train dataset creating time:      \t%0.3fs",
-                        end_train - start_func)
+            end_valid = time.process_time()
             logger.info("Validation dataset creation time: \t%0.3fs",
-                        end_func - end_train)
+                        end_valid - end_func)
+            end_func = end_valid
+        if self.test:
+            self.test_set = self.neural_dataset.get_dataset(TEST_SET_NAME)
+            self.test_set = self.test_set.batch(self.batch_size)
+            end_test = time.process_time()
+            logger.info("Test dataset creation time:       \t%0.3fs",
+                        end_func - end_test)
+            end_func = end_test
+
         logger.info("Total dataset creation time:      \t%0.3fs",
                     end_func - start_func)
 
@@ -616,8 +625,8 @@ class Train(Command):
     def run(self):
         self.build()
         history = None
+        self._build_examples_set()
         if self.train:
-            self._build_train_set()
             history = self.fit()
             if logger.isEnabledFor(logging.INFO):
                 hist = history.history
@@ -699,9 +708,9 @@ class Train(Command):
                     file_prefix, VALIDATION_SET_NAME)
 
             if self.test:
-                self.test_set = \
-                    self.neural_dataset.get_dataset(TEST_SET_NAME)
-                self.test_set = self.test_set.batch(self.batch_size)
+                # self.test_set = \
+                #     self.neural_dataset.get_dataset(TEST_SET_NAME)
+                # self.test_set = self.test_set.batch(self.batch_size)
                 self._save_inference_for_dataset(file_prefix, TEST_SET_NAME)
 
     def _save_inference_for_dataset(self, file_prefix, dataset_name):
