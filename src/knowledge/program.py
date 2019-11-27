@@ -616,7 +616,7 @@ class RulePath:
         otherwise
         :rtype: RulePath or None
         """
-        path = RulePath(self.path)
+        path = RulePath(self.path, self.inverted[-1])
         return path if path.append(item) else None
 
     def path_end(self):
@@ -1355,6 +1355,14 @@ class NeuralLogProgram:
 
 
 DEFAULT_PARAMETERS = [
+    ("initial_value", {
+        "class_name": "random_normal",
+        "config": {"mean": 0.5, "stddev": 0.125}
+    },
+     "initializer for learnable predicates. This initializer will be used to "
+     "initialize facts from learnable predicates that are not in the "
+     "knowledge base."),
+
     ("literal_negation_function", "literal_negation_function",
      "function to get the value of a negated literal from the non-negated "
      "one"),

@@ -44,8 +44,6 @@ COMMAND_NAME = "train"
 logger = logging.getLogger()
 
 
-# TODO: check the model inference without training
-
 def get_clauses(filepath):
     """
     Gets the clauses from the file in `filepath`.
@@ -522,6 +520,7 @@ class Train(Command):
         self.epochs = self.parameters["epochs"]
         self.validation_period = self.parameters["validation_period"]
         self._log_parameters(["batch_size", "epochs", "validation_period"])
+        self._build_train_set()
         self.callbacks = self._get_callbacks()
         self._log_parameters(["callback"])
         history = self.model.fit(
@@ -599,16 +598,25 @@ class Train(Command):
                                                          shuffle=shuffle)
         self.train_set = self.train_set.batch(self.batch_size)
         end_train = time.process_time()
+        logger.info("Train dataset creating time:      \t%0.3fs",
+                    end_train - start_func)
         end_func = end_train
         if self.valid:
             self.validation_set = self.neural_dataset.get_dataset(
                 VALIDATION_SET_NAME)
             self.validation_set = self.validation_set.batch(self.batch_size)
-            end_func = time.process_time()
-            logger.info("Train dataset creating time:      \t%0.3fs",
-                        end_train - start_func)
+            end_valid = time.process_time()
             logger.info("Validation dataset creation time: \t%0.3fs",
-                        end_func - end_train)
+                        end_valid - end_train)
+            end_func = end_valid
+        if self.test:
+            self.test_set = self.neural_dataset.get_dataset(TEST_SET_NAME)
+            self.test_set = self.test_set.batch(self.batch_size)
+            end_test = time.process_time()
+            logger.info("Test dataset creation time:       \t%0.3fs",
+                        end_func - end_test)
+            end_func = end_test
+
         logger.info("Total dataset creation time:      \t%0.3fs",
                     end_func - start_func)
 
@@ -617,7 +625,6 @@ class Train(Command):
         self.build()
         history = None
         if self.train:
-            self._build_train_set()
             history = self.fit()
             if logger.isEnabledFor(logging.INFO):
                 hist = history.history

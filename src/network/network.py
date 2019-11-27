@@ -555,7 +555,7 @@ class NeuralLogNetwork(keras.Model):
                 RuleLayer(
                     layer_name, layer_paths, grounded_layers,
                     self._get_path_combining_function(clause.head.predicate),
-                    self.neutral_element, self.layer_factory.constant_size)
+                    self.neutral_element)
             self._rule_layers[key] = rule_layer
 
         return rule_layer
@@ -681,6 +681,8 @@ class NeuralLogDataset:
 
         :param example_set: the name of the example set
         :type example_set: str
+        :param shuffle: if `True`, shuffles the dataset.
+        :type shuffle: bool
         :return: the dataset
         :rtype: tf.data.Dataset
         """
@@ -688,8 +690,11 @@ class NeuralLogDataset:
                                       sparse_features=False)
         dataset = tf.data.Dataset.from_tensor_slices((features, labels))
         dataset = dataset.map(self)
+        dataset_size = features.shape[0]
         if shuffle:
-            dataset = dataset.shuffle(features.shape[0])
+            dataset = dataset.shuffle(dataset_size)
+        logger.info("Dataset %s created with %d example(s)", example_set,
+                    dataset_size)
         return dataset
 
     def build(self, example_set=NO_EXAMPLE_SET, sparse_features=False):
