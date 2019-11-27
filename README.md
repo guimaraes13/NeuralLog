@@ -43,13 +43,18 @@ evaluate the models.
 
 ### Training
 
-The following command trains a neural network, evaluates it and saves the
-results.
+In order to run the system, first we need to set the PYTHONPATH envelopment
+variable to the system's directory.
 
 ```
 cd NeuralLog
 export PYTHONPATH=$(pwd)
+```
 
+Then, the following command trains a neural network, evaluates it and saves the
+results.
+
+```
 python3 src/run/neurallog.py \ 
     --program examples/family/program.pl examples/family/facts.pl \
     --train examples/family/train.pl \
@@ -71,12 +76,14 @@ knowledge containing rules and common facts;
 - train: the training examples;
 - validation: the validation examples;
 - test: the test examples;
+- logFile: path for the log file, this path is not relative to the `outputPath`;
 - outputPath: the path to save the data;
 - lastModel: the path to save the final model, relative to outputPath;
 - lastProgram: the path to save the last program (the program from the last
 model), relative to outputPath;
 - lastInference: the path to save the inferences of the last model, relative to
-outputPath.
+outputPath;
+- verbose: increases the log details.
 
 This command will create the neural network based on the `program.pl` and 
 `facts.pl` files. Then, it will train the network on the examples from 
@@ -99,21 +106,26 @@ one can use the following command:
 
 ```
 python3 src/run/neurallog.py \ 
-    --program examples/family/program.pl examples/family/facts.pl \
+    --program examples/family/program.pl examples/family/data/best_program.pl \
     --test examples/family/test.pl \
+    --loadModel examples/family/data/mean_reciprocal_rank_validation_set_best \ 
     --logFile examples/family/data/log_eval.txt \
     --outputPath examples/family/data \
-    --loadModel examples/family/data/mean_reciprocal_rank_validation_set_best \ 
     --lastProgram best_eval_program.pl \
     --lastInference best_eval_ \
     --verbose
 ```
 
-Using the `loadModel` parameter, the model will be load from the saved weights.
+By using the `loadModel` parameter to load the best saved model
+(`examples/family/data/mean_reciprocal_rank_validation_set_best`), and the
+`program` parameter to load the best saved program
+(`examples/family/data/best_program.pl`), the model will be load from the saved
+weights.
+
 One could possible resume training from here, but, in this case, by passing no
 training set, there will be no training.
 
-The inferences will be in the file: 
+The inferences will be save to the file: 
 `outputPath` + `lastInference` + `test_set.pl`.
 Since the examples are in the test set, in this case:
 `examples/family/data/best_eval_test_set.pl`

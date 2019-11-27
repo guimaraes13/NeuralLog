@@ -43,6 +43,7 @@ COMMAND_NAME = "train"
 
 logger = logging.getLogger()
 
+
 # TODO: check the model inference without training
 
 def get_clauses(filepath):
