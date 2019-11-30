@@ -371,8 +371,12 @@ class LinkPredictionCallback(AbstractNeuralLogCallback):
             y_scores = self.model.predict(features)
             for i in range(len(self.output_indices)):
                 index = self.output_indices[i]
+                if isinstance(y_scores, list):
+                    output_scores = y_scores[index]
+                else:
+                    output_scores = y_scores
                 for feature, y_true, y_score in \
-                        zip(features, labels[index], y_scores[index]):
+                        zip(features, labels[index], output_scores):
                     x = feature.numpy()
                     y_true = y_true.numpy()
                     subject_index = np.argmax(x)

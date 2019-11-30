@@ -1321,10 +1321,12 @@ class NeuralLogProgram:
             parameter_dict = parameter_dict.setdefault(
                 atom.terms[i].value, dict())
         value = atom.terms[-1].value
-        if value == "True":
-            value = True
-        elif value == "False":
-            value = False
+        if isinstance(value, str):
+            lower_value = value.lower()
+            if lower_value == "true":
+                value = True
+            elif lower_value == "false":
+                value = False
         parameter_dict[atom.terms[-2].value] = value
 
     # noinspection PyUnusedLocal

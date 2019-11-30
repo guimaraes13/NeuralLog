@@ -52,11 +52,15 @@ def print_neural_log_predictions(model, neural_program, dataset,
     """
     for features, _ in dataset:
         y_scores = model.predict(features)
-        for i in range(len(y_scores)):
+        for i in range(len(model.predicates)):
             predicate, inverted = model.predicates[i]
             if inverted:
                 continue
-            for feature, y_score in zip(features, y_scores[i]):
+            if isinstance(y_scores, list):
+                output_scores = y_scores[i]
+            else:
+                output_scores = y_scores
+            for feature, y_score in zip(features, output_scores):
                 x = features.numpy()
                 subject_index = np.argmax(x)
                 subject = neural_program.iterable_constants[subject_index]
@@ -189,7 +193,7 @@ class NeuralLogNetwork(keras.Model):
 
     predicates: List[Tuple[Predicate, bool]]
 
-    def __init__(self, program, train=True):
+    def __init__(self, program, train=True, inverted_relations=True):
         """
         Creates a NeuralLogNetwork.
 
@@ -199,6 +203,9 @@ class NeuralLogNetwork(keras.Model):
         trainable/learnable, this is useful to build neural networks for
         inference only. In this way, the unknown facts will be treated as
         zeros, instead of being randomly initialized
+        :param inverted_relations: if `True`, also creates the layers for the
+        inverse relations.
+        :type inverted_relations: bool
         :type train: bool
         """
         super(NeuralLogNetwork, self).__init__(name="NeuralLogNetwork")
@@ -209,6 +216,7 @@ class NeuralLogNetwork(keras.Model):
         self.predicates = data_structures.NoDependency(list())
         self.predicate_layers = list()
         self.neutral_element = self._get_edge_neutral_element()
+        self.inverted_relations = inverted_relations
 
     def get_literal_negation_function(self, predicate):
         """
@@ -296,7 +304,8 @@ class NeuralLogNetwork(keras.Model):
                     self.predicates.append((predicate, False))
                     self.predicate_layers.append(predicate_layer)
                 key = (predicate, True)
-                if predicate.arity == 2 and key not in self.predicates:
+                if self.inverted_relations and predicate.arity == 2 and \
+                        key not in self.predicates:
                     predicate_layer = self._build_literal(literal,
                                                           inverted=True)
                     self.predicates.append(key)

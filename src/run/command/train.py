@@ -27,6 +27,8 @@ from src.network.network import NeuralLogNetwork, NeuralLogDataset, \
 from src.run.command import Command, command, print_args, create_log_file, \
     TRAIN_SET_NAME, VALIDATION_SET_NAME, TEST_SET_NAME
 
+DEFAULT_INVERTED_RELATIONS = True
+
 METRIC_FILE_PREFIX = "metric_"
 LOGIC_PROGRAM_EXTENSION = ".pl"
 
@@ -158,7 +160,6 @@ class Train(Command):
         self.train_set = None
         self.validation_set = None
         self.test_set = None
-        self.batch_size = 1
         self.output_map = BiDict()  # type: BiDict[Predicate, str]
         self.validation_period = DEFAULT_VALIDATION_PERIOD
         self.epochs = 1
@@ -237,6 +238,10 @@ class Train(Command):
                    " by using the special\npredicate `set_parameter`."
         arguments = list(map(lambda x: (x[0], x[-1]), DEFAULT_PARAMETERS))
         arguments += [
+            ("inverted_relations", "if `True`, creates also the inverted "
+                                   "relation for each output predicate. The "
+                                   "default value is: "
+                                   "{}".format(DEFAULT_INVERTED_RELATIONS)),
             ("loss_function", "the loss function of the neural network and, "
                               "possibly, its options. The default value is: "
                               "{}. It can be individually specified for each "
@@ -435,6 +440,8 @@ class Train(Command):
             end_reading = end_test
         self.neural_program.build_program()
         end_func = time.process_time()
+        logger.info("Total number of predictable constants:\t%d",
+                    len(self.neural_program.iterable_constants))
         logger.info("Program reading time:   \t%0.3fs",
                     end_program - start_func)
         if self.train:
@@ -463,14 +470,18 @@ class Train(Command):
         """
         start_func = time.process_time()
         logger.info("Building model...")
-        self.model = NeuralLogNetwork(self.neural_program, train=self.train)
+        inverted_relations = self.neural_program.parameters.get(
+            "inverted_relations", DEFAULT_INVERTED_RELATIONS)
+        self.model = NeuralLogNetwork(self.neural_program, train=self.train,
+                                      inverted_relations=inverted_relations)
         self.model.build_layers()
         if self.load_model is not None:
             self.model.load_weights(self.load_model)
         self.output_map = self._get_output_map()
         self._read_parameters(self.output_map)
         self._log_parameters(
-            ["loss_function", "optimizer", "regularizer", "metrics", "shuffle"],
+            ["loss_function", "optimizer", "regularizer", "metrics",
+             "inverted_relations"],
             self.output_map.inverse
         )
         self.model.compile(
@@ -479,10 +490,12 @@ class Train(Command):
             regularizer=self.parameters["regularizer"],
             metrics=self.parameters["metrics"]
         )
+        self.model.build([None, len(self.neural_program.iterable_constants)])
+        self.model.summary(print_fn=logger.info)
         self.neural_dataset = NeuralLogDataset(self.model)
         end_func = time.process_time()
 
-        logger.info("Model building time:\t%0.3fs", end_func - start_func)
+        logger.info("\nModel building time:\t%0.3fs", end_func - start_func)
 
     def _get_output_map(self):
         output_map = BiDict()  # type: BiDict[Predicate, str]
@@ -516,10 +529,9 @@ class Train(Command):
         """
         start_func = time.process_time()
         logger.info("Training the model...")
-        self.batch_size = self.parameters["batch_size"]
         self.epochs = self.parameters["epochs"]
         self.validation_period = self.parameters["validation_period"]
-        self._log_parameters(["batch_size", "epochs", "validation_period"])
+        self._log_parameters(["epochs", "validation_period"])
         self.callbacks = self._get_callbacks()
         self._log_parameters(["callback"])
         history = self.model.fit(
@@ -593,30 +605,43 @@ class Train(Command):
         start_func = time.process_time()
         logger.info("Creating training dataset...")
         shuffle = self.neural_program.parameters.get("shuffle", False)
+        batch_size = self.parameters["batch_size"]
+        self._log_parameters(["batch_size", "shuffle"])
         end_func = time.process_time()
+        train_set_time = 0
+        validation_set_time = 0
+        test_set_time = 0
+
         if self.train:
             self.train_set = self.neural_dataset.get_dataset(TRAIN_SET_NAME,
                                                              shuffle=shuffle)
-            self.train_set = self.train_set.batch(self.batch_size)
+            self.train_set = self.train_set.batch(batch_size)
             end_train = time.process_time()
-            logger.info("Train dataset creating time:      \t%0.3fs",
-                        end_train - start_func)
+            train_set_time = end_train - start_func
             end_func = end_train
         if self.valid:
             self.validation_set = self.neural_dataset.get_dataset(
                 VALIDATION_SET_NAME)
-            self.validation_set = self.validation_set.batch(self.batch_size)
+            self.validation_set = self.validation_set.batch(batch_size)
             end_valid = time.process_time()
-            logger.info("Validation dataset creation time: \t%0.3fs",
-                        end_valid - end_func)
+            validation_set_time = end_valid - end_func
             end_func = end_valid
         if self.test:
             self.test_set = self.neural_dataset.get_dataset(TEST_SET_NAME)
-            self.test_set = self.test_set.batch(self.batch_size)
+            self.test_set = self.test_set.batch(batch_size)
             end_test = time.process_time()
-            logger.info("Test dataset creation time:       \t%0.3fs",
-                        end_func - end_test)
+            test_set_time = end_func - end_test
             end_func = end_test
+
+        if self.train:
+            logger.info("Train dataset creating time:      \t%0.3fs",
+                        train_set_time)
+        if self.valid:
+            logger.info("Validation dataset creation time: \t%0.3fs",
+                        validation_set_time)
+        if self.test:
+            logger.info("Test dataset creation time:       \t%0.3fs",
+                        test_set_time)
 
         logger.info("Total dataset creation time:      \t%0.3fs",
                     end_func - start_func)
