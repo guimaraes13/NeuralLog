@@ -36,6 +36,64 @@ from src.network.network_functions import get_literal_function, \
 logger = logging.getLogger()
 
 
+class LossMaskWrapper:
+    """
+    A mask wrapper for the loss function to mask the values of unknown labels.
+
+    It multiplies the output of the network by the square of the labels. In
+    order to this method work, the labels must be: `1`, for positive examples;
+    `-1`, for negative examples; and `0`, for unknown examples.
+
+    In this way, the square of the labels will be `1` for the positive and
+    negative examples; and `0`, for the unknown examples. When multiplied by
+    the prediction, the predictions of the unknown examples will be zero,
+    thus, having no error and no gradient for those examples. While the
+    predictions of the known examples will remain the same.
+    """
+
+    def __init__(self, loss_function):
+        """
+        Creates a loss mask wrapper.
+
+        :param loss_function: the loss function to wrap.
+        :type loss_function: function
+        """
+        self.loss_function = loss_function
+        self.function = keras.losses.get(loss_function)
+        self.__name__ = self.function.__name__
+
+    def call(self, y_true, y_pred):
+        """
+        The wrapped function.
+
+        :param y_true: the true labels
+        :type y_true: tf.Tensor, list[tf.Tensor], np.ndarray, list[np.ndarray]
+        :param y_pred: the predictions
+        :type y_pred: tf.Tensor, list[tf.Tensor], np.ndarray, list[np.ndarray]
+        :return: the wrapped function
+        :rtype: function
+        """
+        if isinstance(y_pred, list):
+            new_y_pred = []
+            for i in range(len(y_pred)):
+                mask = tf.square(y_true[i])
+                new_y_pred.append(y_pred[i] * mask)
+        else:
+            mask = tf.square(y_true)
+            new_y_pred = y_pred * mask
+        return self.function(y_true, new_y_pred)
+
+    __call__ = call
+
+    def __str__(self):
+        return "{}({})".format(self.__class__.__name__,
+                               self.loss_function.__str__())
+
+    def __repr__(self):
+        return "{}({})".format(self.__class__.__name__,
+                               self.loss_function.__repr__())
+
+
 def print_neural_log_predictions(model, neural_program, dataset,
                                  writer=sys.stdout):
     """
@@ -156,20 +214,18 @@ def log_equivalent_clause(current_clause, older_clause):
         if older_clause is None:
             return
         start_line = current_clause.provenance.start_line
-        start_column = current_clause.provenance.start_column
         clause_filename = current_clause.provenance.filename
 
         old_start_line = older_clause.provenance.start_line
-        old_start_col = older_clause.provenance.start_column
         old_clause_filename = older_clause.provenance.filename
         logger.warning(
             "Warning: clause `%s`, defined in file: %s "
-            "at %d:%d ignored. The clause has already been "
-            "defined in in file: %s at %d:%d",
+            "at %d ignored. The clause has already been "
+            "defined in in file: %s at %d.",
             current_clause, clause_filename,
-            start_line, start_column,
+            start_line,
             old_clause_filename,
-            old_start_line, old_start_col
+            old_start_line
         )
 
 
@@ -388,7 +444,7 @@ class NeuralLogNetwork(keras.Model):
         """
         inputs = [self._build_fact(renamed_literal, inverted=inverted)]
         if not is_cyclic(renamed_literal, previous_atoms):
-            input_clauses = dict()  # type: dict[RuleLayer, HornClause]
+            input_clauses = dict()  # type: Dict[RuleLayer, HornClause]
             for clause in self.program.clauses_by_predicate.get(
                     renamed_literal.predicate, []):
                 if is_clause_fact(clause):
@@ -698,10 +754,10 @@ class NeuralLogDataset:
         features, labels = self.build(example_set=example_set,
                                       sparse_features=False)
         dataset = tf.data.Dataset.from_tensor_slices((features, labels))
-        dataset = dataset.map(self)
         dataset_size = features.shape[0]
         if shuffle:
             dataset = dataset.shuffle(dataset_size)
+        dataset = dataset.map(self)
         logger.info("Dataset %s created with %d example(s)", example_set,
                     dataset_size)
         return dataset

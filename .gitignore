@@ -7,3 +7,5 @@ src/run/test_word_net.py
 src/run/test_numeric.py
 src/run/test.py
 /examples/family/data/
+src/language/parser/ply/parsetab.py
+src/language/parser/ply/parser.out

@@ -833,22 +833,18 @@ class NeuralLogProgram:
         old_atom = fact_dict.get(atom.simple_key(), None)
         if report_replacement and old_atom is not None:
             if old_atom.provenance is not None and atom.provenance is not None:
-                logger.warning("Warning: atom %s defined at line %d:%d "
-                               "replaced by Atom %s defined at line %d:%d.",
+                logger.warning("Warning: atom %s defined at line %d "
+                               "replaced by Atom %s defined at line %d.",
                                old_atom, old_atom.provenance.start_line,
-                               old_atom.provenance.start_column,
-                               atom, atom.provenance.start_line,
-                               atom.provenance.start_column)
+                               atom, atom.provenance.start_line)
             elif atom.provenance is None:
-                logger.warning("Warning: atom %s defined at line %d:%d "
+                logger.warning("Warning: atom %s defined at line %d "
                                "replaced by Atom %s.",
-                               old_atom, old_atom.provenance.start_line,
-                               old_atom.provenance.start_column, atom)
+                               old_atom, old_atom.provenance.start_line, atom)
             elif old_atom.provenance is None:
                 logger.warning("Warning: atom %s replaced by Atom %s defined at"
-                               " line %d:%d.", old_atom,
-                               atom, atom.provenance.start_line,
-                               atom.provenance.start_column)
+                               " line %d.", old_atom,
+                               atom, atom.provenance.start_line)
             else:
                 logger.warning("Warning: atom %s replaced by Atom %s",
                                old_atom, atom)
@@ -1269,7 +1265,7 @@ class NeuralLogProgram:
             example.atom.terms[0].value,
             weight=example.atom.weight,
             *example.atom.terms[1:],
-            context=example.atom.provenance
+            provenance=example.atom.provenance
         )
 
         example_set = kwargs.get("example_set", NO_EXAMPLE_SET)
@@ -1279,14 +1275,12 @@ class NeuralLogProgram:
         old_atom = example_dict.get(key, None)
         if old_atom is not None:
             logger.warning("Warning: example %s defined in file %s at line "
-                           "%d:%d replaced by Example %s defined in file %s at "
-                           "line %d:%d.",
+                           "%d replaced by Example %s defined in file %s at "
+                           "line %d.",
                            old_atom, old_atom.provenance.filename,
                            old_atom.provenance.start_line,
-                           old_atom.provenance.start_column,
                            atom, atom.provenance.filename,
-                           atom.provenance.start_line,
-                           atom.provenance.start_column)
+                           atom.provenance.start_line)
         example_dict[key] = atom
 
     # noinspection PyUnusedLocal
