@@ -392,7 +392,7 @@ def find_all_forward_paths(source, destination,
                                       visited_literals)
     for literal in binary_literals_by_term.get(source, []):
         if initial_path is None:
-            inverted = literal.terms[-1] == source
+            inverted = literal.terms[0] != source
             partial_paths.append(RulePath([literal], inverted))
         else:
             partial_paths.append(initial_path.new_path_with_item(literal))
@@ -467,7 +467,7 @@ def find_all_backward_paths(source, destination,
     for literal in binary_literals_by_term.get(source, []):
         if literal in visited_literals:
             continue
-        inverted = literal.terms[-1] == source
+        inverted = literal.terms[0] != source
         partial_paths.append(RulePath([literal], inverted))
         visited_literals.add(literal)
 
@@ -475,8 +475,9 @@ def find_all_backward_paths(source, destination,
         partial_paths, destination, binary_literals_by_term,
         completed_paths, visited_literals)
 
-    for path in complete_path_with_any(
-            dead_end_paths, destination, inverted=True):
+    completed_with_any = complete_path_with_any(
+        dead_end_paths, destination, inverted=True)
+    for path in completed_with_any:
         completed_paths.append(path)
 
     return append_loop_predicates(
@@ -865,7 +866,7 @@ class NeuralLogProgram:
         """
         atom_predicate = atom.predicate
         if atom_predicate.arity > 2:
-            raise TooManyArguments(atom.provenance, atom_predicate.arity)
+            raise TooManyArguments(atom, atom_predicate.arity)
         # atom.context = None
         types = get_predicate_type(atom)
         if atom_predicate not in self.predicates:

@@ -4,7 +4,6 @@ Module to parse the NeuralLog Programs using the ply parser library.
 
 import logging
 import sys
-import time
 from collections import deque
 
 import ply.lex as lex
@@ -12,7 +11,7 @@ import ply.yacc as yacc
 
 from src.language.language import Atom, Predicate, TemplatePredicate, Number, \
     Quote, TemplateTerm, Variable, Constant, Literal, HornClause, AtomClause, \
-    ClauseProvenance, BadArgumentException
+    ClauseProvenance, BadArgumentException, Clause
 from src.language.parser.neural_log_listener import KeyDict, \
     BadClauseException, PLACE_HOLDER, ground_placeholders, solve_place_holders
 
@@ -86,6 +85,13 @@ class NeuralLogLexer:
     t_QUOTED = r"(\"(\\.|[^\"])*\"|\'(\\.|[^\'])*\')"
 
     def __init__(self, **kwargs):
+        """
+        Creates a NeuralLog lexer.
+
+        :param kwargs: optional arguments to be passed to the ply lexer
+        library.
+        :type kwargs: dict
+        """
         self.lexer = lex.lex(module=self, **kwargs)
 
     def t_SCIENTIFIC_NUMBER(self, t):
@@ -155,15 +161,19 @@ class NeuralLogParser:
     Class to parse NeuralLog Programs.
     """
 
-    # noinspection PyUnusedLocal
     def __init__(self, lexer, **kwargs):
         """
+        Creates a NeuralLog parser.
+
         :param lexer: the lexer
         :type lexer: NeuralLogLexer
+        :param kwargs: optional arguments to be passed to the ply parser
+        library.
+        :type kwargs: dict
         """
         self.lexer = lexer
         self.tokens = lexer.tokens
-        self.parser = yacc.yacc(module=self)
+        self.parser = yacc.yacc(module=self, **kwargs)
 
         self.for_context = deque()
 
@@ -182,10 +192,11 @@ class NeuralLogParser:
         :type filename: str
         """
         self.filename = filename
-        data = open(filename).read()
-        self.parser.parse(input=data, lexer=self.lexer)
+        with open(filename) as data:
+            self.parser.parse(input=data.read(), lexer=self.lexer)
         self.expand_placeholders()
 
+    # noinspection DuplicatedCode
     def expand_placeholders(self):
         """
         Expands the placeholders from the Horn clauses.
@@ -278,6 +289,8 @@ class NeuralLogParser:
         :type predicate: list[str]
         :param terms:
         :type terms: list[list[str]]
+        :param start_line: the start line of the atom
+        :type start_line: int
         :return: the atom
         :rtype: Atom
         """
@@ -478,6 +491,15 @@ class NeuralLogParser:
 
         return solved_parts
 
+    def get_clauses(self):
+        """
+        Gets the clauses parsed by the parser.
+
+        :return: the parsed clauses
+        :rtype: collections.Iterable[Clause]
+        """
+        return self.clauses[0]
+
     def p_program(self, p):
         """program : statement
                    | program statement"""
@@ -658,34 +680,3 @@ class NeuralLogParser:
     # noinspection PyMissingOrEmptyDocstring
     def p_error(self, p):
         logger.warning("Syntax error in input:\t%s", p)
-
-
-# if __name__ == "__main__":
-#     config_log(logging.INFO)
-#     start_func = time.process_time()
-#     # data = open("family/inputs.pl").read()
-#     # input_file = sys.argv[1]
-#     input_file = "test/resources/big_input.pl"
-#     logger.info("Reading input file:\t%s", input_file)
-#     nl_lexer = NeuralLogLexer()
-#     # lexer.build()
-#     # lexer.test(data)
-#     parser = NeuralLogParser(nl_lexer)
-#     parser.parse(input_file)
-#
-#     end_func = time.process_time()
-#
-#     logger.info("Lexer time:\t%0.3fs", end_func - start_func)
-#
-#     logger.debug("\n\nConstant(s) (%d):", len(parser.constants))
-#     for c in parser.constants:
-#         logger.debug(c)
-#
-#     logger.debug("\n\nPredicate(s) (%d):", len(parser.predicates))
-#     for pred in parser.predicates:
-#         logger.debug(pred)
-#
-#     logger.debug("\n\nClause(s) (%d):", len(parser.clauses[0]))
-#     for c in parser.clauses[0]:
-#         # logger.debug(c)
-#         logger.debug("%s:\t%s", c.provenance, c)

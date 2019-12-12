@@ -383,6 +383,7 @@ class LinkPredictionCallback(AbstractNeuralLogCallback):
                     positive_objects = np.reshape(np.argwhere(y_true > 0.0), -1)
                     if len(positive_objects) == 0:
                         continue
+                    # noinspection PyTypeChecker
                     filtered_objects = \
                         self.filtered_objects[i].get(subject_index, set())
 

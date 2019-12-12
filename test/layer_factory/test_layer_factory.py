@@ -6,7 +6,6 @@ import unittest
 
 import numpy as np
 import tensorflow as tf
-from antlr4 import FileStream, CommonTokenStream
 
 from src.knowledge.program import NeuralLogProgram
 from src.language.language import Atom
@@ -28,23 +27,10 @@ class TestLayerFactory(unittest.TestCase):
     # noinspection PyMissingOrEmptyDocstring
     @classmethod
     def setUpClass(cls) -> None:
-        # Create the lexer
-        # lexer = NeuralLogLexer(FileStream("layer_factory.pl", "utf-8"))
-        # # Perform the lexer analysis
-        # stream = CommonTokenStream(lexer)
-        # # Create the parser
-        # parser = NeuralLogParser(stream)
-        # # Parse the tokens from the input
-        # abstract_syntax_tree = parser.program()
-        # # Create the Tree transverse
-        # transverse = NeuralLogTransverse()
-        # # Transverse the Abstract Syntax Tree
-        # clauses = transverse(abstract_syntax_tree)
-
         lexer = NeuralLogLexer()
         parser = NeuralLogParser(lexer)
-        parser.parse("layer_factory.pl")
-        clauses = parser.clauses[0]
+        parser.parse("layer_factory/layer_factory.pl")
+        clauses = parser.get_clauses()
         # Create the NeuralLog Program
         cls.program = NeuralLogProgram()
         cls.program.add_clauses(clauses)

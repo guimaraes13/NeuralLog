@@ -94,6 +94,7 @@ class LossMaskWrapper:
                                self.loss_function.__repr__())
 
 
+# noinspection PyTypeChecker
 def print_neural_log_predictions(model, neural_program, dataset,
                                  writer=sys.stdout):
     """

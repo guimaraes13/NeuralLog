@@ -391,7 +391,7 @@ class NeuralLogTransverse:
             predicate = clause.atom.predicate
         if not predicate.is_template() and not clause.is_template():
             self.predicates.add(predicate)
-        clause.set_provenance(get_clause_provenance_from_context(node))
+        clause.set_provenance(build_clause_provenance_from_context(node))
 
     def process_atom(self, atom):
         """
@@ -410,7 +410,7 @@ class NeuralLogTransverse:
         predicate.arity = len(arguments)
 
         return Atom(predicate, *arguments,
-                    provenance=get_clause_provenance_from_context(atom))
+                    provenance=build_clause_provenance_from_context(atom))
 
     def process_weighted_atom(self, weighted_atom):
         """
@@ -426,7 +426,7 @@ class NeuralLogTransverse:
         # weighted_atom.getChild(1).getText(): "::"
         atom = self.process_atom(weighted_atom.getChild(2))
         atom.weight = weight
-        atom.set_provenance(get_clause_provenance_from_context(weighted_atom))
+        atom.set_provenance(build_clause_provenance_from_context(weighted_atom))
         return atom
 
     def process_horn_clause(self, horn_clause):
@@ -678,6 +678,7 @@ class NeuralLogTransverse:
                 (isinstance(term, Quote) and term.is_constant()):
             self.constants.add(term)
 
+    # noinspection DuplicatedCode
     def expand_placeholders(self):
         """
         Expands the placeholders from the Horn clauses.
@@ -812,7 +813,15 @@ def get_file_source(context):
     return None
 
 
-def get_clause_provenance_from_context(context):
+def build_clause_provenance_from_context(context):
+    """
+    Builds the clause provenance from the clause context
+
+    :param context: the context
+    :type context: NeuralLogParser.ParserRuleContext
+    :return: the clause provenance
+    :rtype: ClauseProvenance
+    """
     start_line = context.start.line
     filename = get_file_source(context)
 

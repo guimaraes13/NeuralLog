@@ -15,7 +15,6 @@ from tensorflow.python.keras.callbacks import TensorBoard
 from src.knowledge.program import NeuralLogProgram, BiDict, \
     get_predicate_from_string, print_neural_log_program, DEFAULT_PARAMETERS
 from src.language.language import Predicate
-from src.language.parser.neural_log_listener import NeuralLogTransverse
 from src.language.parser.ply.neural_log_parser import NeuralLogParser, \
     NeuralLogLexer
 from src.network.callbacks import EpochLogger, get_neural_log_callback, \
@@ -95,7 +94,7 @@ def get_clauses(filepath):
     lexer = NeuralLogLexer()
     parser = NeuralLogParser(lexer)
     parser.parse(filepath)
-    clauses = parser.clauses[0]
+    clauses = parser.get_clauses()
     end_func = time.process_time()
 
     logger.info("File:\t%s", filepath)
@@ -732,6 +731,7 @@ class Train(Command):
                 metric = METRIC_FILE_PREFIX + metric
                 metric_path = os.path.join(self.output_path,
                                            "{}.txt".format(metric))
+                # noinspection PyTypeChecker
                 np.savetxt(metric_path, array, fmt="%0.8f")
 
         if not self.train and self.load_model is None:

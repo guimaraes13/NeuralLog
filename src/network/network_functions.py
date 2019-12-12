@@ -362,6 +362,7 @@ class FactLayer(AbstractFactLayer):
         """
         self.kernel = kernel
         self.fact_combining_function = fact_combining_function
+        self.rank = self.kernel.shape.rank
         super(FactLayer, self).__init__(name, **kwargs)
 
     def get_kernel(self):
@@ -401,6 +402,8 @@ class FactLayer(AbstractFactLayer):
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
+        if self.rank == 2 and inputs.shape.rank == 0:
+            inputs = tf.fill([1, self.get_kernel().shape[0]], inputs)
         return self.fact_combining_function(inputs, self.get_kernel())
 
 
