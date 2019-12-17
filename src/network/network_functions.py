@@ -402,9 +402,13 @@ class FactLayer(AbstractFactLayer):
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
-        if self.rank == 2 and inputs.shape.rank == 0:
-            inputs = tf.fill([1, self.get_kernel().shape[0]], inputs)
-        return self.fact_combining_function(inputs, self.get_kernel())
+        # TODO: check if the if below is necessary
+        # if self.rank == 2 and inputs.shape.rank == 0:
+        #     inputs = tf.fill([1, self.get_kernel().shape[0]], inputs)
+        try:
+            return self.fact_combining_function(inputs, self.get_kernel())
+        except Exception as e:
+            raise e
 
 
 class DiagonalFactLayer(FactLayer):
@@ -429,10 +433,9 @@ class DiagonalFactLayer(FactLayer):
         :param kwargs: additional arguments
         :type kwargs: dict[str, Any]
         """
+        kernel = tf.linalg.tensor_diag_part(kernel)
         super(DiagonalFactLayer, self).__init__(
             name, kernel, fact_combining_function, **kwargs)
-        self.kernel = tf.linalg.tensor_diag_part(
-            super(DiagonalFactLayer, self).get_kernel())
 
 
 class InvertedFactLayer(FactLayer):
@@ -455,6 +458,7 @@ class InvertedFactLayer(FactLayer):
         """
         name = fact_layer.name + "_inv"
         self.kernel = fact_layer.get_kernel()
+        self.kernel_rank = self.kernel.shape.rank
         self.fact_combining_function = fact_layer.fact_combining_function
         self._adjust_for_inverted_fact(layer_factory, predicate)
         super(InvertedFactLayer, self).__init__(
@@ -471,7 +475,7 @@ class InvertedFactLayer(FactLayer):
         :type predicate: Predicate
         """
         sparse = isinstance(self.kernel, tf.SparseTensor)
-        if self.kernel.shape.rank == 1:
+        if self.kernel_rank == 1:
             self.fact_combining_function = \
                 factory.get_edge_combining_function_2d(predicate, sparse)
             if sparse:
@@ -488,6 +492,14 @@ class InvertedFactLayer(FactLayer):
             self.fact_combining_function = \
                 factory.get_edge_combining_function(predicate)
             self.kernel = tf.reshape(self.kernel, [-1])
+
+    # TODO: check if this is necessary, after fixing the rules with same
+    #  variables in the head
+    # # noinspection PyMissingOrEmptyDocstring
+    # def call(self, inputs, **kwargs):
+    #     if self.kernel_rank == 2 and inputs.shape.rank == 1:
+    #         inputs = tf.reshape(inputs, [1, -1])
+    #     return super(InvertedFactLayer, self).call(inputs)
 
 
 class AttributeFactLayer(FactLayer):

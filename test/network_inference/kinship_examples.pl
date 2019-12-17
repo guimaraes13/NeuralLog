@@ -7,3 +7,6 @@
 1.0::example(grand_mother, maria, sophia).
 
 1.0::example(grand_grand_father, andrew, charlotte).
+
+%0.0::example(wrong_x, andrew, andrew).
+0.0::example(wrong_y, andrew, andrew).

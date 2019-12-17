@@ -2006,7 +2006,8 @@ class TestLayerFactory(unittest.TestCase):
             layer_factory.arity_2_2_trainable_variable_variable.
                 __func__,
             layer_factory.function[key])
-        tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
+        layer = layer_factory.build_atom(atom)
+        tensor = layer(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
         self.assertEqual((layer_factory.constant_size,), evaluated.shape)

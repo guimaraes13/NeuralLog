@@ -45,16 +45,11 @@ age(roberto, 31).
 age(sophia, 47).
 age(victoria, 17).
 
-#father(andrew, james).
 father(andrew, jennifer).
-#father(christopher, arthur).
 father(christopher, victoria).
 father(james, victoria).
-#father(james, colin).
-#father(marco, alfonso).
 father(marco, sophia).
 father(pierro, angela).
-#father(pierro, marco).
 father(roberto, emilio).
 father(roberto, lucia).
 
@@ -109,3 +104,6 @@ den(X, Y) :- norm(X), norm(Y).
 inv_den(X, Y) :- den(X, Y), inverse(Y).
 
 similarity(X, Y) :- num(X, Y), inv_den(X, Y).
+
+#wrong_x(X, Y) :- father(X, X).
+wrong_y(X, Y) :- mother(Y, Y).

@@ -12,7 +12,7 @@ from tensorflow.python import keras
 from tensorflow.python.training.tracking import data_structures
 
 from src.knowledge.program import NeuralLogProgram, NO_EXAMPLE_SET, \
-    ANY_PREDICATE_NAME, find_clause_paths
+    ANY_PREDICATE_NAME, RuleGraph
 from src.language.language import Atom, Term, HornClause, Literal, \
     get_renamed_literal, get_substitution, TooManyArgumentsFunction, \
     get_variable_indices, Predicate, get_renamed_atom, AtomClause
@@ -461,6 +461,10 @@ class NeuralLogNetwork(keras.Model):
                 #  We should also use the other way around, use a rule
                 #  h(X, a) :- ... to predict facts h(X, Y). which will return
                 #  the values for h(X, a); and zero for every Y != a.
+                # TODO: The self._build_specific_rule should also restrict
+                #  the variable range where the variables of the target rule
+                #  are the same;
+                #  for instance, when proving p(X, X) with p(X, Y) :- ...
                 rule = self._build_specific_rule(
                     renamed_literal, inverted, rule, substitution)
                 if rule in input_clauses:
@@ -597,7 +601,9 @@ class NeuralLogNetwork(keras.Model):
             current_atoms = \
                 set() if previous_atoms is None else set(previous_atoms)
             current_atoms.add(clause.head)
-            paths, grounds = find_clause_paths(clause, inverted=inverted)
+            # paths, grounds = find_clause_paths(clause, inverted=inverted)
+            rule_graph = RuleGraph(clause)
+            paths, grounds = rule_graph.find_clause_paths(inverted)
 
             layer_paths = []
             for path in paths:
