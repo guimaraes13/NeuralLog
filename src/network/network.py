@@ -21,16 +21,10 @@ from src.network.layer_factory import LayerFactory, \
 from src.network.network_functions import get_literal_function, \
     get_combining_function, FactLayer, \
     InvertedFactLayer, SpecificFactLayer, LiteralLayer, FunctionLayer, \
-    AnyLiteralLayer, RuleLayer, ExtractUnaryLiteralLayer
-
-# Network part
-# IMPROVE: to try a LALR(1) parser to improve performance
-# QUESTION: Should we move the functional symbols to the end of the path?
-#  if we do, the rule will have the same behaviour, independent of the
-#  order of the literals. If we do not, we will be able to choose the intended
-#  behaviour, based on the order of the literals.
+    AnyLiteralLayer, RuleLayer, ExtractUnaryLiteralLayer, DiagonalRuleLayer
 
 # WARNING: Do not support literals with same variable in the head of rules.
+# WARNING: Do not support constants in the head of rules.
 # WARNING: Do not support literals with constant numbers in the rules.
 
 logger = logging.getLogger()
@@ -273,6 +267,7 @@ class NeuralLogNetwork(keras.Model):
         self.predicates = data_structures.NoDependency(list())
         self.predicate_layers = list()
         self.neutral_element = self._get_edge_neutral_element()
+        self.neutral_element = tf.reshape(self.neutral_element, [1, 1])
         self.inverted_relations = inverted_relations
 
     def get_literal_negation_function(self, predicate):
@@ -461,10 +456,6 @@ class NeuralLogNetwork(keras.Model):
                 #  We should also use the other way around, use a rule
                 #  h(X, a) :- ... to predict facts h(X, Y). which will return
                 #  the values for h(X, a); and zero for every Y != a.
-                # TODO: The self._build_specific_rule should also restrict
-                #  the variable range where the variables of the target rule
-                #  are the same;
-                #  for instance, when proving p(X, X) with p(X, Y) :- ...
                 rule = self._build_specific_rule(
                     renamed_literal, inverted, rule, substitution)
                 if rule in input_clauses:
@@ -503,9 +494,14 @@ class NeuralLogNetwork(keras.Model):
         """
         predicate = literal.predicate
         substitution_terms = dict()
+        last_term = None
+        equal_terms = False
         for generic, specific in substitution.items():
+            equal_terms = last_term == specific or last_term is None
+            last_term = specific
             if not generic.is_constant() and specific.is_constant():
                 substitution_terms[specific] = generic
+
         if len(substitution_terms) > 0:
             source = literal.terms[-1 if inverted else 0]
             destination = literal.terms[0 if inverted else -1]
@@ -536,6 +532,9 @@ class NeuralLogNetwork(keras.Model):
                 output_constant=output_constant,
                 output_extract_function=output_extract_func
             )
+        elif equal_terms and predicate.arity > 1:
+            rule = DiagonalRuleLayer(
+                rule, self.layer_factory.get_and_combining_function(predicate))
         return rule
 
     def get_literal_combining_function(self, literal):

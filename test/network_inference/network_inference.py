@@ -81,6 +81,56 @@ CORRECT = {
         "charlotte": {
             "andrew": 1.0
         }
+    },
+    "wrong_x^{-1}": {
+        "andrew": {
+            "alfonso": 1.0,
+            "arthur": 1.0,
+            "colin": 1.0,
+            "emilio": 1.0,
+            "james": 1.0,
+            "marco": 1.0
+        },
+        "christopher": {
+            "alfonso": 1.0,
+            "arthur": 1.0,
+            "colin": 1.0,
+            "emilio": 1.0,
+            "james": 1.0,
+            "marco": 1.0
+        },
+        "james": {
+            "alfonso": 1.0,
+            "arthur": 1.0,
+            "colin": 1.0,
+            "emilio": 1.0,
+            "james": 1.0,
+            "marco": 1.0
+        },
+        "maria": {
+            "alfonso": 1.0,
+            "arthur": 1.0,
+            "colin": 1.0,
+            "emilio": 1.0,
+            "james": 1.0,
+            "marco": 1.0
+        },
+        "sophia": {
+            "alfonso": 1.0,
+            "arthur": 1.0,
+            "colin": 1.0,
+            "emilio": 1.0,
+            "james": 1.0,
+            "marco": 1.0
+        },
+        "charlotte": {
+            "alfonso": 1.0,
+            "arthur": 1.0,
+            "colin": 1.0,
+            "emilio": 1.0,
+            "james": 1.0,
+            "marco": 1.0
+        }
     }
 }
 

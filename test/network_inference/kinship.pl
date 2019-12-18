@@ -105,5 +105,5 @@ inv_den(X, Y) :- den(X, Y), inverse(Y).
 
 similarity(X, Y) :- num(X, Y), inv_den(X, Y).
 
-#wrong_x(X, Y) :- father(X, X).
+wrong_x(X, Y) :- father(X, X).
 wrong_y(X, Y) :- mother(Y, Y).

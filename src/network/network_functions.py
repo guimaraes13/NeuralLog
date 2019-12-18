@@ -402,13 +402,7 @@ class FactLayer(AbstractFactLayer):
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
-        # TODO: check if the if below is necessary
-        # if self.rank == 2 and inputs.shape.rank == 0:
-        #     inputs = tf.fill([1, self.get_kernel().shape[0]], inputs)
-        try:
-            return self.fact_combining_function(inputs, self.get_kernel())
-        except Exception as e:
-            raise e
+        return self.fact_combining_function(inputs, self.get_kernel())
 
 
 class DiagonalFactLayer(FactLayer):
@@ -492,14 +486,6 @@ class InvertedFactLayer(FactLayer):
             self.fact_combining_function = \
                 factory.get_edge_combining_function(predicate)
             self.kernel = tf.reshape(self.kernel, [-1])
-
-    # TODO: check if this is necessary, after fixing the rules with same
-    #  variables in the head
-    # # noinspection PyMissingOrEmptyDocstring
-    # def call(self, inputs, **kwargs):
-    #     if self.kernel_rank == 2 and inputs.shape.rank == 1:
-    #         inputs = tf.reshape(inputs, [1, -1])
-    #     return super(InvertedFactLayer, self).call(inputs)
 
 
 class AttributeFactLayer(FactLayer):
@@ -973,6 +959,64 @@ class RuleLayer(NeuralLogLayer):
         return True
 
 
+class DiagonalRuleLayer(NeuralLogLayer):
+    """
+    Class to extract the value of rules with same variables in the head.
+    """
+
+    def __init__(self, rule_layer, combining_function, **kwargs):
+        """
+        Creates a DiagonalRuleLayer.
+
+        :param name: the name of the layer
+        :type name: str
+        :param rule_layer: the rule layer
+        :type rule_layer: RuleLayer
+        :param combining_function: the combining function
+        :type combining_function: function
+        :param kwargs: additional arguments
+        :type kwargs: dict[str, Any]
+        """
+        name = rule_layer.name + "_diagonal"
+        self.rule_layer = rule_layer
+        self.combining_function = combining_function
+        super(DiagonalRuleLayer, self).__init__(name, **kwargs)
+
+    # noinspection PyMissingOrEmptyDocstring
+    def call(self, inputs, **kwargs):
+        result = self.rule_layer(inputs)
+        return self.combining_function(inputs, result)
+
+    # noinspection PyMissingOrEmptyDocstring
+    def compute_output_shape(self, input_shape):
+        return self.rule_layer.compute_output_shape(input_shape)
+
+    # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
+    def get_config(self):
+        return super(DiagonalRuleLayer, self).get_config()
+
+    # noinspection PyMissingOrEmptyDocstring
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
+
+    def __hash__(self):
+        return hash(("_diagonal", self.rule_layer))
+
+    # noinspection DuplicatedCode
+    def __eq__(self, other):
+        if not isinstance(other, DiagonalRuleLayer):
+            return False
+
+        if self.rule_layer != other.rule_layer:
+            return False
+
+        if self.combining_function is not other.combining_function:
+            return False
+
+        return True
+
+
 class ExtractUnaryLiteralLayer(NeuralLogLayer):
     """
     Class to extract the value of a unary literal predicate prediction.
@@ -1016,7 +1060,7 @@ class ExtractUnaryLiteralLayer(NeuralLogLayer):
         return cls(**config)
 
     def __hash__(self):
-        return hash(self.literal_layer)
+        return hash(("_extract_unary", self.literal_layer))
 
     # noinspection DuplicatedCode
     def __eq__(self, other):
