@@ -1,10 +1,11 @@
 """
 Compiles the language into a neural network.
 """
+import inspect
 import logging
 import sys
 from collections import OrderedDict
-from typing import Dict, Set, List, Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 import tensorflow as tf
@@ -21,7 +22,8 @@ from src.network.layer_factory import LayerFactory, \
 from src.network.network_functions import get_literal_function, \
     get_combining_function, FactLayer, \
     InvertedFactLayer, SpecificFactLayer, LiteralLayer, FunctionLayer, \
-    AnyLiteralLayer, RuleLayer, ExtractUnaryLiteralLayer, DiagonalRuleLayer
+    AnyLiteralLayer, RuleLayer, ExtractUnaryLiteralLayer, DiagonalRuleLayer, \
+    EmptyLayer
 
 # WARNING: Do not support literals with same variable in the head of rules.
 # WARNING: Do not support constants in the head of rules.
@@ -269,6 +271,20 @@ class NeuralLogNetwork(keras.Model):
         self.neutral_element = self._get_edge_neutral_element()
         self.neutral_element = tf.reshape(self.neutral_element, [1, 1])
         self.inverted_relations = inverted_relations
+        self.empty_layer = EmptyLayer("empty")
+
+    def get_recursion_depth(self, predicate=None):
+        """
+        Gets the maximum recursion depth for the predicate.
+
+        :param predicate: the predicate
+        :type predicate: Predicate
+        :return: the maximum recursion depth
+        :rtype: int
+        """
+        value = self.program.get_parameter_value("recursion_depth", predicate)
+        sys.setrecursionlimit(max(1000, 15 * value))
+        return value
 
     def get_literal_negation_function(self, predicate):
         """
@@ -346,7 +362,7 @@ class NeuralLogNetwork(keras.Model):
                                        *list(map(lambda x: "X{}".format(x),
                                                  range(predicate.arity)))))
                 if (predicate, False) not in self.predicates:
-                    predicate_layer = self._build_literal(literal)
+                    predicate_layer = self._build_literal(literal, dict())
                     if predicate.arity == 1:
                         combining_func = \
                             self.get_unary_literal_extraction_function(
@@ -358,7 +374,7 @@ class NeuralLogNetwork(keras.Model):
                 key = (predicate, True)
                 if self.inverted_relations and predicate.arity == 2 and \
                         key not in self.predicates:
-                    predicate_layer = self._build_literal(literal,
+                    predicate_layer = self._build_literal(literal, dict(),
                                                           inverted=True)
                     self.predicates.append(key)
                     self.predicate_layers.append(predicate_layer)
@@ -393,14 +409,14 @@ class NeuralLogNetwork(keras.Model):
         return tf.TensorShape(shape)
 
     # noinspection PyMissingOrEmptyDocstring
-    def _build_literal(self, atom, previous_atoms=None, inverted=False):
+    def _build_literal(self, atom, predicates_depths, inverted=False):
         """
         Builds the layer for the literal.
 
         :param atom: the atom
         :type atom: Atom
-        :param previous_atoms: the previous literals
-        :type previous_atoms: Set[Atom] or None
+        :param predicates_depths: the depths of the predicates
+        :type predicates_depths: dict[Predicate, int]
         :param inverted: if `True`, creates the inverted literal; this is,
             a literal in the format (output, input). If `False`, creates the
             standard (input, output) literal format.
@@ -414,23 +430,26 @@ class NeuralLogNetwork(keras.Model):
         if literal_layer is None:
             if atom.predicate in self.program.logic_predicates:
                 logger.debug("Building layer for literal: %s", renamed_literal)
+                predicates_depths.setdefault(atom.predicate, -1)
+                predicates_depths[atom.predicate] += 1
                 literal_layer = self._build_logic_literal_layer(
-                    renamed_literal, previous_atoms, inverted)
+                    renamed_literal, predicates_depths, inverted)
+                predicates_depths[atom.predicate] -= 1
             else:
                 logger.debug("Building layer for function: %s", renamed_literal)
                 literal_layer = self._build_function_layer(renamed_literal)
             self._literal_layers[key] = literal_layer
         return literal_layer
 
-    def _build_logic_literal_layer(self, renamed_literal, previous_atoms,
+    def _build_logic_literal_layer(self, renamed_literal, predicates_depths,
                                    inverted):
         """
         Builds the logic literal layer.
 
         :param renamed_literal: the renamed literal
         :type renamed_literal: Atom
-        :param previous_atoms: the previous atoms
-        :type previous_atoms: list[Atom] or set[Atom]
+        :param predicates_depths: the depths of the predicates
+        :type predicates_depths: dict[Predicate, int]
         :param inverted: if `True`, creates the inverted literal; this is,
             a literal in the format (output, input). If `False`, creates the
             standard (input, output) literal format.
@@ -438,8 +457,9 @@ class NeuralLogNetwork(keras.Model):
         :return: the literal layer
         :rtype: LiteralLayer
         """
-        inputs = [self._build_fact(renamed_literal, inverted=inverted)]
-        if not is_cyclic(renamed_literal, previous_atoms):
+        depth = predicates_depths[renamed_literal.predicate] - 1
+        if depth < self.get_recursion_depth(renamed_literal.predicate):
+            inputs = [self._build_fact(renamed_literal, inverted=inverted)]
             input_clauses = dict()  # type: Dict[RuleLayer, HornClause]
             for clause in self.program.clauses_by_predicate.get(
                     renamed_literal.predicate, []):
@@ -448,7 +468,7 @@ class NeuralLogNetwork(keras.Model):
                 substitution = get_substitution(clause.head, renamed_literal)
                 if substitution is None:
                     continue
-                rule = self._build_rule(clause, previous_atoms, inverted)
+                rule = self._build_rule(clause, predicates_depths, inverted)
                 if rule is None:
                     continue
                 # TODO: Here we only use a generic rule to predict a specific
@@ -463,6 +483,10 @@ class NeuralLogNetwork(keras.Model):
                     continue
                 input_clauses[rule] = clause
                 inputs.append(rule)
+        else:
+            print("Depth: {}\tStack: {}\tLimit: {}".format(
+                depth, len(inspect.stack()), sys.getrecursionlimit()))
+            inputs = [self.empty_layer]
 
         combining_func = self.get_literal_combining_function(renamed_literal)
         negation_function = None
@@ -470,7 +494,8 @@ class NeuralLogNetwork(keras.Model):
             negation_function = self.get_literal_negation_function(
                 renamed_literal.predicate)
         return LiteralLayer(
-            "literal_layer_{}".format(
+            "literal_layer_{}_{}".format(
+                depth,
                 get_standardised_name(renamed_literal.__str__())), inputs,
             combining_func, negation_function=negation_function)
 
@@ -578,14 +603,14 @@ class NeuralLogNetwork(keras.Model):
             get_standardised_name(renamed_literal.__str__()))
         return FunctionLayer(name, function_value, inputs=inputs)
 
-    def _build_rule(self, clause, previous_atoms=None, inverted=False):
+    def _build_rule(self, clause, predicates_depths, inverted=False):
         """
         Builds the Rule Node.
 
         :param clause: the clause
         :type clause: HornClause
-        :param previous_atoms: the previous atoms
-        :type previous_atoms: Set[Atom] or None
+        :param predicates_depths: the depths of the predicates
+        :type predicates_depths: dict[Predicate, int]
         :param inverted: if `True`, creates the layer for the inverted rule;
             this is, the rule in the format (output, input). If `False`,
             creates the layer for standard (input, output) rule format.
@@ -597,10 +622,11 @@ class NeuralLogNetwork(keras.Model):
         rule_layer = self._rule_layers.get(key, None)
         if rule_layer is None:
             logger.debug("Building layer for rule: %s", clause)
-            current_atoms = \
-                set() if previous_atoms is None else set(previous_atoms)
-            current_atoms.add(clause.head)
-            # paths, grounds = find_clause_paths(clause, inverted=inverted)
+            # current_atoms = \
+            #     set() if previous_atoms is None else set(previous_atoms)
+            # current_atoms.add(clause.head)
+            # previous_atoms.setdefault(clause.head.predicate, 0)
+            # previous_atoms[clause.head.predicate] += 1
             rule_graph = RuleGraph(clause)
             paths, grounds = rule_graph.find_clause_paths(inverted)
 
@@ -612,14 +638,15 @@ class NeuralLogNetwork(keras.Model):
                         literal_layer = self._get_any_literal()
                     else:
                         literal_layer = self._build_literal(
-                            path[i], current_atoms, path.inverted[i])
+                            path[i], predicates_depths, path.inverted[i])
                     layer_path.append(literal_layer)
                 layer_paths.append(layer_path)
 
             grounded_layers = []
             for grounded in grounds:
-                literal_layer = self._build_literal(grounded, current_atoms)
+                literal_layer = self._build_literal(grounded, predicates_depths)
                 grounded_layers.append(literal_layer)
+            # previous_atoms[clause.head.predicate] -= 1
             layer_name = "rule_layer_{}".format(
                 get_standardised_name(clause.__str__()))
             rule_layer = \

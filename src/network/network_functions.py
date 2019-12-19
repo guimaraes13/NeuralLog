@@ -313,6 +313,39 @@ class NeuralLogLayer(keras.layers.Layer):
     __repr__ = __str__
 
 
+class EmptyLayer(NeuralLogLayer):
+    """
+    Represents an EmptyLayer.
+    """
+
+    def __init__(self, name, **kwargs):
+        super(EmptyLayer, self).__init__(name, **kwargs)
+        self.zero = tf.constant(0.0)
+
+    # noinspection PyMissingOrEmptyDocstring
+    def call(self, inputs, **kwargs):
+        return tf.multiply(inputs, self.zero)
+
+    # noinspection PyMissingOrEmptyDocstring
+    def compute_output_shape(self, input_shape):
+        return tf.TensorShape(input_shape)
+
+    # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
+    def get_config(self):
+        return super(EmptyLayer, self).get_config()
+
+    # noinspection PyMissingOrEmptyDocstring,PyShadowingNames
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
+
+    def __hash__(self):
+        return hash("empty")
+
+    def __eq__(self, other):
+        return isinstance(other, EmptyLayer)
+
+
 class AbstractFactLayer(NeuralLogLayer):
     """
     Represents an abstract fact layer.
@@ -731,7 +764,7 @@ class LiteralLayer(NeuralLogLayer):
 
     def __hash__(self):
         if self.negation_function is None and len(self.input_layers) == 1:
-            return hash(self.input_layers[0].fact_combining_function)
+            return hash(self.input_layers[0])
 
         return hash(tuple(self.input_layers) +
                     (self.literal_combining_function, self.negation_function))

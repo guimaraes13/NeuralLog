@@ -1744,6 +1744,8 @@ DEFAULT_PARAMETERS = [
      "initialize facts from learnable predicates that are not in the "
      "knowledge base."),
 
+    ("recursion_depth", 10, "the maximum recursion depth for the predicate."),
+
     ("literal_negation_function", "literal_negation_function",
      "function to get the value of a negated literal from the non-negated "
      "one"),
