@@ -1,7 +1,6 @@
 """
 Compiles the language into a neural network.
 """
-import inspect
 import logging
 import sys
 from collections import OrderedDict
@@ -28,6 +27,12 @@ from src.network.network_functions import get_literal_function, \
 # WARNING: Do not support literals with same variable in the head of rules.
 # WARNING: Do not support constants in the head of rules.
 # WARNING: Do not support literals with constant numbers in the rules.
+
+# TODO: For now, we only use a generic rule to predict a specific
+#  fact. For instance, h(X, Y) :- ... to predict h(X, a).
+#  We should also use the other way around, use a rule
+#  h(X, a) :- ... to predict facts h(X, Y). which will return
+#  the values for h(X, a); and zero for every Y != a.
 
 logger = logging.getLogger()
 
@@ -283,7 +288,7 @@ class NeuralLogNetwork(keras.Model):
         :rtype: int
         """
         value = self.program.get_parameter_value("recursion_depth", predicate)
-        sys.setrecursionlimit(max(1000, 15 * value))
+        sys.setrecursionlimit(max(sys.getrecursionlimit(), 15 * value))
         return value
 
     def get_literal_negation_function(self, predicate):
@@ -348,12 +353,10 @@ class NeuralLogNetwork(keras.Model):
         function = get_combining_function(combining_function)
         return AnyLiteralLayer("literal_layer_any-X0-X1-", function)
 
-    # noinspection PyMissingOrEmptyDocstring
-    # def build(self, input_shape):
-    #     self.build_layers()
-    #     super(NeuralLogNetwork, self).build(input_shape)
-
     def build_layers(self):
+        """
+        Builds the layers of the network.
+        """
         for example_set in self.program.examples.values():
             for predicate in example_set:
                 logger.debug("Building output layer for predicate: %s",
@@ -471,11 +474,6 @@ class NeuralLogNetwork(keras.Model):
                 rule = self._build_rule(clause, predicates_depths, inverted)
                 if rule is None:
                     continue
-                # TODO: Here we only use a generic rule to predict a specific
-                #  fact. For instance, h(X, Y) :- ... to predict h(X, a).
-                #  We should also use the other way around, use a rule
-                #  h(X, a) :- ... to predict facts h(X, Y). which will return
-                #  the values for h(X, a); and zero for every Y != a.
                 rule = self._build_specific_rule(
                     renamed_literal, inverted, rule, substitution)
                 if rule in input_clauses:
@@ -484,8 +482,6 @@ class NeuralLogNetwork(keras.Model):
                 input_clauses[rule] = clause
                 inputs.append(rule)
         else:
-            print("Depth: {}\tStack: {}\tLimit: {}".format(
-                depth, len(inspect.stack()), sys.getrecursionlimit()))
             inputs = [self.empty_layer]
 
         combining_func = self.get_literal_combining_function(renamed_literal)
@@ -622,11 +618,6 @@ class NeuralLogNetwork(keras.Model):
         rule_layer = self._rule_layers.get(key, None)
         if rule_layer is None:
             logger.debug("Building layer for rule: %s", clause)
-            # current_atoms = \
-            #     set() if previous_atoms is None else set(previous_atoms)
-            # current_atoms.add(clause.head)
-            # previous_atoms.setdefault(clause.head.predicate, 0)
-            # previous_atoms[clause.head.predicate] += 1
             rule_graph = RuleGraph(clause)
             paths, grounds = rule_graph.find_clause_paths(inverted)
 
@@ -646,7 +637,6 @@ class NeuralLogNetwork(keras.Model):
             for grounded in grounds:
                 literal_layer = self._build_literal(grounded, predicates_depths)
                 grounded_layers.append(literal_layer)
-            # previous_atoms[clause.head.predicate] -= 1
             layer_name = "rule_layer_{}".format(
                 get_standardised_name(clause.__str__()))
             rule_layer = \

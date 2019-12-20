@@ -613,7 +613,8 @@ class RuleGraph:
         visited_literals = set()
         paths = self.find_forward_paths(source, destination, visited_literals)
 
-        if self.clause.head.predicate.arity > 1:
+        if self.clause.head.predicate.arity > 1 and \
+                not visited_literals.issuperset(self.clause.body):
             # Finding backward paths
             source, destination = destination, source
             backward_paths = self.find_forward_paths(source, destination,
@@ -671,6 +672,9 @@ class RuleGraph:
             new_path = initial_path.new_path_with_item(literal)
             if new_path is not None:
                 visited_literals.add(literal)
+                for loop in self.loops.get(new_path.path_end(), []):
+                    new_path.append(loop)
+                    visited_literals.add(loop)
                 partial_paths.append(new_path)
         if len(partial_paths) == 0:
             partial_paths.append(initial_path)

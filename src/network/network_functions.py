@@ -270,6 +270,19 @@ def mean(a):
     return tf.reshape(sum_a / non_zero, [-1, 1])
 
 
+@neural_log_literal_function("normalize")
+def normalize(a):
+    """
+    Returns the normalized vector `a / sum(a)`.
+
+    :param a: the input vector
+    :type a: tf.Tensor
+    :return: the normalized vector
+    :rtype: tf.Tensor
+    """
+    return tf.math.divide_no_nan(a, tf.reduce_sum(a))
+
+
 @neural_log_literal_function("square_root")
 def square_root(a):
     """
