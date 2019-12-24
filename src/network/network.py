@@ -97,7 +97,7 @@ class LossMaskWrapper:
 
 # noinspection PyTypeChecker
 def print_neural_log_predictions(model, neural_program, dataset,
-                                 writer=sys.stdout):
+                                 writer=sys.stdout, set_name=None):
     """
     Prints the predictions of `model` to `writer`.
 
@@ -120,8 +120,9 @@ def print_neural_log_predictions(model, neural_program, dataset,
                 output_scores = y_scores[i]
             else:
                 output_scores = y_scores
+
             for feature, y_score in zip(features, output_scores):
-                x = features.numpy()
+                x = feature.numpy()
                 subject_index = np.argmax(x)
                 subject = neural_program.iterable_constants[subject_index]
                 if predicate.arity == 1:
@@ -129,16 +130,27 @@ def print_neural_log_predictions(model, neural_program, dataset,
                                              weight=float(y_score)))
                     print(clause, file=writer)
                 else:
-                    clause = AtomClause(Atom(predicate, subject, "X"))
-                    print("%%", clause, file=writer, sep=" ")
+                    clauses = []
                     for index in range(len(y_score)):
                         object_term = neural_program.iterable_constants[index]
-                        clause = AtomClause(Atom(predicate,
-                                                 subject, object_term,
-                                                 weight=float(y_score[index])))
-                        print(clause, file=writer)
-            print(file=writer)
-        print(file=writer)
+                        prediction = Atom(predicate, subject, object_term,
+                                          weight=float(y_score[index]))
+                        if set_name is not None and \
+                                prediction.simple_key() not in \
+                                neural_program.examples[set_name][predicate]:
+                            continue
+                        clauses.append(AtomClause(prediction))
+
+                    if len(clauses) > 0:
+                        clause = AtomClause(Atom(predicate, subject, "X"))
+                        print("%%", clause, file=writer, sep=" ")
+                        for clause in sorted(
+                                clauses,
+                                key=lambda x: x.atom.weight,
+                                reverse=True):
+                            print(clause, file=writer)
+                        print(file=writer)
+            # print(file=writer)
 
 
 def is_cyclic(atom, previous_atoms):
@@ -251,7 +263,7 @@ class NeuralLogNetwork(keras.Model):
 
     predicates: List[Tuple[Predicate, bool]]
 
-    def __init__(self, program, train=True, inverted_relations=True):
+    def __init__(self, program, train=True, inverse_relations=True):
         """
         Creates a NeuralLogNetwork.
 
@@ -261,9 +273,9 @@ class NeuralLogNetwork(keras.Model):
         trainable/learnable, this is useful to build neural networks for
         inference only. In this way, the unknown facts will be treated as
         zeros, instead of being randomly initialized
-        :param inverted_relations: if `True`, also creates the layers for the
+        :param inverse_relations: if `True`, also creates the layers for the
         inverse relations.
-        :type inverted_relations: bool
+        :type inverse_relations: bool
         :type train: bool
         """
         super(NeuralLogNetwork, self).__init__(name="NeuralLogNetwork")
@@ -275,7 +287,7 @@ class NeuralLogNetwork(keras.Model):
         self.predicate_layers = list()
         self.neutral_element = self._get_edge_neutral_element()
         self.neutral_element = tf.reshape(self.neutral_element, [1, 1])
-        self.inverted_relations = inverted_relations
+        self.inverse_relations = inverse_relations
         self.empty_layer = EmptyLayer("empty")
 
     def get_recursion_depth(self, predicate=None):
@@ -375,7 +387,7 @@ class NeuralLogNetwork(keras.Model):
                     self.predicates.append((predicate, False))
                     self.predicate_layers.append(predicate_layer)
                 key = (predicate, True)
-                if self.inverted_relations and predicate.arity == 2 and \
+                if self.inverse_relations and predicate.arity == 2 and \
                         key not in self.predicates:
                     predicate_layer = self._build_literal(literal, dict(),
                                                           inverted=True)
@@ -490,8 +502,7 @@ class NeuralLogNetwork(keras.Model):
             negation_function = self.get_literal_negation_function(
                 renamed_literal.predicate)
         return LiteralLayer(
-            "literal_layer_{}_{}".format(
-                depth,
+            "literal_layer_{}".format(
                 get_standardised_name(renamed_literal.__str__())), inputs,
             combining_func, negation_function=negation_function)
 

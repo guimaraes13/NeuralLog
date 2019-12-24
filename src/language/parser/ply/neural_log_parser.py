@@ -236,9 +236,31 @@ class NeuralLogParser:
                 if self.is_valid(new_clause):
                     expanded_clauses.append(new_clause)
                     self.predicates.add(new_clause.head.predicate)
+                    predicates_names.add(new_clause.head.predicate.get_name())
+                    self.add_constant_names_to_set(clause, constants_names)
                     self.add_constants(new_clause)
         self.clauses.clear()
         self.clauses.append(expanded_clauses)
+
+    def add_constant_names_to_set(self, clause, constants_set):
+        """
+        Adds the constant from the clause to `constants_set`
+        :param clause: the clause
+        :type clause: HornClause
+        :param constants_set: the set of constants
+        :type constants_set: set[Term]
+        """
+        for term in clause.head:
+            if isinstance(term, Constant) or \
+                    (isinstance(term,
+                                Quote) and term.is_constant()):
+                constants_set.add(term.get_name())
+        for literal in clause.body:
+            for term in literal.terms:
+                if isinstance(term, Constant) or \
+                        (isinstance(term,
+                                    Quote) and term.is_constant()):
+                    constants_set.add(term.get_name())
 
     def is_valid(self, clause):
         """
@@ -519,12 +541,12 @@ class NeuralLogParser:
         p[0] = (p[2], p[4])
         self.for_context.append(p[0])
         self.clauses.append(deque())
-        logger.debug("for_loop_init:\t%s", p[0])
+        logger.log(5, "for_loop_init:\t%s", p[0])
 
     def p_for_loop_end(self, p):
         """for_loop_end : DONE_TOKEN"""
         p[0] = self.solve_for_context()
-        logger.debug("for_loop_end:\t%s", p[0])
+        logger.log(5, "for_loop_end:\t%s", p[0])
 
     def p_for_header_terms(self, p):
         """for_header : for_terms"""
@@ -540,14 +562,14 @@ class NeuralLogParser:
         clause = AtomClause(p[1])
         p[0] = clause
         self.clauses[-1].append(clause)
-        logger.debug("clause:\t%s", p[0])
+        logger.log(5, "clause:\t%s", p[0])
 
     def p_clause(self, p):
         """clause : horn_clause END_OF_CLAUSE"""
         clause = p[1]
         p[0] = clause
         self.clauses[-1].append(clause)
-        logger.debug("clause:\t%s", p[0])
+        logger.log(5, "clause:\t%s", p[0])
 
     def p_propositional_atom(self, p):
         """atom : predicate"""
@@ -579,39 +601,51 @@ class NeuralLogParser:
                      | PLACE_HOLDER"""
         p[0] = [p[1]]
         p.set_lineno(0, p.lineno(1))
-        logger.debug("predicate:\t%s", p[0])
+        logger.log(5, "predicate:\t%s", p[0])
+
+    def p_predicate_int(self, p):
+        """predicate : INTEGER"""
+        p[0] = [str(p[1])]
+        p.set_lineno(0, p.lineno(1))
+        logger.log(5, "predicate:\t%s", p[0])
 
     def p_r_predicate(self, p):
         """predicate : predicate TERM
                      | predicate PLACE_HOLDER"""
         p[0] = p[1] + [p[2]]
         p.set_lineno(0, p.lineno(1))
-        logger.debug("predicate:\t%s", p[0])
+        logger.log(5, "predicate:\t%s", p[0])
+
+    def p_r_predicate_int(self, p):
+        """predicate : predicate INTEGER"""
+        p[0] = p[1] + [str(p[2])]
+        p.set_lineno(0, p.lineno(1))
+        logger.log(5, "predicate:\t%s", p[0])
 
     def p_body(self, p):
         """body : literal"""
         p[0] = [p[1]]
-        logger.debug("body:\t%s", p[0])
+        logger.log(5, "body:\t%s", p[0])
 
     def p_r_body(self, p):
         """body : body ITEM_SEPARATOR literal"""
         p[0] = p[1] + [p[3]]
-        logger.debug("body:\t%s", p[0])
+        logger.log(5, "body:\t%s", p[0])
 
     def p_literal(self, p):
         """literal : atom"""
         p[0] = Literal(p[1], negated=False)
-        logger.debug("literal:\t%s", p[0])
+        logger.log(5, "literal:\t%s", p[0])
 
     def p_n_literal(self, p):
         """literal : NEGATION atom"""
         p[0] = Literal(p[2], negated=True)
-        logger.debug("literal:\t%s", p[0])
+        logger.log(5, "literal:\t%s", p[0])
 
     def p_list_of_arguments(self, p):
         """list_of_arguments : OPEN_ARGUMENTS arguments CLOSE_ARGUMENTS"""
         p[0] = p[2]
-        logger.debug("list_of_arguments:\t%s", p[0])
+        logger.log(5, "list_of_arguments:\t%s", p[0])
 
     def p_arguments(self, p):
         """arguments : argument """
@@ -636,10 +670,18 @@ class NeuralLogParser:
                              | TERM"""
         p[0] = [p[1]]
 
+    def p_place_holder_term_int(self, p):
+        """place_holder_term : INTEGER"""
+        p[0] = [str(p[1])]
+
     def p_r_place_holder_term(self, p):
         """place_holder_term : place_holder_term PLACE_HOLDER
                              | place_holder_term TERM"""
         p[0] = p[1] + [p[2]]
+
+    def p_r_place_holder_term_int(self, p):
+        """place_holder_term : place_holder_term INTEGER"""
+        p[0] = p[1] + [str(p[2])]
 
     def p_for_variable(self, p):
         """for_variable : TERM"""

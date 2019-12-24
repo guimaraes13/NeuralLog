@@ -6,6 +6,7 @@ import re
 from typing import Any, List, Dict, Set, Tuple
 
 import numpy as np
+from sklearn.metrics import roc_auc_score
 import tensorflow as tf
 import tensorflow.keras.callbacks as keras_callbacks
 from tensorflow.keras.callbacks import Callback
@@ -358,7 +359,7 @@ class LinkPredictionCallback(AbstractNeuralLogCallback):
         `k`.
 
         :return: three arrays, one for each metric
-        :rtype: (np.array, np.array, np.array)
+        :rtype: (np.ndarray, np.ndarray, np.ndarray)
         """
         if self.dataset is None:
             return
@@ -441,3 +442,142 @@ class LinkPredictionCallback(AbstractNeuralLogCallback):
             logs[self.mean_rank_name] = weighted_mean_rank
             logs[self.mean_reciprocal_rank_name] = weighted_mrr
             logs[self.top_k_rank_name] = weighted_top_k
+
+
+@neural_log_callback("roc_auc")
+class AreaUnderCurveROC(AbstractNeuralLogCallback):
+    """
+    Evaluates the model against the Area Under the ROC Curve.
+
+    This class appends the evaluation values into the logs dictionary, so other
+    callbacks may use it.
+    """
+
+    # noinspection PyUnusedLocal
+    def __init__(self, train_command, dataset,
+                 positive_label=1.0, negative_label=0.0,
+                 suffix=None, period=1,  **kwargs):
+        """
+        Evaluates the model against the Area Under the ROC Curve.
+
+        :param train_command: the train command instance
+        :type train_command: Train
+        :param dataset: the name of the data set: train, valid or test
+        :type dataset: str
+        :param suffix: the suffix of the metric to append to the history log.
+        :param positive_label: the value of the positive label
+        :type positive_label: float
+        :param negative_label: the value of the negative label
+        :type negative_label: float
+        If `None` the `dataset_name` will be used instead.
+        :type suffix: str or None
+        :param period: the interval (number of epochs) between the
+        evaluation. The default value is `1`.
+        :type period: int
+        """
+        super(AreaUnderCurveROC, self).__init__(train_command)
+        self.dataset_name = dataset
+        if suffix is None:
+            suffix = dataset
+        self.metric_name = "roc_auc_{}".format(suffix)
+        self.dataset = getattr(self.train_command, self.dataset_name)
+        self.positive_label = positive_label
+        self.negative_label = negative_label
+        self.period = period
+        self.epochs_since_last_save = 0
+        self.examples = self._build_examples()
+
+    def _build_examples(self):
+        model = self.train_command.model  # type: NeuralLogNetwork
+        data_examples = model.program.examples[self.dataset_name]
+        examples = dict()
+        # neural_program.examples[set_name][predicate]
+        for predicate, inverted in model.predicates:
+            examples_by_predicate = dict()
+            for example in data_examples[predicate].values():
+                in_term = example.terms[-1 if inverted else 0]
+                out_term = example.terms[0 if inverted else -1]
+                weight = example.weight
+                if weight == self.positive_label:
+                    w = 1
+                elif weight == self.negative_label:
+                    w = 0
+                else:
+                    continue
+                examples_by_predicate.setdefault(in_term, dict())[out_term] = w
+
+            examples[(predicate, inverted)] = examples_by_predicate
+        return examples
+
+    def evaluate(self):
+        """
+        Evaluates the model on the Area Under the ROC Curve.
+
+        For each predicate in the output of the model, it returns
+        two values: (1) the label of the examples; (2) the score of the
+        examples, which is the predictions of the model.
+
+        :return: two arrays, one for scores and other for labels
+        :rtype: dict[(Predicate, bool), (np.ndarray, np.ndarray)]
+        """
+        if self.dataset is None:
+            return
+        results = dict()
+        model = self.train_command.model  # type: NeuralLogNetwork
+        neural_program = model.program
+        for predicate in model.predicates:
+            results[predicate] = ([], [])
+
+        for features, labels in self.dataset:
+            y_scores = self.model.predict(features)
+            for i in range(len(model.predicates)):
+                predicate = model.predicates[i]
+                examples = self.examples[predicate]  # type: dict[Term, dict[Term, int]]
+                result = results[predicate]
+                if isinstance(y_scores, list):
+                    output_scores = y_scores[i]
+                else:
+                    output_scores = y_scores
+                for feature, y_true, y_score in zip(features, labels[i],
+                                                    output_scores):
+                    x = feature.numpy()
+                    subject_index = np.argmax(x)
+                    subject = neural_program.iterable_constants[subject_index]
+                    for obj, label in examples.get(subject, dict()).items():
+                        obj_index = neural_program.index_for_constant(obj)
+                        result[0].append(label)
+                        result[1].append(y_score[obj_index])
+
+        return results
+
+    def on_epoch_end(self, epoch, logs=None):
+        """
+        Method called on the end of each epoch.
+
+        :param epoch: the number of the epoch
+        :type epoch: int
+        :param logs: a dict of data from other callbacks
+        :type logs: dict
+        """
+        self.epochs_since_last_save += 1
+        if logs is None:
+            return
+
+        if self.epochs_since_last_save >= self.period or \
+                self.train_command.epochs == epoch + 1:
+            self.epochs_since_last_save = 0
+            model = self.train_command.model  # type: NeuralLogNetwork
+            metrics = self.evaluate()
+            total = 0
+            total_auc = 0.0
+            for i in range(len(model.predicates)):
+                predicate = model.predicates[i]
+                metric_key = LOG_FORMAT.format(i + 1, self.metric_name)
+                y_true, y_score = metrics[predicate]
+                auc = roc_auc_score(y_true, y_score)
+                logs[metric_key] = auc
+                length = len(y_true)
+                total_auc += auc * length
+                total += length
+
+            logs[self.metric_name] = total_auc / total

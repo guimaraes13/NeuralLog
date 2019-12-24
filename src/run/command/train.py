@@ -258,7 +258,7 @@ class Train(Command):
                    " by using the special\npredicate `set_parameter`."
         arguments = list(map(lambda x: (x[0], x[-1]), DEFAULT_PARAMETERS))
         arguments += [
-            ("inverted_relations", "if `True`, creates also the inverted "
+            ("inverse_relations", "if `True`, creates also the inverted "
                                    "relation for each output predicate. The "
                                    "default value is: "
                                    "{}".format(DEFAULT_INVERTED_RELATIONS)),
@@ -325,6 +325,7 @@ class Train(Command):
         self.parameters.setdefault("batch_size", DEFAULT_BATCH_SIZE)
         self.parameters.setdefault("epochs", DEFAULT_NUMBER_OF_EPOCHS)
         self.parameters.setdefault("validation_period", DEFAULT_VALID_PERIOD)
+        print_args(self.parameters)
 
     def _get_loss_function(self, output_map):
         """
@@ -525,10 +526,10 @@ class Train(Command):
         """
         start_func = time.perf_counter()
         logger.info("Building model...")
-        inverted_relations = self.neural_program.parameters.get(
-            "inverted_relations", DEFAULT_INVERTED_RELATIONS)
+        inverse_relations = self.neural_program.parameters.get(
+            "inverse_relations", DEFAULT_INVERTED_RELATIONS)
         self.model = NeuralLogNetwork(self.neural_program, train=self.train,
-                                      inverted_relations=inverted_relations)
+                                      inverse_relations=inverse_relations)
         self.model.build_layers()
         if self.load_model is not None:
             self.model.load_weights(self.load_model)
@@ -536,7 +537,7 @@ class Train(Command):
         self._read_parameters(self.output_map)
         self._log_parameters(
             ["loss_function", "optimizer", "regularizer", "metrics",
-             "inverted_relations"],
+             "inverse_relations"],
             self.output_map.inverse
         )
         self.model.compile(
@@ -809,7 +810,8 @@ class Train(Command):
         logger.info("\t\t{}:{}{}".format(dataset_name, tab, output))
         output_file = open(output, "w")
         print_neural_log_predictions(
-            self.model, self.neural_program, dataset, writer=output_file)
+            self.model, self.neural_program, dataset, writer=output_file,
+            set_name=dataset_name)
         output_file.close()
 
     def _get_inference_filename(self, prefix, dataset):

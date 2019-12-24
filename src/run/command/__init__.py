@@ -248,10 +248,12 @@ def print_args(args):
         arguments = args
     else:
         arguments = args.__dict__
-    max_key_length = max(map(lambda x: len(x), arguments.keys()))
-    for k, v in sorted(arguments.items()):
+    max_key_length = max(
+        map(lambda x: len(str(x)), arguments.keys()))
+    for k, v in sorted(arguments.items(), key=lambda x: str(x)):
         if hasattr(v, "__len__") and len(v) == 1 and not isinstance(v, dict):
             v = v[0]
+        k = str(k)
         logger.info("%s:%s%s", k,
                     " " * (int((max_key_length - len(k)) / SKIP_SIZE)
                            + INDENT_SIZE), v)

@@ -1192,7 +1192,7 @@ class NeuralLogProgram:
                 self.clauses_by_predicate.setdefault(clause.head.predicate,
                                                      list()).append(clause)
             else:
-                raise ClauseMalformedException()
+                raise ClauseMalformedException(clause)
 
     def _expand_clauses(self):
         expanded_trainable = set()

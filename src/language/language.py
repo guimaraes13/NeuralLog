@@ -249,12 +249,12 @@ class ClauseMalformedException(Exception):
     Represents an term malformed exception.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, clause=None) -> None:
         """
         Creates an term malformed exception.
         """
         super().__init__("Clause malformed, the clause must be an atom, "
-                         "a weighted atom or a Horn clause.")
+                         "a weighted atom or a Horn clause: `{}`".format(clause))
 
 
 class BadArgumentException(Exception):
@@ -360,6 +360,18 @@ class Term:
         if isinstance(other, Term):
             return self.key() == other.key()
         return False
+
+    def __gt__(self, other):
+        return self.key() > other.key()
+
+    def __ge__(self, other):
+        return self.key() >= other.key()
+
+    def __lt__(self, other):
+        return self.key() < other.key()
+
+    def __le__(self, other):
+        return self.key() <= other.key()
 
     def __str__(self):
         return self.value
