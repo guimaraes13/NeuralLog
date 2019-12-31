@@ -266,8 +266,22 @@ def mean(a):
     sum_a = tf.math.reduce_sum(a, axis=1, keepdims=False)
     non_zero = tf.math.count_nonzero(a, axis=1,
                                      keepdims=False, dtype=tf.float32)
-    non_zero = tf.clip_by_value(non_zero, CLIP_VALUE_MIN, TENSOR_FLOAT32_MAX)
-    return tf.reshape(sum_a / non_zero, [-1, 1])
+    result = tf.math.divide_no_nan(sum_a, non_zero)
+    return tf.reshape(result, [-1, 1])
+
+
+@neural_log_literal_function("sum")
+def summation(a):
+    """
+    Returns the sum of the values of `a` for each row.
+
+    :param a: the input tensor
+    :type a: tf.Tensor
+    :return: the result tensor
+    :rtype: tf.Tensor
+    """
+    result = tf.math.reduce_sum(a, axis=1, keepdims=False)
+    return tf.reshape(result, [-1, 1])
 
 
 @neural_log_literal_function("normalize")

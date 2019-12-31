@@ -254,7 +254,8 @@ class ClauseMalformedException(Exception):
         Creates an term malformed exception.
         """
         super().__init__("Clause malformed, the clause must be an atom, "
-                         "a weighted atom or a Horn clause: `{}`".format(clause))
+                         "a weighted atom or a Horn clause: "
+                         "`{}`".format(clause))
 
 
 class BadArgumentException(Exception):

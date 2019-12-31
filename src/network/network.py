@@ -97,7 +97,7 @@ class LossMaskWrapper:
 
 # noinspection PyTypeChecker
 def print_neural_log_predictions(model, neural_program, dataset,
-                                 writer=sys.stdout, set_name=None):
+                                 writer=sys.stdout, dataset_name=None):
     """
     Prints the predictions of `model` to `writer`.
 
@@ -109,6 +109,8 @@ def print_neural_log_predictions(model, neural_program, dataset,
     :type dataset: tf.data.Dataset
     :param writer: the writer. Default is to print to the standard output
     :type writer: Any
+    :param dataset_name: the name of the dataset
+    :type dataset_name: str
     """
     for features, _ in dataset:
         y_scores = model.predict(features)
@@ -135,9 +137,10 @@ def print_neural_log_predictions(model, neural_program, dataset,
                         object_term = neural_program.iterable_constants[index]
                         prediction = Atom(predicate, subject, object_term,
                                           weight=float(y_score[index]))
-                        if set_name is not None and \
+                        if dataset_name is not None and \
                                 prediction.simple_key() not in \
-                                neural_program.examples[set_name][predicate]:
+                                neural_program.examples[
+                                    dataset_name][predicate]:
                             continue
                         clauses.append(AtomClause(prediction))
 
@@ -146,7 +149,7 @@ def print_neural_log_predictions(model, neural_program, dataset,
                         print("%%", clause, file=writer, sep=" ")
                         for clause in sorted(
                                 clauses,
-                                key=lambda x: x.atom.weight,
+                                key=lambda c: c.atom.weight,
                                 reverse=True):
                             print(clause, file=writer)
                         print(file=writer)

@@ -6,9 +6,8 @@ import re
 from typing import Any, List, Dict, Set, Tuple
 
 import numpy as np
-from sklearn.metrics import roc_auc_score
-import tensorflow as tf
 import tensorflow.keras.callbacks as keras_callbacks
+from sklearn.metrics import roc_auc_score
 from tensorflow.keras.callbacks import Callback
 
 from src.knowledge.program import NeuralLogProgram
@@ -278,7 +277,7 @@ class LinkPredictionCallback(AbstractNeuralLogCallback):
         self.output_indices = []  # type: List[int]
         self.output_predicates = []  # type: List[Tuple[Predicate, bool]]
         self.filtered_objects = []  # type: List[Dict[int, Set[int]]]
-        self.dataset = self._get_dataset()
+        self.dataset = self.train_command.get_dataset(self.dataset_name)
         if suffix is None:
             suffix = dataset
         self.mean_rank_name = MEAN_RANK_METRIC_FORMAT.format(suffix)
@@ -336,15 +335,6 @@ class LinkPredictionCallback(AbstractNeuralLogCallback):
                 filtered_entities.setdefault(sub_index, set()).add(obj_index)
 
         return filtered_entities
-
-    def _get_dataset(self):
-        """
-        Gets the dataset from the train command.
-
-        :return: the dataset or `None`
-        :rtype: tf.data.Dataset or None
-        """
-        return getattr(self.train_command, self.dataset_name)
 
     def evaluate(self):
         """
@@ -456,7 +446,7 @@ class AreaUnderCurveROC(AbstractNeuralLogCallback):
     # noinspection PyUnusedLocal
     def __init__(self, train_command, dataset,
                  positive_label=1.0, negative_label=0.0,
-                 suffix=None, period=1,  **kwargs):
+                 suffix=None, period=1, **kwargs):
         """
         Evaluates the model against the Area Under the ROC Curve.
 
@@ -532,7 +522,7 @@ class AreaUnderCurveROC(AbstractNeuralLogCallback):
             y_scores = self.model.predict(features)
             for i in range(len(model.predicates)):
                 predicate = model.predicates[i]
-                examples = self.examples[predicate]  # type: dict[Term, dict[Term, int]]
+                examples = self.examples[predicate]
                 result = results[predicate]
                 if isinstance(y_scores, list):
                     output_scores = y_scores[i]
@@ -542,6 +532,7 @@ class AreaUnderCurveROC(AbstractNeuralLogCallback):
                                                     output_scores):
                     x = feature.numpy()
                     subject_index = np.argmax(x)
+                    # noinspection PyTypeChecker
                     subject = neural_program.iterable_constants[subject_index]
                     for obj, label in examples.get(subject, dict()).items():
                         obj_index = neural_program.index_for_constant(obj)

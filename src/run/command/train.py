@@ -20,7 +20,7 @@ from src.language.parser.ply.neural_log_parser import NeuralLogParser, \
 from src.network.callbacks import EpochLogger, get_neural_log_callback, \
     AbstractNeuralLogCallback, get_formatted_name
 from src.network.network import NeuralLogNetwork, NeuralLogDataset, \
-    print_neural_log_predictions, LossMaskWrapper
+    LossMaskWrapper, print_neural_log_predictions
 from src.run.command import Command, command, print_args, create_log_file, \
     TRAIN_SET_NAME, VALIDATION_SET_NAME, TEST_SET_NAME
 
@@ -259,9 +259,9 @@ class Train(Command):
         arguments = list(map(lambda x: (x[0], x[-1]), DEFAULT_PARAMETERS))
         arguments += [
             ("inverse_relations", "if `True`, creates also the inverted "
-                                   "relation for each output predicate. The "
-                                   "default value is: "
-                                   "{}".format(DEFAULT_INVERTED_RELATIONS)),
+                                  "relation for each output predicate. The "
+                                  "default value is: "
+                                  "{}".format(DEFAULT_INVERTED_RELATIONS)),
             ("loss_function", "the loss function of the neural network and, "
                               "possibly, its options. The default value is: "
                               "{}. It can be individually specified for each "
@@ -797,22 +797,12 @@ class Train(Command):
                 self._save_inference_for_dataset(file_prefix, TEST_SET_NAME)
 
     def _save_inference_for_dataset(self, file_prefix, dataset_name):
-        if dataset_name == TRAIN_SET_NAME:
-            dataset = self.train_set
-            tab = "\t\t"
-        elif dataset_name == VALIDATION_SET_NAME:
-            dataset = self.validation_set
+        tab = "\t\t"
+        if dataset_name == VALIDATION_SET_NAME:
             tab = "\t"
-        else:
-            dataset = self.test_set
-            tab = "\t\t"
         output = self._get_inference_filename(file_prefix, dataset_name)
         logger.info("\t\t{}:{}{}".format(dataset_name, tab, output))
-        output_file = open(output, "w")
-        print_neural_log_predictions(
-            self.model, self.neural_program, dataset, writer=output_file,
-            set_name=dataset_name)
-        output_file.close()
+        self.write_neural_log_predictions(output, dataset_name)
 
     def _get_inference_filename(self, prefix, dataset):
         return self._get_output_path(prefix + dataset + LOGIC_PROGRAM_EXTENSION)
@@ -821,3 +811,35 @@ class Train(Command):
         if self.output_path is not None:
             return os.path.join(self.output_path, suffix)
         return suffix
+
+    def get_dataset(self, name):
+        """
+        Gets the dataset based on the name.
+
+        :param name: the name of the dataset
+        :type name: str
+        :return: the dataset
+        :rtype: tf.data.Dataset or None
+        """
+        if name == TRAIN_SET_NAME:
+            return self.train_set
+        if name == VALIDATION_SET_NAME:
+            return self.validation_set
+        if name == TEST_SET_NAME:
+            return self.test_set
+        return None
+
+    def write_neural_log_predictions(self, filepath, dataset_name):
+        """
+        Writes the predictions of the model, for the dataset to the `filepath`.
+
+        :param filepath: the file path
+        :type filepath: str
+        :param dataset_name: the name of the dataset
+        :type dataset_name: str
+        """
+        dataset = self.get_dataset(dataset_name)
+        writer = open(filepath, "w")
+        print_neural_log_predictions(self.model, self.neural_program,
+                                     dataset, writer, dataset_name)
+        writer.close()
