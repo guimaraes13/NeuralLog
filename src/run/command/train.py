@@ -9,6 +9,7 @@ import time
 from typing import Dict
 
 import numpy as np
+import tensorflow as tf
 from tensorflow.keras.callbacks import ModelCheckpoint
 from tensorflow.python.keras.callbacks import TensorBoard
 
@@ -35,6 +36,7 @@ DEFAULT_NUMBER_OF_EPOCHS = 10
 DEFAULT_VALID_PERIOD = 1
 DEFAULT_INVERTED_RELATIONS = True
 DEFAULT_MASK_PREDICTIONS = False
+DEFAULT_CLIP_LABELS = False
 
 TAB_SIZE = 4
 
@@ -308,6 +310,10 @@ class Train(Command):
                                  "the labels must be: `1`, for positive "
                                  "examples; `-1`, for negative examples; "
                                  "and `0`, for unknown examples"),
+            ("clip_labels", "if `True`, clips the values of the labels "
+                            "to [0, 1]. This is useful when one wants to keep "
+                            "the output of the network in [0, 1], and also use "
+                            "the mask_predictions features."),
         ]
         return format_arguments(message, arguments)
 
@@ -318,6 +324,7 @@ class Train(Command):
         self.parameters = dict(self.neural_program.parameters)
         self.parameters.setdefault("mask_predictions", DEFAULT_MASK_PREDICTIONS)
         self.parameters["loss_function"] = self._get_loss_function(output_map)
+        self.parameters.setdefault("clip_labels", DEFAULT_CLIP_LABELS)
         self._wrap_mask_loss_functions()
         self.parameters["metrics"] = self._get_metrics(output_map)
         self.parameters.setdefault("optimizer", DEFAULT_OPTIMIZER)
@@ -325,6 +332,7 @@ class Train(Command):
         self.parameters.setdefault("batch_size", DEFAULT_BATCH_SIZE)
         self.parameters.setdefault("epochs", DEFAULT_NUMBER_OF_EPOCHS)
         self.parameters.setdefault("validation_period", DEFAULT_VALID_PERIOD)
+
         print_args(self.parameters)
 
     def _get_loss_function(self, output_map):
@@ -375,12 +383,16 @@ class Train(Command):
         if not self.parameters["mask_predictions"]:
             return
         loss_function = self.parameters["loss_function"]
+        label_function = None
+        if self.parameters["clip_labels"]:
+            label_function = lambda x: tf.clip_by_value(x, clip_value_min=0.0,
+                                                        clip_value_max=1.0)
         if isinstance(loss_function, dict):
             functions = dict()
             for key, value in loss_function.items():
-                functions[key] = LossMaskWrapper(value)
+                functions[key] = LossMaskWrapper(value, label_function)
         else:
-            functions = LossMaskWrapper(loss_function)
+            functions = LossMaskWrapper(loss_function, label_function)
         self.parameters["loss_function"] = functions
 
     def _get_metrics(self, output_map):
@@ -536,8 +548,8 @@ class Train(Command):
         self.output_map = self._get_output_map()
         self._read_parameters(self.output_map)
         self._log_parameters(
-            ["loss_function", "optimizer", "regularizer", "metrics",
-             "inverse_relations"],
+            ["clip_labels", "loss_function", "optimizer", "regularizer",
+             "metrics", "inverse_relations"],
             self.output_map.inverse
         )
         self.model.compile(

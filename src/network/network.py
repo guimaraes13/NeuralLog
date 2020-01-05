@@ -52,7 +52,7 @@ class LossMaskWrapper:
     predictions of the known examples will remain the same.
     """
 
-    def __init__(self, loss_function):
+    def __init__(self, loss_function, label_function=None):
         """
         Creates a loss mask wrapper.
 
@@ -61,6 +61,7 @@ class LossMaskWrapper:
         """
         self.loss_function = loss_function
         self.function = keras.losses.get(loss_function)
+        self.label_function = label_function
         self.__name__ = self.function.__name__
 
     def call(self, y_true, y_pred):
@@ -82,6 +83,8 @@ class LossMaskWrapper:
         else:
             mask = tf.square(y_true)
             new_y_pred = y_pred * mask
+        if self.label_function is not None:
+            y_true = self.label_function(y_true)
         return self.function(y_true, new_y_pred)
 
     __call__ = call
