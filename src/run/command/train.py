@@ -117,10 +117,36 @@ def format_arguments(message, arguments):
     :return: the formatted message
     :rtype: str
     """
-    formatted = message + "\n\n"
+    formatted = message
+    formatted += "\n\n"
+    formatted += "The following parameters can be set in the logic file " \
+                 "by using the special\npredicate set_parameter or " \
+                 "set_predicate_parameter*.\n" \
+                 "Syntax:\n\n" \
+                 "set_parameter(<name>, <value>).\nor\n" \
+                 "set_parameter(<name>, class_name, " \
+                 "<class_name>).\n" \
+                 "set_parameter(<name>, config, <config_1>, " \
+                 "<value_1>).\n...\n" \
+                 "set_parameter(<name>, config, <config_n>, " \
+                 "<value_n>).\n\nor\n\n" \
+                 "set_predicate_parameter(<predicate>, <name>, " \
+                 "<value>).\nor\n" \
+                 "set_predicate_parameter(<predicate>, <name>, class_name, " \
+                 "<class_name>).\n" \
+                 "set_predicate_parameter(<predicate>, <name>, config, " \
+                 "<config_1>, " \
+                 "<value_1>).\n...\n" \
+                 "set_predicate_parameter(<predicate>, <name>, config, " \
+                 "<config_n>, " \
+                 "<value_n>).\n\n"
+    formatted += "\n\n"
     max_key_size = max(map(lambda x: len(x[0]), arguments))
     stride = max_key_size + TAB_SIZE
-    for key, value in arguments:
+    for argument in arguments:
+        key, value = argument[0], argument[1]
+        if len(argument) > 2 and argument[2]:
+            key += "*"
         formatted += key + " " * (stride - len(key) - 1)
         length = 0
         for word in value.split(" "):
@@ -133,6 +159,11 @@ def format_arguments(message, arguments):
                 formatted += " "
             formatted += word
         formatted += "\n\n"
+    formatted += "* this feature may be set individually for each " \
+                 "predicate. " \
+                 "If it is not\ndefined for a specific predicate, " \
+                 "the default globally defined will be used."
+    formatted += "\n\n"
     return formatted
 
 
@@ -256,9 +287,9 @@ class Train(Command):
     # noinspection PyMissingOrEmptyDocstring
     def get_command_description(self):
         message = super().get_command_description()
-        message += "\n\nThe following parameters can be set in the logic file" \
-                   " by using the special\npredicate `set_parameter`."
-        arguments = list(map(lambda x: (x[0], x[-1]), DEFAULT_PARAMETERS))
+        arguments = list(
+            map(lambda x: (x[0], x[2], x[3] if len(x) > 3 else True),
+                DEFAULT_PARAMETERS))
         arguments += [
             ("inverse_relations", "if `True`, creates also the inverted "
                                   "relation for each output predicate. The "

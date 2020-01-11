@@ -1736,7 +1736,8 @@ class NeuralLogProgram:
         parameter_dict[atom.terms[-2].value] = atom.terms[-1].value
 
     def _add_default_parameters(self):
-        for key, value, description in DEFAULT_PARAMETERS:
+        for parameter in DEFAULT_PARAMETERS:
+            key, value = parameter[0], parameter[1]
             self.parameters.setdefault(key, value)
 
 
@@ -1781,7 +1782,7 @@ DEFAULT_PARAMETERS = [
      "element used to extract the tensor value of grounded literal "
      "in a rule. The default edge combining function is the element-wise "
      "multiplication. Thus, the neutral element is `1.0`, represented by "
-     "`tf.constant(1.0)`"),
+     "`tf.constant(1.0)`", False),
 
     ("edge_combining_function", "tf.math.multiply",
      "function to extract the value of the fact based on the input. "
@@ -1807,7 +1808,7 @@ DEFAULT_PARAMETERS = [
 
     ("any_aggregation_function", "any_aggregation_function",
      "function to aggregate the input of the `any` predicate. The default "
-     "function is the `tf.reduce_sum`"),
+     "function is the `tf.reduce_sum`", False),
 
     ("attributes_combine_function", "tf.math.multiply",
      "function to combine the numeric terms of a fact. "
