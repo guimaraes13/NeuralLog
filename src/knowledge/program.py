@@ -177,384 +177,6 @@ def get_value_from_parameter(names, parameters):
     return value
 
 
-# def get_disconnected_literals(clause, connected_literals):
-#     """
-#     Gets the literals from the `clause` which are disconnected from the
-#     source and destination variables but are grounded.
-#
-#     :param clause: the clause
-#     :type clause: HornClause
-#     :param connected_literals: the set of connected literals
-#     :type connected_literals: Set[Literal]
-#     :return: the list of disconnected literals
-#     :rtype: List[Literal]
-#     """
-#     ground_literals = []
-#     for literal in clause.body:
-#         if literal in connected_literals or not literal.is_grounded():
-#             continue
-#         ground_literals.append(literal)
-#     return ground_literals
-#
-#
-# def build_literal_dictionaries(clause):
-#     """
-#     Builds the dictionaries with the literals of the `clause`. This method
-#     creates two dictionaries, the first one containing the literals that
-#     connects different terms; and the second one the loop literals,
-#     which connects the terms to themselves, either by being unary or by having
-#     equal terms.
-#
-#     Both dictionaries have the terms in the literals as keys.
-#
-#     :param clause: the clause
-#     :type clause: HornClause
-#     :return: the dictionaries
-#     :rtype: (Dict[Term, List[Literal]], Dict[Term, List[Literal]])
-#     """
-#     binary_literals_by_term = dict()  # type: Dict[Term, List[Literal]]
-#     loop_literals_by_term = dict()  # type: Dict[Term, List[Literal]]
-#     for literal in clause.body:
-#         if literal.arity() == 1:
-#             dict_to_append = loop_literals_by_term
-#         elif literal.arity() == 2:
-#             if literal.terms[0] == literal.terms[-1]:
-#                 dict_to_append = loop_literals_by_term
-#             else:
-#                 dict_to_append = binary_literals_by_term
-#         else:
-#             continue
-#         for term in set(literal.terms):
-#             dict_to_append.setdefault(term, []).append(literal)
-#     return binary_literals_by_term, loop_literals_by_term
-#
-#
-# def find_paths(partial_paths, destination, binary_literals_by_term,
-#                completed_paths, visited_literals):
-#     """
-#     Finds the paths from `partial_paths` to `destination` by appending the
-#     literals from `binary_literals_by_term`. The completed paths are stored
-#     in `completed_paths` while the used literals are stores in
-#     `visited_literals`.
-#
-#     Finally, it returns the dead end paths.
-#
-#     :param partial_paths: The initial partial paths
-#     :type partial_paths: deque[RulePath]
-#     :param destination: the destination term
-#     :type destination: Term
-#     :param binary_literals_by_term: the literals to be appended
-#     :type binary_literals_by_term: Dict[Term, List[Literals]]
-#     :param completed_paths: the completed paths
-#     :type completed_paths: deque[RulePath]
-#     :param visited_literals: the visited literals
-#     :type visited_literals: Set[Literal]
-#     :return: the dead end paths
-#     :rtype: List[RulePath]
-#     """
-#     dead_end_paths = []  # type: List[RulePath]
-#     while len(partial_paths) > 0:
-#         size = len(partial_paths)
-#         for i in range(size):
-#             path = partial_paths.popleft()
-#             path_end = path.path_end()
-#
-#             if path_end == destination:
-#                 completed_paths.append(path)
-#                 continue
-#
-#             possible_edges = binary_literals_by_term.get(path_end, [None])
-#             not_added_path = True
-#             for literal in possible_edges:
-#                 new_path = path.new_path_with_item(literal)
-#                 if new_path is None:
-#                     continue
-#                 partial_paths.append(new_path)
-#                 # noinspection PyTypeChecker
-#                 visited_literals.add(literal)
-#                 not_added_path = False
-#
-#             if not_added_path:
-#                 dead_end_paths.append(path)
-#     return dead_end_paths
-#
-#
-# def append_not_in_set(literal, literals, appended):
-#     """
-#     Appends `literal` to `literals` if it is not in `appended`.
-#     Also, updates appended.
-#
-#     :param literal: the literal to append
-#     :type literal: Literal
-#     :param literals: the list to append to
-#     :type literals: List[Literal]
-#     :param appended: the set of already appended literals
-#     :type appended: Set[Literal]
-#     """
-#     if literal not in appended:
-#         literals.append(literal)
-#         appended.add(literal)
-#
-#
-# def complete_path_with_any(dead_end_paths, destination, inverted=False):
-#     """
-#     Completes the path by appending the special `any` predicate between the
-#     end of the path and the destination.
-#
-#     :param dead_end_paths: the paths to be completed
-#     :type dead_end_paths: collections.Iterable[RulePath]
-#     :param destination: the destination
-#     :type destination: Term
-#     :param inverted: if `True`, append the any predicate with the terms in the
-#     reversed order
-#     :type inverted: bool
-#     :return: the completed paths
-#     :rtype: List[RulePath]
-#     """
-#     completed_paths = []
-#     for path in dead_end_paths:
-#         if inverted:
-#             any_literal = Literal(Atom(ANY_PREDICATE_NAME,
-#                                        destination, path.path_end()))
-#         else:
-#             any_literal = Literal(Atom(ANY_PREDICATE_NAME,
-#                                        path.path_end(), destination))
-#         path.append(any_literal)
-#         completed_paths.append(path)
-#     return completed_paths
-#
-#
-# def append_loop_predicates(completed_paths, loop_literals_by_term,
-#                            visited_literals, reverse_path=False):
-#     """
-#     Appends the loop predicates to the path.
-#
-#     :param completed_paths: the completed paths
-#     :type completed_paths: deque[RulePath]
-#     :param loop_literals_by_term: the loop predicates by term
-#     :type loop_literals_by_term: Dict[Term, List[Literals]]
-#     :param visited_literals: the set of visited literals to be updated
-#     :type visited_literals: Set[Literal]
-#     :param reverse_path: if `True`, reverse the path before processing
-#     :type reverse_path: bool
-#     :return: the final paths
-#     :rtype: List[RulePath]
-#     """
-#     final_paths = []  # type: List[RulePath]
-#     for path in completed_paths:
-#         if reverse_path:
-#             path = path.reverse()
-#         last_reversed = False
-#         literals = []
-#         appended = path.literals
-#         for i in range(len(path.path)):
-#             last_reversed = path.inverted[i]
-#             input_term = path[i].terms[-1 if last_reversed else 0]
-#             output_term = path[i].terms[0 if last_reversed else -1]
-#             for literal in loop_literals_by_term.get(input_term, []):
-#                 append_not_in_set(literal, literals, appended)
-#             literals.append(path.path[i])
-#             for literal in loop_literals_by_term.get(output_term, []):
-#                 append_not_in_set(literal, literals, appended)
-#                 last_reversed = False
-#             visited_literals.update(appended)
-#         final_paths.append(RulePath(literals, last_reversed))
-#     return final_paths
-#
-#
-# def find_all_forward_paths(source, destination,
-#                            loop_literals_by_term,
-#                            binary_literals_by_term, visited_literals,
-#                            inverted_path=False):
-#     """
-#     Finds all forward paths from `source` to `destination` by using the
-#     literals in `binary_literals_by_term` and `loop_literals_by_term`.
-#     If the destination cannot be reached, it includes a special `any`
-#     predicated to connect the path.
-#
-#     :param source: the source of the paths
-#     :type source: Term
-#     :param destination: the destination of the paths
-#     :type destination: Term
-#     :param loop_literals_by_term: the literals that connects different terms
-#     :type loop_literals_by_term: Dict[Term, List[Literals]]
-#     :param binary_literals_by_term: the loop literals, which connects the
-#     terms to themselves
-#     :type binary_literals_by_term: Dict[Term, List[Literals]]
-#     :param visited_literals: the set of visited literals
-#     :type visited_literals: Set[Literal]
-#     :return: the completed forward paths between source and destination
-#     :rtype: List[RulePath]
-#     """
-#     partial_paths = deque()  # type: deque[RulePath]
-#     completed_paths = deque()  # type: deque[RulePath]
-#
-#     initial_path = build_initial_path(source, loop_literals_by_term,
-#                                       visited_literals)
-#     for literal in binary_literals_by_term.get(source, []):
-#         if literal in visited_literals:
-#             continue
-#         if initial_path is None:
-#             inverted = literal.terms[0] != source
-#             partial_paths.append(RulePath([literal], inverted))
-#         else:
-#             partial_paths.append(initial_path.new_path_with_item(literal))
-#         visited_literals.add(literal)
-#     if len(partial_paths) == 0:
-#         if initial_path is not None:
-#             if inverted_path:
-#                 if initial_path.literals.issubset(visited_literals):
-#                     return []
-#             partial_paths.append(initial_path)
-#         elif inverted_path:
-#             return []
-#
-#     dead_end_paths = find_paths(
-#         partial_paths, destination, binary_literals_by_term,
-#         completed_paths, visited_literals)
-#
-#     completed_with_any = complete_path_with_any(
-#         dead_end_paths, destination, inverted=False)
-#     for path in completed_with_any:
-#         completed_paths.append(path)
-#
-#     return append_loop_predicates(
-#         completed_paths, loop_literals_by_term, visited_literals,
-#         reverse_path=inverted_path)
-#
-#
-# def build_initial_path(source, loop_literals_by_term, visited_literals):
-#     """
-#     Builds a path with its initial literals, if any.
-#
-#     :param source: the source of the path
-#     :type source: Term
-#     :param loop_literals_by_term: the literals that connects different terms
-#     :type loop_literals_by_term: Dict[Term, List[Literals]]
-#     :param visited_literals: the literals added to the path
-#     :type visited_literals: Set[Literal]
-#     :return: the path or `None`
-#     :rtype: RulePath or None
-#     """
-#     loop_literals = loop_literals_by_term.get(source, [])
-#     if len(loop_literals) == 0:
-#         return None
-#     initial_path = RulePath([loop_literals[0]])
-#     visited_literals.add(loop_literals[0])
-#     for loop_literal in loop_literals[1:]:
-#         initial_path.append(loop_literal)
-#         visited_literals.add(loop_literal)
-#     return initial_path
-#
-#
-# def find_all_backward_paths(source, destination,
-#                             loop_literals_by_term,
-#                             binary_literals_by_term, visited_literals):
-#     """
-#     Finds all backward paths from `source` to `destination` by using the
-#     literals in `binary_literals_by_term` and `loop_literals_by_term`.
-#     If the destination cannot be reached, it includes a special `any`
-#     predicated to connect the path.
-#
-#     :param source: the source of the paths
-#     :type source: Term
-#     :param destination: the destination of the paths
-#     :type destination: Term
-#     :param loop_literals_by_term: the literals that connects different terms
-#     :type loop_literals_by_term: Dict[Term, List[Literals]]
-#     :param binary_literals_by_term: the loop literals, which connects the
-#     terms to themselves
-#     :type binary_literals_by_term: Dict[Term, List[Literals]]
-#     :param visited_literals: the set of visited literals
-#     :type visited_literals: Set[Literal]
-#     :return: the completed backward paths between source and destination
-#     :rtype: List[RulePath]
-#     """
-#     partial_paths = deque()  # type: deque[RulePath]
-#     completed_paths = deque()  # type: deque[RulePath]
-#
-#     for literal in binary_literals_by_term.get(source, []):
-#         if literal in visited_literals:
-#             continue
-#         inverted = literal.terms[0] != source
-#         partial_paths.append(RulePath([literal], inverted))
-#         visited_literals.add(literal)
-#
-#     dead_end_paths = find_paths(
-#         partial_paths, destination, binary_literals_by_term,
-#         completed_paths, visited_literals)
-#
-#     completed_with_any = complete_path_with_any(
-#         dead_end_paths, destination, inverted=True)
-#     for path in completed_with_any:
-#         completed_paths.append(path)
-#
-#     return append_loop_predicates(
-#         completed_paths, loop_literals_by_term, visited_literals,
-#         reverse_path=True)
-#
-#
-# def find_clause_paths(clause, inverted=False):
-#     """
-#     Finds the paths in the clause.
-#     :param inverted: if `True`, creates the paths for the inverted rule;
-#     this is, the rule in the format (output, input). If `False`,
-#     creates the path for the standard (input, output) rule format.
-#     :type inverted: bool
-#     :param clause: the clause
-#     :type clause: HornClause
-#     :return: the completed paths between the terms of the clause and the
-#     remaining grounded literals
-#     :rtype: (List[RulePath], List[Literal])
-#     """
-#     # Defining variables
-#     source = clause.head.terms[0]
-#     destination = clause.head.terms[-1]
-#     if inverted:
-#         source, destination = destination, source
-#     binary_literals_by_term, loop_literals_by_term = \
-#         build_literal_dictionaries(clause)
-#     visited_literals = set()
-#
-#     # Finding forward paths
-#     paths = find_all_forward_paths(
-#         source, destination, loop_literals_by_term,
-#         binary_literals_by_term, visited_literals)
-#
-#     if clause.head.predicate.arity > 1:
-#         # Finding backward paths
-#         source, destination = destination, source
-#         # backward_paths = find_all_backward_paths(
-#         #     source, destination, loop_literals_by_term,
-#         #     binary_literals_by_term, visited_literals)
-#         backward_paths = find_all_forward_paths(
-#             source, destination, loop_literals_by_term,
-#             binary_literals_by_term, visited_literals, inverted_path=True)
-#         paths += backward_paths
-#
-#     ground_literals = get_disconnected_literals(clause, visited_literals)
-#
-#     return paths, ground_literals
-#
-#
-# def get_constants_from_path(clause, iterable_constants):
-#     """
-#     Gets all the constant terms from the paths in the clause and adds it
-#     to `iterable_constants`.
-#
-#     :param clause: the clause
-#     :type clause: HornClause
-#     :param iterable_constants: the iterable constants
-#     :type iterable_constants: set[Term]
-#     """
-#     rule_graph = RuleGraph(clause)
-#     paths, _ = rule_graph.find_clause_paths()
-#     for path in paths:
-#         for term in path.terms:
-#             if term.is_constant() and not isinstance(term, Number):
-#                 iterable_constants.add(term)
-
-
 class RuleGraph:
     """
     Represents a rule graph
@@ -1097,6 +719,25 @@ class BiDict(dict, MutableMapping[KT, VT]):
         if self[key] in self.inverse and not self.inverse[self[key]]:
             del self.inverse[self[key]]
         super(BiDict, self).__delitem__(key)
+
+
+def _convert_to_bool(value):
+    """
+    If the value is `true` or `false`, return the boolean equivalent form of
+    the value. This method is case insensitive.
+
+    :param value: the string value
+    :type value: str
+    :return: the string value or the boolean value
+    :rtype: str or bool
+    """
+    if isinstance(value, str):
+        lower_value = value.lower()
+        if lower_value == "true":
+            value = True
+        elif lower_value == "false":
+            value = False
+    return value
 
 
 class NeuralLogProgram:
@@ -1704,13 +1345,7 @@ class NeuralLogProgram:
         for i in range(arity - 2):
             parameter_dict = parameter_dict.setdefault(
                 atom.terms[i].value, dict())
-        value = atom.terms[-1].value
-        if isinstance(value, str):
-            lower_value = value.lower()
-            if lower_value == "true":
-                value = True
-            elif lower_value == "false":
-                value = False
+        value = _convert_to_bool(atom.terms[-1].value)
         parameter_dict[atom.terms[-2].value] = value
 
     # noinspection PyUnusedLocal
@@ -1733,7 +1368,8 @@ class NeuralLogProgram:
         for i in range(1, arity - 2):
             parameter_dict = parameter_dict.setdefault(atom.terms[i].value,
                                                        dict())
-        parameter_dict[atom.terms[-2].value] = atom.terms[-1].value
+        value = _convert_to_bool(atom.terms[-1].value)
+        parameter_dict[atom.terms[-2].value] = value
 
     def _add_default_parameters(self):
         for parameter in DEFAULT_PARAMETERS:
@@ -1749,6 +1385,13 @@ DEFAULT_PARAMETERS = [
      "initializer for learnable predicates. This initializer will be used to "
      "initialize facts from learnable predicates that are not in the "
      "knowledge base."),
+
+    ("allow_sparse", True,
+     "by default, we represent constant facts as sparse matrices whenever "
+     "it is possible. Although it reduces the amount of used memory, "
+     "it limits the multiplication to matrices with rank at most 2. We case "
+     "one needs to work if higher order matrices, this options must be set to "
+     "`False`."),
 
     ("recursion_depth", 1, "the maximum recursion depth for the predicate."),
 

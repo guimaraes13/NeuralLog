@@ -283,6 +283,17 @@ class LayerFactory:
             predicate,
             self.program.get_diagonal_matrix_representation(predicate))
 
+    def get_allow_sparse(self, predicate=None):
+        """
+        Gets the allow sparse option for the predicate.
+
+        :param predicate: the predicate
+        :type predicate: Predicate
+        :return: the allow sparse option
+        :rtype: bool
+        """
+        return self.program.get_parameter_value("allow_sparse", predicate)
+
     def get_weighted_attribute_combining_function(self, predicate=None):
         """
         Gets the attribute combining function. This is the function to
@@ -575,13 +586,15 @@ class LayerFactory:
                 name = renamed_atom.__str__()
             else:
                 name = name_format.format(renamed_atom.__str__())
-            tensor = self._build_constant(value, shape, name)
+            allow_sparse = self.get_allow_sparse(renamed_atom.predicate)
+            tensor = self._build_constant(value, shape, name,
+                                          allow_sparse=allow_sparse)
             # noinspection PyTypeChecker
             self._tensor_by_name[name] = tensor
 
         return tensor
 
-    def _build_constant(self, value, shape, name):
+    def _build_constant(self, value, shape, name, allow_sparse=True):
         """
         Builds the constant for the atom.
 
@@ -599,7 +612,7 @@ class LayerFactory:
             if isinstance(value, csr_matrix):
                 sparsity = len(value.data) / np.prod(value.shape,
                                                      dtype=np.float32)
-                if sparsity < self.SPARSE_THRESHOLD:
+                if allow_sparse and sparsity < self.SPARSE_THRESHOLD:
                     data = value.data
                     if len(data) == 0:
                         data = [0.0]

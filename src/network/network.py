@@ -480,7 +480,11 @@ class NeuralLogNetwork(keras.Model):
         """
         depth = predicates_depths[renamed_literal.predicate] - 1
         if depth < self.get_recursion_depth(renamed_literal.predicate):
-            inputs = [self._build_fact(renamed_literal, inverted=inverted)]
+            inputs = []
+            if renamed_literal.predicate in self.program.facts_by_predicate:
+                # TODO: skip adding facts if depth > 0, we only need to add
+                #  the facts once.
+                inputs = [self._build_fact(renamed_literal, inverted=inverted)]
             input_clauses = dict()  # type: Dict[RuleLayer, HornClause]
             for clause in self.program.clauses_by_predicate.get(
                     renamed_literal.predicate, []):
@@ -827,9 +831,7 @@ class NeuralLogDataset:
         index = 0
         examples = self.network.program.examples.get(example_set, OrderedDict())
         for predicate, inverted in self.network.predicates:
-            # for facts in examples.get(predicate, dict()).values():
             predicates.append((predicate, inverted))
-            # facts = facts.values()
             facts = examples.get(predicate, dict()).values()
             values = []
             indices = []

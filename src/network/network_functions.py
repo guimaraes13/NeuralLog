@@ -173,6 +173,25 @@ def get_combining_function(identifier):
         return _get(identifier, combining_functions, None)
 
 
+@neural_log_combining_function("concat_combining_function")
+def concat_combining_function(a, b):
+    """
+    Combines the tensor `a` and `b` by concatenating them.
+
+    :param a: the tensor a
+    :type a: tf.Tensor
+    :param b: the tensor b
+    :type b: tf.Tensor
+    :return: a combination of the tensors
+    :rtype: tf.Tensor
+    """
+    if a.shape.rank == 2:
+        a = tf.expand_dims(a, 1)
+    if b.shape.rank == 2:
+        b = tf.expand_dims(b, 1)
+    return tf.concat([a, b], axis=1)
+
+
 @neural_log_combining_function("edge_combining_function_2d:sparse")
 def edge_combining_function_2d_sparse(a, sp_b):
     """
@@ -182,7 +201,7 @@ def edge_combining_function_2d_sparse(a, sp_b):
     :type a: tf.Tensor
     :param sp_b: the tensor b
     :type sp_b: tf.SparseTensor
-    :return: a combination of the tensor
+    :return: a combination of the tensors
     :rtype: tf.Tensor
     """
     tensor = tf.sparse.sparse_dense_matmul(sp_b, a,
@@ -462,6 +481,8 @@ class FactLayer(AbstractFactLayer):
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
+        if inputs is None:
+            return None
         return self.fact_combining_function(inputs, self.get_kernel())
 
 
@@ -763,6 +784,8 @@ class LiteralLayer(NeuralLogLayer):
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
         if len(self.input_layers) == 1:
+            if isinstance(self.input_layers[0], EmptyLayer):
+                return None
             result = self.input_layers[0](inputs)
             if self.negation_function is not None:
                 return self.negation_function(result)
@@ -771,6 +794,8 @@ class LiteralLayer(NeuralLogLayer):
         result = self.input_layers[0](inputs)
         for input_layer in self.input_layers[1:]:
             layer_result = input_layer(inputs)
+            if layer_result is None:
+                continue
             result = self.literal_combining_function(result, layer_result)
         if self.negation_function is not None:
             return self.negation_function(result)
@@ -797,12 +822,6 @@ class LiteralLayer(NeuralLogLayer):
                     (self.literal_combining_function, self.negation_function))
 
     def __eq__(self, other):
-        # if isinstance(other, FactLayer):
-        #     if self.negation_function is not None:
-        #         return False
-        #     if len(self.input_layers) != 1:
-        #         return False
-        #     return self.input_layers[0] == other
         if not isinstance(other, LiteralLayer):
             return False
 
