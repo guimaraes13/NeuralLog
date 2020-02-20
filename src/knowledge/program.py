@@ -553,149 +553,6 @@ class RulePath:
         return self.source == other.source, self.path == other.path
 
 
-# class RulePath:
-#     """
-#     Represents a rule path.
-#     """
-#
-#     path: List[Literal] = list()
-#     "The path of literals"
-#
-#     literals: Set[Literal] = set()
-#     "The set of literals in the path"
-#
-#     terms: Set[Term]
-#     "The set of all terms in the path"
-#
-#     inverted: List[bool]
-#     """It is True if the correspondent literal is inverted;
-#     it is false, otherwise"""
-#
-#     def __init__(self, path, last_inverted=False):
-#         """
-#         Initializes a path.
-#
-#         :param path: the path
-#         :type path: collections.Iterable[Literal]
-#         :param last_inverted: if the last literal is inverted
-#         :type last_inverted: bool
-#         """
-#         self.path = list(path)
-#         self.literals = set(self.path)
-#         # self.last_term = self.path[-1].terms[0 if inverted else -1]
-#         self.terms = set()
-#         for literal in self.literals:
-#             self.terms.update(literal.terms)
-#         self.inverted = self._compute_inverted(last_inverted)
-#
-#     def _compute_inverted(self, last_inverted):
-#         inverted = []
-#         last_term = self.path[-1].terms[0 if last_inverted else -1]
-#         for i in reversed(range(0, len(self.path))):
-#             literal = self.path[i]
-#             if literal.arity() != 1 and literal.terms[0] == last_term:
-#                 inverted.append(True)
-#                 last_term = literal.terms[-1]
-#             else:
-#                 inverted.append(False)
-#                 last_term = literal.terms[0]
-#
-#         return list(reversed(inverted))
-#
-#     def append(self, item):
-#         """
-#         Appends the item to the end of the path, if it is not in the path yet.
-#
-#         :param item: the item
-#         :type item: Literal
-#         :return: True, if the item has been appended to the path; False,
-#         otherwise.
-#         :rtype: bool
-#         """
-#         if item is None:
-#             return False
-#
-#         if item.arity() == 1:
-#             output_variable = item.terms[0]
-#             last_inverted = False
-#         else:
-#             if item.terms[0] == self.path_end():
-#                 output_variable = item.terms[-1]
-#                 last_inverted = False
-#             else:
-#                 output_variable = item.terms[0]
-#                 last_inverted = True
-#
-#         if item.arity() != 1 and output_variable in self.terms:
-#             return False
-#
-#         self.path.append(item)
-#         self.literals.add(item)
-#         self.terms.update(item.terms)
-#         self.inverted.append(last_inverted)
-#         return True
-#
-#     def new_path_with_item(self, item):
-#         """
-#         Creates a new path with `item` at the end.
-#
-#         :param item: the item
-#         :type item: Literal or None
-#         :return: the new path, if its is possible to append the item; None,
-#         otherwise
-#         :rtype: RulePath or None
-#         """
-#         path = RulePath(self.path, self.inverted[-1])
-#         return path if path.append(item) else None
-#
-#     def path_end(self):
-#         """
-#         Gets the term at the end of the path.
-#
-#         :return: the term at the end of the path
-#         :rtype: Term
-#         """
-#         return self.path[-1].terms[0 if self.inverted[-1] else -1]
-#
-#     def reverse(self):
-#         """
-#         Gets a reverse path.
-#
-#         :return: the reverse path
-#         :rtype: RulePath
-#         """
-#         not_inverted = self.path[0].arity() != 1 and not self.inverted[0]
-#         path = RulePath(reversed(self.path), not_inverted)
-#         return path
-#
-#     def __getitem__(self, item):
-#         return self.path.__getitem__(item)
-#
-#     def __len__(self):
-#         return self.path.__len__()
-#
-#     def __str__(self):
-#         message = ""
-#         for i in reversed(range(0, len(self.path))):
-#             literal = self.path[i]
-#             prefix = literal.predicate.name
-#             iterator = list(map(lambda x: x.value, literal.terms))
-#             if self.inverted[i]:
-#                 prefix += "^{-1}"
-#                 iterator = reversed(iterator)
-#
-#             prefix += "("
-#             prefix += ", ".join(iterator)
-#             prefix += ")"
-#             message = prefix + message
-#             if i > 0:
-#                 message = ", " + message
-#
-#         return message
-#
-#     __repr__ = __str__
-
-
 class BiDict(dict, MutableMapping[KT, VT]):
     """
     A bidirectional dictionary.
@@ -740,6 +597,74 @@ def _convert_to_bool(value):
     return value
 
 
+def _find_term_type(atom, term_types):
+    """
+    Finds the types of the terms in the atom.
+
+    For each term of the atom, it adds the term type (composed of the
+    predicate and the position of the term) to the set of types where the
+    term appears.
+
+    :param atom: the atom
+    :type atom: Atom
+    :param term_types: a dictionary with the set of types where the
+    term appears
+    :type term_types: dict[Term, set[Tuple[Predicate, int]]]
+    :return: a dictionary with the set of types where the
+    term appears
+    :rtype: dict[Term, set[Tuple[Predicate, int]]]
+    """
+    for i in range(atom.arity()):
+        term_types.setdefault(atom.terms[i], set()).add((atom.predicate, i))
+    return term_types
+
+
+def _join_sets_with_common_elements(sets):
+    """
+    Groups sets that has common elements and returns a list of disjoint
+    sets.
+
+    :param sets: the sets of elements
+    :type sets: list[set]
+    :return: the list of disjoint sets
+    :rtype: list[set]
+    """
+    current_sets = list(sets)
+    join_sets = list()  # type: List[set]
+    while True:
+        for elements_set in current_sets:
+            not_joined = True
+            for join_set in join_sets:
+                if not join_set.isdisjoint(elements_set):
+                    not_joined = False
+                    join_set.update(elements_set)
+            if not_joined:
+                join_sets.append(elements_set)
+        if len(join_sets) == len(current_sets):
+            break
+        current_sets = join_sets
+        join_sets = list()
+
+    return join_sets
+
+
+def _build_constant_dict(_iterable_constants):
+    """
+    Builds the dictionary of iterable constants.
+
+    :param _iterable_constants: the iterable constants
+    :type _iterable_constants: collection.Iterable[Term]
+    :return: the dictionary of iterable constants
+    :rtype: BiDict[int, Term]
+    """
+    count = 0
+    dictionary = BiDict()
+    for constant in sorted(_iterable_constants, key=lambda x: x.__str__()):
+        dictionary[count] = constant
+        count += 1
+    return dictionary
+
+
 class NeuralLogProgram:
     """
     Represents a NeuralLog language.
@@ -776,6 +701,9 @@ class NeuralLogProgram:
 
     iterable_constants: BiDict[int, Term] = BiDict()
     "The iterable constants"
+
+    iterable_constants_per_term: Dict[Tuple[Predicate, int], BiDict[int, Term]]
+    "The iterable constants per (predicate / term position)"
 
     predicates: Dict[Predicate, Tuple[TermType]] = dict()
     "All the predicates and their types"
@@ -916,42 +844,64 @@ class NeuralLogProgram:
         Gets the constants from the clauses.
         """
         _iterable_constants = set()
+        grouped_types = self._get_grouped_types()
+        _iterable_constants_per_term = dict()
+        for type_terms in grouped_types:
+            iterable_constant = set()
+            for predicate_term in type_terms:
+                _iterable_constants_per_term[predicate_term] = iterable_constant
+
         for facts in self.facts_by_predicate.values():
             for fact in facts.values():
-                self._get_constants_from_atom(fact, _iterable_constants)
+                self._get_constants_from_atom(fact, _iterable_constants,
+                                              _iterable_constants_per_term)
                 fact.provenance = None
         for sets in self.examples.values():
             for examples in sets.values():
                 for example in examples.values():
                     self._get_constants_from_atom(example, _iterable_constants,
+                                                  _iterable_constants_per_term,
                                                   is_example=True)
                     example.provenance = None
         for clauses in self.clauses_by_predicate.values():
             for clause in clauses:
-                self._get_constants_from_atom(clause.head, _iterable_constants)
+                self._get_constants_from_atom(clause.head, _iterable_constants,
+                                              _iterable_constants_per_term)
                 clause.head.provenance = None
                 for literal in clause.body:
-                    self._get_constants_from_atom(literal, _iterable_constants)
+                    self._get_constants_from_atom(literal, _iterable_constants,
+                                                  _iterable_constants_per_term)
                     literal.provenance = None
-                # get_constants_from_path(clause, _iterable_constants)
-        self._build_constant_dict(_iterable_constants)
+        self.iterable_constants = _build_constant_dict(_iterable_constants)
+        self.number_of_entities = len(self.iterable_constants)
+        self.iterable_constants_per_term = dict()
+        for type_terms in grouped_types:
+            value = _iterable_constants_per_term[list(type_terms)[0]]
+            dictionary = _build_constant_dict(value)
+            for predicate_term in type_terms:
+                self.iterable_constants_per_term[predicate_term] = dictionary
 
-    def _build_constant_dict(self, _iterable_constants):
+    def _get_grouped_types(self):
         """
-        Builds the dictionary of iterable constants.
-
-        :param _iterable_constants: the iterable constants
-        :type _iterable_constants: collection.Iterable[Term]
-        :return: the dictionary of iterable constants
-        :rtype: BiDict[int, Term]
+        Gets the groups of types of each predicate term position.
+        :return: the dictionary of iterable constants per
+        (predicate, term position)
+        :rtype: list[set[tuple[Predicate, int]]]
         """
-        count = 0
-        for constant in sorted(_iterable_constants, key=lambda x: x.__str__()):
-            self.iterable_constants[count] = constant
-            count += 1
-        self.number_of_entities = count
+        type_sets = list()
+        for clauses in self.clauses_by_predicate.values():
+            for clause in clauses:
+                term_types = dict()
+                _find_term_type(clause.head, term_types)
+                clause.head.provenance = None
+                for literal in clause.body:
+                    _find_term_type(literal, term_types)
+                    literal.provenance = None
+                type_sets += list(term_types.values())
+        return _join_sets_with_common_elements(type_sets)
 
     def _get_constants_from_atom(self, atom, iterable_constants,
+                                 iterable_constant_per_term,
                                  is_example=False):
         """
         Gets the constants from an atom.
@@ -960,6 +910,11 @@ class NeuralLogProgram:
         :type atom: Atom
         :param iterable_constants: the iterable constants
         :type iterable_constants: set[Term]
+        :param iterable_constant_per_term: the iterable constants per
+        (predicate, term position)
+        :type iterable_constant_per_term: dict[tuple[Predicate, int], set[Term]]
+        :param is_example: if the atom is an example
+        :type is_example: bool
         """
         types = self.predicates[atom.predicate]
         for i in range(len(types)):
@@ -967,6 +922,7 @@ class NeuralLogProgram:
                 continue
             self.constants.add(atom[i])
             if is_example or types[i].variable:
+                iterable_constant_per_term[(atom.predicate, i)].add(atom[i])
                 iterable_constants.add(atom[i])
 
     def get_matrix_representation(self, predicate, mask=False):
