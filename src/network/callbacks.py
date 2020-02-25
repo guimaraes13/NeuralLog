@@ -361,7 +361,10 @@ class LinkPredictionCallback(AbstractNeuralLogCallback):
         top_hits = np.zeros(number_of_indices, dtype=np.int64)
         total_count = np.zeros(number_of_indices, dtype=np.int64)
         for features, labels in self.dataset:
-            y_scores = self.model.call(features)
+            y_scores = self.model.predict(features)
+            if len(self.model.predicates) == 1:
+                y_scores = [y_scores]
+                features = [features]
             for i in range(len(self.output_indices)):
                 index = self.output_indices[i]
                 for feature, y_true, y_score in \
@@ -519,13 +522,16 @@ class AreaUnderCurveROC(AbstractNeuralLogCallback):
             results[predicate] = ([], [])
 
         for features, labels in self.dataset:
-            y_scores = self.model.call(features)
+            y_scores = self.model.predict(features)
+            if len(self.model.predicates) == 1:
+                y_scores = [y_scores]
+                features = [features]
             for i in range(len(model.predicates)):
                 predicate = model.predicates[i]
                 examples = self.examples[predicate]
                 result = results[predicate]
-                for feature, y_true, y_score in zip(features[i], labels[i],
-                                                    y_scores[i]):
+                for feature, y_true, y_score in zip(
+                        features[i], labels[i], y_scores[i]):
                     x = feature.numpy()
                     if x.max() == 0.0:
                         continue

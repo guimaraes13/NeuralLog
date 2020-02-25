@@ -116,7 +116,10 @@ def print_neural_log_predictions(model, neural_program, dataset,
     :type dataset_name: str
     """
     for features, _ in dataset:
-        y_scores = model.call(features)
+        y_scores = model.predict(features)
+        if len(model.predicates) == 1:
+            y_scores = [y_scores]
+            features = [features]
         for i in range(len(model.predicates)):
             predicate, inverted = model.predicates[i]
             if inverted:
@@ -397,6 +400,11 @@ class NeuralLogNetwork(keras.Model):
                                                           inverted=True)
                     self.predicates.append(key)
                     self.predicate_layers.append(predicate_layer)
+        if len(self.predicates) == 1:
+            self.call = self.call_single_input
+        else:
+            # noinspection PyAttributeOutsideInit
+            self.call = self.call_multiples_inputs
 
     def get_unary_literal_extraction_function(self, predicate):
         """
@@ -415,8 +423,15 @@ class NeuralLogNetwork(keras.Model):
             "unary_literal_extraction_function", predicate)
         return get_combining_function(combining_function)
 
-    # noinspection PyMissingOrEmptyDocstring
-    def call(self, inputs, training=None, mask=None):
+    # noinspection PyMissingOrEmptyDocstring,PyUnusedLocal
+    def call_single_input(self, inputs, training=None, mask=None):
+        results = []
+        for i in range(len(self.predicate_layers)):
+            results.append(self.predicate_layers[i](inputs))
+        return tuple(results)
+
+    # noinspection PyMissingOrEmptyDocstring,PyUnusedLocal
+    def call_multiples_inputs(self, inputs, training=None, mask=None):
         results = []
         for i in range(len(self.predicate_layers)):
             results.append(self.predicate_layers[i](inputs[i]))
@@ -816,23 +831,26 @@ class NeuralLogDataset:
                 self.program.get_constant_size(predicate, index))
             dense_features.append(feature)
 
-        # features = tf.one_hot(features, self.network.constant_size)
         labels = tuple(map(lambda x: tf.sparse.to_dense(x), labels))
 
         if len(dense_features) > 1:
             dense_features = tuple(dense_features)
-        return dense_features, labels
+        else:
+            dense_features = dense_features[0]
 
-        # return tuple(dense_features), labels
+        return dense_features, labels
 
     __call__ = call
 
-    def get_dataset(self, example_set=NO_EXAMPLE_SET, shuffle=False):
+    def get_dataset(self, example_set=NO_EXAMPLE_SET,
+                    batch_size=1, shuffle=False):
         """
         Gets the data set for the example set.
 
         :param example_set: the name of the example set
         :type example_set: str
+        :param batch_size: the batch size
+        :type batch_size: int
         :param shuffle: if `True`, shuffles the dataset.
         :type shuffle: bool
         :return: the dataset
@@ -842,11 +860,9 @@ class NeuralLogDataset:
         # noinspection PyTypeChecker
         dataset_size = len(features[0])
         dataset = tf.data.Dataset.from_tensor_slices((features, labels))
-        # features_ds = tf.data.Dataset.from_tensor_slices(features)
-        # labels_ds = tf.data.Dataset.from_tensor_slices(labels)
-        # dataset = tf.data.Dataset.zip((features_ds, labels_ds))
         if shuffle:
             dataset = dataset.shuffle(dataset_size)
+        dataset = dataset.batch(batch_size)
         dataset = dataset.map(self)
         logger.info("Dataset %s created with %d example(s)", example_set,
                     dataset_size)
@@ -874,12 +890,17 @@ class NeuralLogDataset:
             facts = examples.get(predicate, dict()).values()
             for fact in facts:
                 input_term = fact.terms[-1 if inverted else 0]
-                input_terms.append(input_term)
-                output = output_by_term.setdefault(input_term, dict())
+                if input_term not in output_by_term:
+                    output = dict()
+                    output_by_term[input_term] = output
+                    input_terms.append(input_term)
+                else:
+                    output = output_by_term[input_term]
                 if predicate.arity == 1:
                     output[(predicate, inverted)] = fact.weight
                 else:
                     output_term = fact.terms[0 if inverted else -1]
+                    # noinspection PyTypeChecker
                     output.setdefault((predicate, inverted), []).append(
                         (output_term, fact.weight))
 
@@ -893,7 +914,9 @@ class NeuralLogDataset:
                                                               inverted)
             for i in range(len(input_terms)):
                 index = self.program.get_index_of_constant(
-                    predicate, input_index, input_terms[i]) or -1
+                    predicate, input_index, input_terms[i])
+                if index is None:
+                    index = -1
                 features.append(index)
                 outputs = output_by_term[input_terms[i]].get(
                     (predicate, inverted), None)

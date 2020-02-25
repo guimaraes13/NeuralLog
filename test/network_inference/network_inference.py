@@ -9,7 +9,8 @@ import numpy as np
 from src.knowledge.program import NeuralLogProgram
 from src.language.parser.ply.neural_log_parser import NeuralLogLexer
 from src.language.parser.ply.neural_log_parser import NeuralLogParser
-from src.network.network import NeuralLogNetwork, NeuralLogDataset
+from src.network.network import NeuralLogNetwork, NeuralLogDataset, \
+    get_predicate_indices
 
 RESOURCES = "network_inference"
 PROGRAM = "kinship.pl"
@@ -186,8 +187,10 @@ class TestNetworkInference(unittest.TestCase):
                     indices = np.where(prediction[j] != 0.0)[0]
                     if len(indices) == 0:
                         continue
+                    input_index, output_index = get_predicate_indices(
+                        *(predicates[i]))
                     sub = self.program.get_constant_by_index(
-                        predicate, 0, np.argmax(x_numpy[j]))
+                        predicate, input_index, np.argmax(x_numpy[j]))
                     name = predicate.name
                     if predicates[i][1]:
                         name += "^{-1}"
@@ -197,7 +200,7 @@ class TestNetworkInference(unittest.TestCase):
                         #     continue
                         pred = prediction[j][index]
                         obj = self.program.get_constant_by_index(
-                            predicate, 1, index)
+                            predicate, output_index, index)
                         print(pred, obj, sep=":\t")
                         # noinspection PyUnresolvedReferences
                         expected = CORRECT[name][sub.value][obj.value]

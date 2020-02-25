@@ -160,9 +160,9 @@ def format_arguments(message, arguments):
             formatted += word
         formatted += "\n\n"
     formatted += "* this feature may be set individually for each " \
-                 "predicate. " \
-                 "If it is not\ndefined for a specific predicate, " \
-                 "the default globally defined will be used."
+                 "predicate.\n" \
+                 "If it is not defined for a specific predicate,\n" \
+                 "the default globally defined value will be used."
     formatted += "\n\n"
     return formatted
 
@@ -712,22 +712,22 @@ class Train(Command):
         test_set_time = 0
 
         if self.train:
-            self.train_set = self.neural_dataset.get_dataset(TRAIN_SET_NAME,
-                                                             shuffle=shuffle)
-            self.train_set = self.train_set.batch(batch_size)
+            self.train_set = self.neural_dataset.get_dataset(
+                example_set=TRAIN_SET_NAME,
+                batch_size=batch_size,
+                shuffle=shuffle)
             end_train = time.perf_counter()
             train_set_time = end_train - start_func
             end_func = end_train
         if self.valid:
             self.validation_set = self.neural_dataset.get_dataset(
-                VALIDATION_SET_NAME)
-            self.validation_set = self.validation_set.batch(batch_size)
+                example_set=VALIDATION_SET_NAME, batch_size=batch_size)
             end_valid = time.perf_counter()
             validation_set_time = end_valid - end_func
             end_func = end_valid
         if self.test:
-            self.test_set = self.neural_dataset.get_dataset(TEST_SET_NAME)
-            self.test_set = self.test_set.batch(batch_size)
+            self.test_set = self.neural_dataset.get_dataset(
+                example_set=TEST_SET_NAME, batch_size=batch_size)
             end_test = time.perf_counter()
             test_set_time = end_test - end_func
             end_func = end_test
@@ -834,9 +834,6 @@ class Train(Command):
                     file_prefix, VALIDATION_SET_NAME)
 
             if self.test:
-                # self.test_set = \
-                #     self.neural_dataset.get_dataset(TEST_SET_NAME)
-                # self.test_set = self.test_set.batch(self.batch_size)
                 self._save_inference_for_dataset(file_prefix, TEST_SET_NAME)
 
     def _save_inference_for_dataset(self, file_prefix, dataset_name):
