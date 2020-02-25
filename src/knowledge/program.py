@@ -597,28 +597,6 @@ def _convert_to_bool(value):
     return value
 
 
-def _find_term_type(atom, term_types):
-    """
-    Finds the types of the terms in the atom.
-
-    For each term of the atom, it adds the term type (composed of the
-    predicate and the position of the term) to the set of types where the
-    term appears.
-
-    :param atom: the atom
-    :type atom: Atom
-    :param term_types: a dictionary with the set of types where the
-    term appears
-    :type term_types: dict[Term, set[Tuple[Predicate, int]]]
-    :return: a dictionary with the set of types where the
-    term appears
-    :rtype: dict[Term, set[Tuple[Predicate, int]]]
-    """
-    for i in range(atom.arity()):
-        term_types.setdefault(atom.terms[i], set()).add((atom.predicate, i))
-    return term_types
-
-
 def _join_sets_with_common_elements(sets):
     """
     Groups sets that has common elements and returns a list of disjoint
@@ -698,9 +676,6 @@ class NeuralLogProgram:
 
     constants: Set[Term] = set()
     "All the constants"
-
-    iterable_constants: BiDict[int, Term] = BiDict()
-    "The iterable constants"
 
     iterable_constants_per_term: Dict[Tuple[Predicate, int], BiDict[int, Term]]
     "The iterable constants per (predicate / term position)"
@@ -872,8 +847,6 @@ class NeuralLogProgram:
                     self._get_constants_from_atom(literal, _iterable_constants,
                                                   _iterable_constants_per_term)
                     literal.provenance = None
-        self.iterable_constants = _build_constant_dict(_iterable_constants)
-        self.number_of_entities = len(self.iterable_constants)
         self.iterable_constants_per_term = dict()
         for type_terms in grouped_types:
             value = _iterable_constants_per_term[list(type_terms)[0]]
@@ -892,13 +865,44 @@ class NeuralLogProgram:
         for clauses in self.clauses_by_predicate.values():
             for clause in clauses:
                 term_types = dict()
-                _find_term_type(clause.head, term_types)
-                clause.head.provenance = None
+                self._find_term_type(clause.head, term_types)
                 for literal in clause.body:
-                    _find_term_type(literal, term_types)
-                    literal.provenance = None
+                    self._find_term_type(literal, term_types)
                 type_sets += list(term_types.values())
         return _join_sets_with_common_elements(type_sets)
+
+    def _find_term_type(self, atom, term_types):
+        """
+        Finds the types of the terms in the atom.
+
+        For each term of the atom, it adds the term type (composed of the
+        predicate and the position of the term) to the set of types where the
+        term appears.
+
+        :param atom: the atom
+        :type atom: Atom
+        :param term_types: a dictionary with the set of types where the
+        term appears
+        :type term_types: dict[Term, set[Tuple[Predicate, int]]]
+        :return: a dictionary with the set of types where the
+        term appears
+        :rtype: dict[Term, set[Tuple[Predicate, int]]]
+        """
+        numeric_terms = []
+        not_numeric_terms = []
+        for i in range(atom.arity()):
+            if self.predicates[atom.predicate][i].number:
+                numeric_terms.append(i)
+            else:
+                not_numeric_terms.append(i)
+                term_types.setdefault(atom.terms[i],
+                                      set()).add((atom.predicate, i))
+        for i in numeric_terms:
+            for j in not_numeric_terms:
+                term_types.setdefault(atom.terms[i],
+                                      set()).add((atom.predicate, j))
+
+        return term_types
 
     def _get_constants_from_atom(self, atom, iterable_constants,
                                  iterable_constant_per_term,
@@ -924,6 +928,71 @@ class NeuralLogProgram:
             if is_example or types[i].variable:
                 iterable_constant_per_term[(atom.predicate, i)].add(atom[i])
                 iterable_constants.add(atom[i])
+
+    def get_constant_size(self, predicate, index):
+        """
+        Gets the constant size of the predicate term.
+
+        :param predicate: the predicate
+        :type predicate: Predicate
+        :param index: the index of the term
+        :type index: int
+        :return: the constant size of the predicate term
+        :rtype: int
+        """
+        return len(self.iterable_constants_per_term.get((predicate, index),
+                                                        dict()))
+
+    def is_iterable_constant(self, atom, term_index):
+        """
+        Checks if the term of the atom is an iterable constant.
+
+        :param atom: the atom
+        :type atom: Atom
+        :param term_index: the index of the term
+        :type term_index: int
+        :return: `True`, if the term is an iterable constant; otherwise, `False`
+        :rtype: bool
+        """
+        dictionary = self.iterable_constants_per_term.get(
+            (atom.predicate, term_index), None)
+        if dictionary is not None:
+            return atom.terms[term_index] in dictionary.inverse
+        return False
+
+    def get_constant_by_index(self, predicate, term_index, constant_index):
+        """
+        Gets the constant name by the index.
+
+        :param predicate: the predicate
+        :type predicate: Predicate
+        :param term_index: the index of the predicate term
+        :type term_index: int
+        :param constant_index: the constant index
+        :type constant_index: int or ndarray[int]
+        :return: the constant
+        :rtype: Term
+        """
+        # noinspection PyTypeChecker
+        return self.iterable_constants_per_term[
+            (predicate, term_index)][constant_index]
+
+    def get_index_of_constant(self, predicate, term_index, constant):
+        """
+        Gets the index of the constant.
+
+        :param predicate: the predicate
+        :type predicate: Predicate
+        :param term_index: the index of the predicate term
+        :type term_index: int
+        :param constant: the constant
+        :type constant: Term
+        :return: the index of the constant
+        :rtype: int
+        """
+        # noinspection PyTypeChecker
+        return self.iterable_constants_per_term[
+            (predicate, term_index)].inverse.get(constant, None)
 
     def get_matrix_representation(self, predicate, mask=False):
         """
@@ -1028,31 +1097,30 @@ class NeuralLogProgram:
         :rtype: (csr_matrix, csr_matrix)
         """
         attribute_index = 0 if self.predicates[predicate][0].number else 1
-        # entity_index = 1 - attribute_index
+        entity_index = 1 - attribute_index
         weight_data = []
         attribute_data = []
         entity_indices = []
         for fact in self.facts_by_predicate.get(predicate, dict()).values():
-            index = self._check_iterable_terms(fact.terms)
+            index = self._check_iterable_terms(fact)
             if index is None:
                 continue
             weight_data.append(1.0 if mask else fact.weight)
             attribute_data.append(fact.terms[attribute_index].value)
             entity_indices.append(index[0])
 
+        size = self.get_constant_size(predicate, entity_index)
         weights = csr_matrix((weight_data,
                               (entity_indices, [0] * len(weight_data))),
-                             shape=(self.number_of_entities, 1),
+                             shape=(size, 1),
                              dtype=np.float32)
         if mask:
             return weights
 
-        return (
-            weights,
-            csr_matrix((attribute_data,
-                        (entity_indices, [0] * len(attribute_data))),
-                       shape=(self.number_of_entities, 1), dtype=np.float32)
-        )
+        return (weights,
+                csr_matrix((attribute_data,
+                            (entity_indices, [0] * len(attribute_data))),
+                           shape=(size, 1), dtype=np.float32))
 
     def _relational_matrix_representation(self, predicate, mask=False):
         """
@@ -1073,7 +1141,7 @@ class NeuralLogProgram:
         for _ in term_range:
             ind.append([])
         for fact in self.facts_by_predicate.get(predicate, dict()).values():
-            indices = self._check_iterable_terms(fact.terms)
+            indices = self._check_iterable_terms(fact)
             if indices is None:
                 continue
             for i in term_range:
@@ -1081,13 +1149,17 @@ class NeuralLogProgram:
             data.append(1.0 if mask else fact.weight)
 
         if predicate.arity == 1:
+            size = self.get_constant_size(predicate, 0)
             return csr_matrix((data, (ind[0], [0] * len(data))),
-                              shape=(self.number_of_entities, 1),
+                              shape=(size, 1),
                               dtype=np.float32)
 
-        return csr_matrix((data, tuple(ind)),
-                          shape=(self.number_of_entities,) * predicate.arity,
-                          dtype=np.float32)
+        shape = []
+        for i in range(predicate.arity):
+            shape.append(self.get_constant_size(predicate, i))
+
+        return csr_matrix(
+            (data, tuple(ind)), shape=tuple(shape), dtype=np.float32)
 
     def get_diagonal_matrix_representation(self, predicate, mask=False):
         """
@@ -1106,7 +1178,7 @@ class NeuralLogProgram:
         ind = [[], []]
 
         for fact in self.facts_by_predicate.get(predicate, dict()).values():
-            indices = self._check_iterable_terms(fact.terms)
+            indices = self._check_iterable_terms(fact)
             if indices is None:
                 continue
             if indices[0] != indices[1]:
@@ -1115,25 +1187,25 @@ class NeuralLogProgram:
             ind[1].append(0)
             data.append(1.0 if mask else fact.weight)
 
-        return csr_matrix((data, tuple(ind)),
-                          shape=(self.number_of_entities, 1), dtype=np.float32)
+        size = self.get_constant_size(predicate, 0)
+        return csr_matrix((data, tuple(ind)), shape=(size, 1), dtype=np.float32)
 
-    def _check_iterable_terms(self, terms):
+    def _check_iterable_terms(self, atom):
         """
-        Checks if all the terms are iterable constants. If they all are,
-        it returns a list of their indices, otherwise, returns `None`.
+        Checks if all the terms of an atom are iterable constants. If they all
+        are, it returns a list of their indices, otherwise, returns `None`.
 
-        :param terms: the terms
-        :type terms: list[Term]
+        :param atom: the atom
+        :type atom: Atom
         :return: a list with the indices of the terms, if they all are
         iterable constants; otherwise, returns `None`
         :rtype: list[int] or None
         """
         indices = []
-        for term in terms:
-            if isinstance(term, Number):
+        for i in range(len(atom.terms)):
+            if isinstance(atom.terms[i], Number):
                 continue
-            index = self.iterable_constants.inverse.get(term, None)
+            index = self.get_index_of_constant(atom.predicate, i, atom.terms[i])
             if index is None:
                 return None
             indices.append(index)
@@ -1168,7 +1240,8 @@ class NeuralLogProgram:
         for fact in self.facts_by_predicate.get(predicate, dict()).values():
             if fact.terms[constant_index] != atom.terms[constant_index]:
                 continue
-            index = self.iterable_constants.inverse.get(
+            index = self.iterable_constants_per_term[
+                (predicate, variable_index)].inverse.get(
                 fact.terms[variable_index], None)
             if index is None:
                 continue
@@ -1176,19 +1249,8 @@ class NeuralLogProgram:
             ind[1].append(0)
             data.append(1.0 if mask else fact.weight)
 
-        return csr_matrix((data, tuple(ind)),
-                          shape=(self.number_of_entities, 1), dtype=np.float32)
-
-    def index_for_constant(self, constant):
-        """
-        Gets the index for the iterable constant.
-
-        :param constant: the iterable constant
-        :type constant: Term
-        :return: the index of the iterable constant
-        :rtype: int
-        """
-        return self.iterable_constants.inverse[constant]
+        size = self.get_constant_size(predicate, variable_index)
+        return csr_matrix((data, tuple(ind)), shape=(size, 1), dtype=np.float32)
 
     def _is_builtin_predicate(self, predicate):
         """

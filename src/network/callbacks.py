@@ -328,10 +328,12 @@ class LinkPredictionCallback(AbstractNeuralLogCallback):
             examples = self.program.examples.get(dataset, dict())
             examples = examples.get(predicate, dict())  # type: Dict[Any, Atom]
             for example in examples.values():
-                sub_index = self.program.index_for_constant(
-                    example.terms[-1 if inverted else 0])
-                obj_index = self.program.index_for_constant(
-                    example.terms[0 if inverted else -1])
+                sub_index = self.program.get_index_of_constant(
+                    predicate, 1 if inverted else 0,
+                    example.terms[1 if inverted else 0])
+                obj_index = self.program.get_index_of_constant(
+                    predicate, 0 if inverted else 1,
+                    example.terms[0 if inverted else 1])
                 filtered_entities.setdefault(sub_index, set()).add(obj_index)
 
         return filtered_entities
@@ -359,16 +361,14 @@ class LinkPredictionCallback(AbstractNeuralLogCallback):
         top_hits = np.zeros(number_of_indices, dtype=np.int64)
         total_count = np.zeros(number_of_indices, dtype=np.int64)
         for features, labels in self.dataset:
-            y_scores = self.model.predict(features)
+            y_scores = self.model.call(features)
             for i in range(len(self.output_indices)):
                 index = self.output_indices[i]
-                if isinstance(y_scores, list):
-                    output_scores = y_scores[index]
-                else:
-                    output_scores = y_scores
                 for feature, y_true, y_score in \
-                        zip(features, labels[index], output_scores):
+                        zip(features[index], labels[index], y_scores[index]):
                     x = feature.numpy()
+                    if x.max() == 0.0:
+                        continue
                     y_true = y_true.numpy()
                     subject_index = np.argmax(x)
                     positive_objects = np.reshape(np.argwhere(y_true > 0.0), -1)
@@ -519,23 +519,24 @@ class AreaUnderCurveROC(AbstractNeuralLogCallback):
             results[predicate] = ([], [])
 
         for features, labels in self.dataset:
-            y_scores = self.model.predict(features)
+            y_scores = self.model.call(features)
             for i in range(len(model.predicates)):
                 predicate = model.predicates[i]
                 examples = self.examples[predicate]
                 result = results[predicate]
-                if isinstance(y_scores, list):
-                    output_scores = y_scores[i]
-                else:
-                    output_scores = y_scores
-                for feature, y_true, y_score in zip(features, labels[i],
-                                                    output_scores):
+                for feature, y_true, y_score in zip(features[i], labels[i],
+                                                    y_scores[i]):
                     x = feature.numpy()
+                    if x.max() == 0.0:
+                        continue
                     subject_index = np.argmax(x)
                     # noinspection PyTypeChecker
-                    subject = neural_program.iterable_constants[subject_index]
+                    # subject = neural_program.iterable_constants[subject_index]
+                    subject = neural_program.get_constant_by_index(
+                        predicate[0], 0, subject_index)
                     for obj, label in examples.get(subject, dict()).items():
-                        obj_index = neural_program.index_for_constant(obj)
+                        obj_index = neural_program.get_index_of_constant(
+                            predicate[0], 1, obj)
                         result[0].append(label)
                         result[1].append(y_score[obj_index])
 

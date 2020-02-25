@@ -358,6 +358,15 @@ class NeuralLogLayer(keras.layers.Layer):
 
     __repr__ = __str__
 
+    def is_empty(self):
+        """
+        Checks if a Layer is empty.
+
+        :return: `True`, if the layer is empty; `False`, otherwise
+        :rtype: bool
+        """
+        return False
+
 
 class EmptyLayer(NeuralLogLayer):
     """
@@ -384,6 +393,17 @@ class EmptyLayer(NeuralLogLayer):
     @classmethod
     def from_config(cls, config):
         return cls(**config)
+
+    def is_empty(self):
+        """
+        Checks if a Layer is empty.
+
+        The EmptyLayer is always empty.
+
+        :return: `True`, if the layer is empty; `False`, otherwise
+        :rtype: bool
+        """
+        return True
 
     def __hash__(self):
         return hash("empty")
@@ -483,7 +503,19 @@ class FactLayer(AbstractFactLayer):
     def call(self, inputs, **kwargs):
         if inputs is None:
             return None
-        return self.fact_combining_function(inputs, self.get_kernel())
+        kernel = self.get_kernel()
+        inputs_shape = inputs.shape
+        if len(kernel.shape) > 1:
+            # if len(inputs_shape) == 1:
+            #     inputs = tf.reshape(inputs, [1, -1])
+            if len(inputs_shape) == 2 and \
+                    inputs_shape[0] == inputs_shape[1] == 1 and \
+                    kernel.shape[0] > 1:
+                shape = list(inputs_shape)
+                shape[-1] = kernel.shape[0]
+                inputs = tf.broadcast_to(inputs, shape)
+
+        return self.fact_combining_function(inputs, kernel)
 
 
 class DiagonalFactLayer(FactLayer):
@@ -779,13 +811,18 @@ class LiteralLayer(NeuralLogLayer):
         self.input_layers = input_layers
         self.literal_combining_function = literal_combining_function
         self.negation_function = negation_function
+        self._is_empty = self._compute_empty()
         super(LiteralLayer, self).__init__(name, **kwargs)
+
+    def _compute_empty(self):
+        for layer in self.input_layers:
+            if not layer.is_empty():
+                return False
+        return True
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
         if len(self.input_layers) == 1:
-            if isinstance(self.input_layers[0], EmptyLayer):
-                return None
             result = self.input_layers[0](inputs)
             if self.negation_function is not None:
                 return self.negation_function(result)
@@ -793,13 +830,25 @@ class LiteralLayer(NeuralLogLayer):
 
         result = self.input_layers[0](inputs)
         for input_layer in self.input_layers[1:]:
-            layer_result = input_layer(inputs)
-            if layer_result is None:
+            if input_layer.is_empty():
                 continue
+            layer_result = input_layer(inputs)
             result = self.literal_combining_function(result, layer_result)
         if self.negation_function is not None:
             return self.negation_function(result)
         return result
+
+    def is_empty(self):
+        """
+        Checks if a Layer is empty.
+
+        A literal layer is only empty if all input layers of the literal are
+        empty.
+
+        :return: `True`, if the layer is empty; `False`, otherwise
+        :rtype: bool
+        """
+        return self._is_empty
 
     # noinspection PyMissingOrEmptyDocstring
     def compute_output_shape(self, input_shape):
@@ -965,7 +1014,15 @@ class RuleLayer(NeuralLogLayer):
         self.grounded_layers = grounded_layers
         self.path_combining_function = path_combining_function
         self.neutral_element = neutral_element
+        self._is_empty = self._compute_empty()
         super(RuleLayer, self).__init__(name, **kwargs)
+
+    def _compute_empty(self):
+        for path in self.paths:
+            for layer in path:
+                if layer.is_empty():
+                    return True
+        return False
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
@@ -1004,6 +1061,20 @@ class RuleLayer(NeuralLogLayer):
                 return tf.matmul(tensor, new_tensor)
             tensor = literal_layer(tensor)
         return tensor
+
+    def is_empty(self):
+        """
+        Checks if a Layer is empty.
+
+        A RuleLayer is empty if there is, at least, a path with a empty layer
+        in it.
+
+        If there is no paths in the rule layer, it is not empty.
+
+        :return: `True`, if the layer is empty; `False`, otherwise
+        :rtype: bool
+        """
+        return self._is_empty
 
     # noinspection PyMissingOrEmptyDocstring
     def compute_output_shape(self, input_shape):

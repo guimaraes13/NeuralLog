@@ -29,7 +29,7 @@ class TestLayerFactory(unittest.TestCase):
     def setUpClass(cls) -> None:
         lexer = NeuralLogLexer()
         parser = NeuralLogParser(lexer)
-        parser.parse("layer_factory/layer_factory.pl")
+        parser.parse("layer_factory.pl")
         clauses = parser.get_clauses()
         # Create the NeuralLog Program
         cls.program = NeuralLogProgram()
@@ -188,7 +188,7 @@ class TestLayerFactory(unittest.TestCase):
     def test_arity_1_1_not_trainable_iterable_constant(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = "christopher"
-        atom = Atom("male", value, weight=0.07)
+        atom = Atom("it_male", value, weight=0.07)
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_1_1_not_trainable_iterable_constant.__func__,
@@ -202,10 +202,9 @@ class TestLayerFactory(unittest.TestCase):
     def test_arity_1_1_not_trainable_variable(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = "X"
-        atom = Atom("male", value)
-        correct = np.array([0.02, 0.03, 0.0, 0.05, 0.0, 0.0, 0.07, 0.11, 0.13,
-                            0.0, 0.17, 0.0, 0.0, 0.19, 0.0, 0.0, 0.23, 0.31,
-                            0.0, 0.0])
+        atom = Atom("it_male", value)
+        correct = np.array([0.02, 0.03, 0.05, 1., 0.07, 0.11, 0.13, 0.17, 0.19,
+                            0.23, 0.31, 0.07, 0.37])
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_1_1_not_trainable_variable.__func__,
@@ -213,12 +212,15 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size,), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        size = layer_factory.program.get_constant_size(atom.predicate, 0)
+        self.assertEqual((size,), evaluated.shape)
+        self.assertEqual((size,), correct.shape)
+        for i in range(size):
             self.assertAlmostEqual(
                 correct[i], evaluated[i], places=EQUAL_DELTA,
                 msg="Incorrect value for constant {}: {}".format(
-                    i, layer_factory.program.iterable_constants[i]))
+                    i, layer_factory.program.get_constant_by_index(
+                        atom.predicate, 0, i)))
 
     def test_arity_1_1_trainable_constant(self):
         layer_factory = self.layer_factory  # type: LayerFactory
@@ -252,7 +254,7 @@ class TestLayerFactory(unittest.TestCase):
     def test_arity_1_1_trainable_iterable_constant(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = "christine"
-        atom = Atom("female", value, weight=0.107)
+        atom = Atom("it_female", value, weight=0.107)
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_1_1_trainable_iterable_constant.__func__,
@@ -266,10 +268,9 @@ class TestLayerFactory(unittest.TestCase):
     def test_arity_1_1_trainable_variable(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = "X"
-        atom = Atom("female", value)
-        weight = np.array(
-            [0.0, 0.0, 0.101, 0.0, 0.103, 0.107, 0.0, 0.0, 0.0, 0.109, 0.0,
-             0.127, 0.137, 0.0, 0.149, 0.151, 0.0, 0.0, 0.157, 0.163])
+        atom = Atom("it_female", value)
+        weight = np.array([0.101, 0.103, 0.107, 0.109, 0.113, 0.127, 0.137,
+                           0.139, 0.149, 0.151, 0.107, 0.157, 0.163])
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_1_1_trainable_variable.__func__,
@@ -277,10 +278,13 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size,), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        size = layer_factory.program.get_constant_size(atom.predicate, 0)
+        self.assertEqual((size,), evaluated.shape)
+        self.assertEqual((size,), weight.shape)
+        for i in range(size):
             error_message = "Incorrect value for constant {}: {}".format(
-                i, layer_factory.program.iterable_constants[i])
+                i, layer_factory.program.get_constant_by_index(
+                    atom.predicate, 0, i))
             if np.isclose(weight[i], 0.0):
                 self.assertGreaterEqual(evaluated[i], WEIGHT_MIN_VALUE,
                                         msg=error_message)
@@ -626,7 +630,7 @@ class TestLayerFactory(unittest.TestCase):
     def test_arity_2_1_not_trainable_iterable_constant_number(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = 41
-        atom = Atom("age", "colin", value, weight=0.223)
+        atom = Atom("it_age", "colin", value, weight=0.223)
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.
@@ -643,7 +647,7 @@ class TestLayerFactory(unittest.TestCase):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = "X"
         expected = 41
-        atom = Atom("age", "colin", value, weight=0.223)
+        atom = Atom("it_age", "colin", value, weight=0.223)
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.
@@ -659,12 +663,9 @@ class TestLayerFactory(unittest.TestCase):
     def test_arity_2_1_not_trainable_variable_number(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = 27
-        atom = Atom("age", "X", value)
-        weight = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.227,
-                           0.241, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                           0.0, 0.0])
-        values = np.array([0, 0, 0, 0, 0, 0, 0, 41, 27, 27, 0, 0, 0, 0,
-                           0, 0, 0, 0, 0, 0])
+        atom = Atom("it_age", "X", value)
+        weight = np.array([0.0, 0.227, 0.241, 0.0, 0.0, 0.0])
+        values = np.array([41, 27, 27, 81, 23, 30])
         correct = weight * values
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
@@ -673,19 +674,21 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size,), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        size = layer_factory.program.get_constant_size(atom.predicate, 0)
+        self.assertEqual((size,), evaluated.shape)
+        self.assertEqual((size,), correct.shape)
+        for i in range(size):
             self.assertAlmostEqual(
                 correct[i], evaluated[i], places=EQUAL_DELTA,
                 msg="Incorrect value for constant {}: {}".format(
-                    i, layer_factory.program.iterable_constants[i]))
+                    i, layer_factory.program.get_constant_by_index(
+                        atom.predicate, 0, i)))
 
     def test_arity_2_1_not_trainable_variable_number_not_in_kb(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = 105
-        atom = Atom("age", "X", value)
-        weight = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                           0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        atom = Atom("it_age", "X", value)
+        weight = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_2_1_not_trainable_variable_number.__func__,
@@ -693,22 +696,22 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size,), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        size = layer_factory.program.get_constant_size(atom.predicate, 0)
+        self.assertEqual((size,), evaluated.shape)
+        self.assertEqual((size,), weight.shape)
+        for i in range(size):
             self.assertAlmostEqual(
                 weight[i], evaluated[i], places=EQUAL_DELTA,
                 msg="Incorrect value for constant {}: {}".format(
-                    i, layer_factory.program.iterable_constants[i]))
+                    i, layer_factory.program.get_constant_by_index(
+                        atom.predicate, 0, i)))
 
     def test_arity_2_1_not_trainable_variable_number_variable(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = "Y"
-        atom = Atom("age", "X", value)
-        weight = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.223, 0.227,
-                           0.241, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                           0.0, 0.0])
-        values = np.array([0, 0, 0, 0, 0, 0, 0, 41, 27, 27, 0, 0, 0, 0, 0, 0,
-                           0, 0, 0, 0])
+        atom = Atom("it_age", "X", value)
+        weight = np.array([0.223, 0.227, 0.241, 0.251, 0.239, 0.211])
+        values = np.array([41, 27, 27, 81, 23, 30])
         correct = weight * values
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
@@ -717,19 +720,21 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size,), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        size = layer_factory.program.get_constant_size(atom.predicate, 0)
+        self.assertEqual((size,), evaluated.shape)
+        self.assertEqual((size,), correct.shape)
+        for i in range(size):
             self.assertAlmostEqual(
                 correct[i], evaluated[i], places=EQUAL_DELTA,
                 msg="Incorrect value for constant {}: {}".format(
-                    i, layer_factory.program.iterable_constants[i]))
+                    i, layer_factory.program.get_constant_by_index(
+                        atom.predicate, 0, i)))
 
     def test_arity_2_1_not_trainable_equal_variable_number_variable(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = "X"
-        atom = Atom("age", "X", value)
-        weight = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                           0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        atom = Atom("it_age", "X", value)
+        weight = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_2_1_not_trainable_variable_number.__func__,
@@ -737,12 +742,15 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size,), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        size = layer_factory.program.get_constant_size(atom.predicate, 0)
+        self.assertEqual((size,), evaluated.shape)
+        self.assertEqual((size,), weight.shape)
+        for i in range(size):
             self.assertAlmostEqual(
                 weight[i], evaluated[i], places=EQUAL_DELTA,
                 msg="Incorrect value for constant {}: {}".format(
-                    i, layer_factory.program.iterable_constants[i]))
+                    i, layer_factory.program.get_constant_by_index(
+                        atom.predicate, 0, i)))
 
     def test_arity_2_1_not_trainable_number_constant(self):
         layer_factory = self.layer_factory  # type: LayerFactory
@@ -820,7 +828,7 @@ class TestLayerFactory(unittest.TestCase):
     def test_arity_2_1_not_trainable_number_iterable_constant(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = 1.73
-        atom = Atom("inv_height", value, "jennifer", weight=0.353)
+        atom = Atom("it_inv_height", value, "jennifer", weight=0.353)
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.
@@ -837,7 +845,7 @@ class TestLayerFactory(unittest.TestCase):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = "X"
         expected = 1.73
-        atom = Atom("inv_height", value, "jennifer", weight=0.353)
+        atom = Atom("it_inv_height", value, "jennifer", weight=0.353)
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.
@@ -853,13 +861,11 @@ class TestLayerFactory(unittest.TestCase):
     def test_arity_2_1_not_trainable_number_variable(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = 1.65
-        atom = Atom("inv_height", value, "X")
-        weight = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                           0.0, 0.0, 0.359, 0.331, 0.0, 0.0, 0.367, 0.0,
-                           0.0, 0.0])
-        values = np.array([0.0, 0.0, 0.0, 0.0, 1.81, 0.0, 0.0, 1.57, 2.06,
-                           1.7, 1.9, 1.73, 1.65, 1.65, 0.0, 0.0, 1.65, 0.0,
-                           0.0, 0.0])
+        atom = Atom("it_inv_height", value, "X")
+        weight = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.359, 0.331,
+                           0.367, 0.0, 0.0])
+        values = np.array([1.81, 1.57, 2.06, 1.7, 1.45, 1.7, 1.73, 1.65, 1.65,
+                           1.65, 1.72, 1.73])
         correct = weight * values
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
@@ -868,20 +874,22 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size,), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        size = layer_factory.program.get_constant_size(atom.predicate, 1)
+        self.assertEqual((size,), evaluated.shape)
+        self.assertEqual((size,), correct.shape)
+        for i in range(size):
             self.assertAlmostEqual(
                 correct[i], evaluated[i], places=EQUAL_DELTA,
                 msg="Incorrect value for constant {}: {}".format(
-                    i, layer_factory.program.iterable_constants[i]))
+                    i, layer_factory.program.get_constant_by_index(
+                        atom.predicate, 1, i)))
 
     def test_arity_2_1_not_trainable_number_not_in_kb_variable(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = 2.65
-        atom = Atom("inv_height", value, "X")
-        weight = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                           0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                           0.0, 0.0, 0.0, 0.0])
+        atom = Atom("it_inv_height", value, "X")
+        weight = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                           0.0, 0.0])
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_2_1_not_trainable_number_variable.__func__,
@@ -889,23 +897,24 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size,), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        size = layer_factory.program.get_constant_size(atom.predicate, 1)
+        self.assertEqual((size,), evaluated.shape)
+        self.assertEqual((size,), weight.shape)
+        for i in range(size):
             self.assertAlmostEqual(
                 weight[i], evaluated[i], places=EQUAL_DELTA,
                 msg="Incorrect value for constant {}: {}".format(
-                    i, layer_factory.program.iterable_constants[i]))
+                    i, layer_factory.program.get_constant_by_index(
+                        atom.predicate, 1, i)))
 
     def test_arity_2_1_not_trainable_number_variable_variable(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = "Y"
-        atom = Atom("inv_height", value, "X")
-        weight = np.array([0.0, 0.0, 0.0, 0.0, 0.373, 0.0, 0.0, 0.311, 0.313,
-                           0.347, 0.317, 0.353, 0.359, 0.331, 0.0, 0.0,
-                           0.367, 0.0, 0.0, 0.0])
-        values = np.array([0.0, 0.0, 0.0, 0.0, 1.81, 0.0, 0.0, 1.57, 2.06,
-                           1.7, 1.7, 1.73, 1.65, 1.65, 0.0, 0.0, 1.65, 0.0,
-                           0.0, 0.0])
+        atom = Atom("it_inv_height", value, "X")
+        weight = np.array([0.373, 0.311, 0.313, 0.347, 0.349, 0.317,
+                           0.353, 0.359, 0.331, 0.367, 0.337, 0.307])
+        values = np.array([1.81, 1.57, 2.06, 1.70, 1.45, 1.70,
+                           1.73, 1.65, 1.65, 1.65, 1.72, 1.73])
         correct = weight * values
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
@@ -914,20 +923,22 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size,), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        size = layer_factory.program.get_constant_size(atom.predicate, 1)
+        self.assertEqual((size,), evaluated.shape)
+        self.assertEqual((size,), correct.shape)
+        for i in range(size):
             self.assertAlmostEqual(
                 correct[i], evaluated[i], places=EQUAL_DELTA,
                 msg="Incorrect value for constant {}: {}".format(
-                    i, layer_factory.program.iterable_constants[i]))
+                    i, layer_factory.program.get_constant_by_index(
+                        atom.predicate, 1, i)))
 
     def test_arity_2_1_not_trainable_equal_number_variable_variable(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = "X"
-        atom = Atom("inv_height", value, "X")
-        weight = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                           0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                           0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        atom = Atom("it_inv_height", value, "X")
+        weight = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                           0.0, 0.0])
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_2_1_not_trainable_number_variable.__func__,
@@ -935,12 +946,15 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size,), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        size = layer_factory.program.get_constant_size(atom.predicate, 1)
+        self.assertEqual((size,), evaluated.shape)
+        self.assertEqual((size,), weight.shape)
+        for i in range(size):
             self.assertAlmostEqual(
                 weight[i], evaluated[i], places=EQUAL_DELTA,
                 msg="Incorrect value for constant {}: {}".format(
-                    i, layer_factory.program.iterable_constants[i]))
+                    i, layer_factory.program.get_constant_by_index(
+                        atom.predicate, 1, i)))
 
     def test_arity_2_1_trainable_constant_number(self):
         layer_factory = self.layer_factory  # type: LayerFactory
@@ -1021,7 +1035,7 @@ class TestLayerFactory(unittest.TestCase):
     def test_arity_2_1_trainable_iterable_constant_number(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = 1.7
-        atom = Atom("height", "james", value, weight=0.317)
+        atom = Atom("it_height", "james", value, weight=0.317)
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.
@@ -1038,7 +1052,7 @@ class TestLayerFactory(unittest.TestCase):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = "X"
         expected = 1.7
-        atom = Atom("height", "james", value, weight=0.317)
+        atom = Atom("it_height", "james", value, weight=0.317)
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.
@@ -1054,10 +1068,9 @@ class TestLayerFactory(unittest.TestCase):
     def test_arity_2_1_trainable_variable_number(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = 1.7
-        atom = Atom("height", "X", value)
-        weight = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                           0.0, 0.347, 0.317, 0.0, 0.0, 0.0, 0.0, 0.0,
-                           0.0, 0.0, 0.0, 0.0])
+        atom = Atom("it_height", "X", value)
+        weight = np.array([0.0, 0.0, 0.0, 0.347, 0.0, 0.317, 0.0, 0.0, 0.0,
+                           0.0, 0.0, 0.0])
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_2_1_trainable_variable_number.__func__,
@@ -1065,10 +1078,13 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size,), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        size = layer_factory.program.get_constant_size(atom.predicate, 0)
+        self.assertEqual((size,), evaluated.shape)
+        self.assertEqual((size,), weight.shape)
+        for i in range(size):
             error_message = "Incorrect value for constant {}: {}".format(
-                i, layer_factory.program.iterable_constants[i])
+                i, layer_factory.program.get_constant_by_index(
+                    atom.predicate, 0, i))
             if np.isclose(weight[i], 0.0):
                 self.assertGreaterEqual(evaluated[i],
                                         value * WEIGHT_MIN_VALUE,
@@ -1083,7 +1099,7 @@ class TestLayerFactory(unittest.TestCase):
     def test_arity_2_1_trainable_variable_number_not_in_kb(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = 2.7
-        atom = Atom("height", "X", value)
+        atom = Atom("it_height", "X", value)
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_2_1_trainable_variable_number.__func__,
@@ -1091,21 +1107,20 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size,), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        size = layer_factory.program.get_constant_size(atom.predicate, 0)
+        self.assertEqual((size,), evaluated.shape)
+        for i in range(size):
             self.assertGreaterEqual(evaluated[i], value * WEIGHT_MIN_VALUE)
             self.assertLessEqual(evaluated[i], value * WEIGHT_MAX_VALUE)
 
     def test_arity_2_1_trainable_variable_number_variable(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = "Y"
-        atom = Atom("height", "X", value)
-        weight = np.array([0.0, 0.0, 0.0, 0.0, 0.373, 0.0, 0.0, 0.311, 0.313,
-                           0.347, 0.317, 0.353, 0.359, 0.331, 0.0, 0.0,
-                           0.367, 0.0, 0.0, 0.0])
-        values = np.array([0.0, 0.0, 0.0, 0.0, 1.81, 0.0, 0.0, 1.57, 2.06,
-                           1.7, 1.7, 1.73, 1.59, 1.65, 0.0, 0.0, 1.82, 0.0,
-                           0.0, 0.0])
+        atom = Atom("it_height", "X", value)
+        weight = np.array([0.373, 0.311, 0.313, 0.347, 0.349, 0.317,
+                           0.353, 0.359, 0.331, 0.367, 0.337, 0.307])
+        values = np.array([1.81, 1.57, 2.06, 1.7, 1.45, 1.7,
+                           1.73, 1.59, 1.65, 1.82, 1.72, 1.73])
         correct = weight * values
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
@@ -1114,17 +1129,20 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size,), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        size = layer_factory.program.get_constant_size(atom.predicate, 0)
+        self.assertEqual((size,), evaluated.shape)
+        self.assertEqual((size,), correct.shape)
+        for i in range(size):
             self.assertAlmostEqual(
                 correct[i], evaluated[i], places=EQUAL_DELTA,
                 msg="Incorrect value for constant {}: {}".format(
-                    i, layer_factory.program.iterable_constants[i]))
+                    i, layer_factory.program.get_constant_by_index(
+                        atom.predicate, 0, i)))
 
     def test_arity_2_1_trainable_equal_variable_number_variable(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = "X"
-        atom = Atom("height", "X", value)
+        atom = Atom("it_height", "X", value)
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_2_1_trainable_variable_number.__func__,
@@ -1132,12 +1150,14 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size,), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        size = layer_factory.program.get_constant_size(atom.predicate, 0)
+        self.assertEqual((size,), evaluated.shape)
+        for i in range(size):
             self.assertAlmostEqual(
                 0.0, evaluated[i], places=EQUAL_DELTA,
                 msg="Incorrect value for constant {}: {}".format(
-                    i, layer_factory.program.iterable_constants[i]))
+                    i, layer_factory.program.get_constant_by_index(
+                        atom.predicate, 0, i)))
 
     def test_arity_2_1_trainable_number_constant(self):
         layer_factory = self.layer_factory  # type: LayerFactory
@@ -1218,7 +1238,7 @@ class TestLayerFactory(unittest.TestCase):
     def test_arity_2_1_trainable_number_iterable_constant(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = 27
-        atom = Atom("inv_age", value, "francesca", weight=0.241)
+        atom = Atom("it_inv_age", value, "francesca", weight=0.241)
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.
@@ -1235,7 +1255,7 @@ class TestLayerFactory(unittest.TestCase):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = "X"
         expected = 27
-        atom = Atom("inv_age", value, "francesca", weight=0.241)
+        atom = Atom("it_inv_age", value, "francesca", weight=0.241)
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.
@@ -1251,10 +1271,8 @@ class TestLayerFactory(unittest.TestCase):
     def test_arity_2_1_trainable_number_variable(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = 27
-        atom = Atom("inv_age", value, "X")
-        weight = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.227,
-                           0.241, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                           0.0, 0.0])
+        atom = Atom("it_inv_age", value, "X")
+        weight = np.array([0.0, 0.227, 0.241, 0.0, 0.0, 0.0])
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_2_1_trainable_number_variable.__func__,
@@ -1262,10 +1280,13 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size,), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        size = layer_factory.program.get_constant_size(atom.predicate, 1)
+        self.assertEqual((size,), evaluated.shape)
+        self.assertEqual((size,), weight.shape)
+        for i in range(size):
             error_message = "Incorrect value for constant {}: {}".format(
-                i, layer_factory.program.iterable_constants[i])
+                i, layer_factory.program.get_constant_by_index(
+                    atom.predicate, 1, i))
             if np.isclose(weight[i], 0.0):
                 self.assertGreaterEqual(evaluated[i],
                                         value * WEIGHT_MIN_VALUE,
@@ -1280,7 +1301,7 @@ class TestLayerFactory(unittest.TestCase):
     def test_arity_2_1_trainable_number_not_in_kb_variable(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = 127
-        atom = Atom("inv_age", value, "X")
+        atom = Atom("it_inv_age", value, "X")
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_2_1_trainable_number_variable.__func__,
@@ -1288,10 +1309,12 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size,), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        size = layer_factory.program.get_constant_size(atom.predicate, 1)
+        self.assertEqual((size,), evaluated.shape)
+        for i in range(size):
             error_message = "Incorrect value for constant {}: {}".format(
-                i, layer_factory.program.iterable_constants[i])
+                i, layer_factory.program.get_constant_by_index(
+                    atom.predicate, 1, i))
             self.assertGreaterEqual(evaluated[i],
                                     value * WEIGHT_MIN_VALUE,
                                     msg=error_message)
@@ -1301,13 +1324,9 @@ class TestLayerFactory(unittest.TestCase):
     def test_arity_2_1_trainable_number_variable_variable(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = "Y"
-        atom = Atom("inv_age", value, "X")
-        weight = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.223,
-                           0.227, 0.241, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                           0.0, 0.0, 0.0, 0.0])
-        values = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 41,
-                           27, 27, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                           0.0, 0.0, 0.0, 0.0])
+        atom = Atom("it_inv_age", value, "X")
+        weight = np.array([0.223, 0.227, 0.241, 0.251, 0.239, 0.211])
+        values = np.array([41, 27, 27, 81, 23, 30])
         correct = weight * values
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
@@ -1316,17 +1335,20 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size,), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        size = layer_factory.program.get_constant_size(atom.predicate, 1)
+        self.assertEqual((size,), evaluated.shape)
+        self.assertEqual((size,), correct.shape)
+        for i in range(size):
             self.assertAlmostEqual(
                 correct[i], evaluated[i], places=EQUAL_DELTA,
                 msg="Incorrect value for constant {}: {}".format(
-                    i, layer_factory.program.iterable_constants[i]))
+                    i, layer_factory.program.get_constant_by_index(
+                        atom.predicate, 1, i)))
 
     def test_arity_2_1_trainable_equal_number_variable_variable(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = "X"
-        atom = Atom("inv_age", value, "X")
+        atom = Atom("it_inv_age", value, "X")
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_2_1_trainable_number_variable.__func__,
@@ -1334,12 +1356,14 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size,), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        size = layer_factory.program.get_constant_size(atom.predicate, 1)
+        self.assertEqual((size,), evaluated.shape)
+        for i in range(size):
             self.assertAlmostEqual(
                 0.0, evaluated[i], places=EQUAL_DELTA,
                 msg="Incorrect value for constant {}: {}".format(
-                    i, layer_factory.program.iterable_constants[i]))
+                    i, layer_factory.program.get_constant_by_index(
+                        atom.predicate, 1, i)))
 
     def test_arity_2_2_not_trainable_constant_constant(self):
         layer_factory = self.layer_factory  # type: LayerFactory
@@ -1400,7 +1424,7 @@ class TestLayerFactory(unittest.TestCase):
     def test_arity_2_2_not_trainable_constant_iterable_constant(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = ["some_female", "jennifer"]
-        atom = Atom("daughter", *value, weight=0.9415)
+        atom = Atom("it_daughter", *value, weight=0.9415)
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_2_2_not_trainable_constant_iterable_constant.
@@ -1415,10 +1439,8 @@ class TestLayerFactory(unittest.TestCase):
     def test_arity_2_2_not_trainable_constant_variable(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = ["some_female", "X"]
-        atom = Atom("sister", *value)
-        correct = np.array([0.0, 0.0, 0.6853, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                            0.0, 0.0, 0.5853, 0.0, 0.7853, 0.0, 0.0, 0.0,
-                            0.0, 0.0, 0.0])
+        atom = Atom("it_sister", *value)
+        correct = np.array([0.0, 0.6853, 0.0, 0.0, 0.0, 0.5853, 0.7853])
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_2_2_not_trainable_constant_variable.__func__,
@@ -1426,12 +1448,15 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size,), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        size = layer_factory.program.get_constant_size(atom.predicate, 1)
+        self.assertEqual((size,), evaluated.shape)
+        self.assertEqual((size,), correct.shape)
+        for i in range(size):
             self.assertAlmostEqual(
                 correct[i], evaluated[i], places=EQUAL_DELTA,
                 msg="Incorrect value for constant {}: {}".format(
-                    i, layer_factory.program.iterable_constants[i]))
+                    i, layer_factory.program.get_constant_by_index(
+                        atom.predicate, 1, i)))
 
     def test_arity_2_2_not_trainable_constant_not_in_kb_variable(self):
         layer_factory = self.layer_factory  # type: LayerFactory
@@ -1444,17 +1469,19 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size,), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        size = layer_factory.program.get_constant_size(atom.predicate, 1)
+        self.assertEqual((size,), evaluated.shape)
+        for i in range(size):
             self.assertAlmostEqual(
                 0.0, evaluated[i], places=EQUAL_DELTA,
                 msg="Incorrect value for constant {}: {}".format(
-                    i, layer_factory.program.iterable_constants[i]))
+                    i, layer_factory.program.get_constant_by_index(
+                        atom.predicate, 1, i)))
 
     def test_arity_2_2_not_trainable_iterable_constant_constant(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = ["james", "some_female"]
-        atom = Atom("husband", *value, weight=0.7019)
+        atom = Atom("it_husband", *value, weight=0.7019)
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_2_2_not_trainable_iterable_constant_constant.
@@ -1469,7 +1496,7 @@ class TestLayerFactory(unittest.TestCase):
     def test_arity_2_2_not_trainable_iterable_constant_iterable_constant(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = ["james", "victoria"]
-        atom = Atom("husband", *value, weight=0.577)
+        atom = Atom("it_husband_2", *value, weight=0.577)
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.
@@ -1496,34 +1523,38 @@ class TestLayerFactory(unittest.TestCase):
             layer_factory.function[key])
         evaluated = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT).numpy()
 
-        self.assertEqual((layer_factory.constant_size,), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        size = layer_factory.program.get_constant_size(atom.predicate, 1)
+        self.assertEqual((size,), evaluated.shape)
+        self.assertEqual((size,), correct.shape)
+        for i in range(size):
             self.assertAlmostEqual(
                 correct[i], evaluated[i], places=EQUAL_DELTA,
                 msg="Incorrect value for constant {}: {}".format(
-                    i, layer_factory.program.iterable_constants[i]))
+                    i, layer_factory.program.get_constant_by_index(
+                        atom.predicate, 1, i)))
 
     def test_arity_2_2_not_trainable_variable_constant(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = ["X", "some_female"]
-        atom = Atom("brother", *value)
-        correct = np.array([0.0, 0.0, 0.6853, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                            0.0, 0.0, 0.5853, 0.0, 0.7853, 0.0, 0.0, 0.0,
-                            0.0, 0.0, 0.0])
+        atom = Atom("it_brother", *value)
+        correct = np.array([0.0, 0.6853, 0.0, 0.0, 0.0, 0.0, 0.5853, 0.7853])
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_2_2_not_trainable_variable_constant.__func__,
             layer_factory.function[key])
 
-        input_value = tf.eye(layer_factory.constant_size)
+        size = layer_factory.program.get_constant_size(atom.predicate, 0)
+        input_value = tf.eye(size)
         evaluated = layer_factory.build_atom(atom)(input_value).numpy()
 
-        self.assertEqual((layer_factory.constant_size, 1), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        self.assertEqual((size, 1), evaluated.shape)
+        self.assertEqual((size,), correct.shape)
+        for i in range(size):
             self.assertAlmostEqual(
                 correct[i], evaluated[i], places=EQUAL_DELTA,
                 msg="Incorrect value for constant {}: {}".format(
-                    i, layer_factory.program.iterable_constants[i]))
+                    i, layer_factory.program.get_constant_by_index(
+                        atom.predicate, 0, i)))
 
     def test_arity_2_2_not_trainable_variable_constant_not_in_kb(self):
         layer_factory = self.layer_factory  # type: LayerFactory
@@ -1533,37 +1564,41 @@ class TestLayerFactory(unittest.TestCase):
         self.assertEqual(
             layer_factory.arity_2_2_not_trainable_variable_constant.__func__,
             layer_factory.function[key])
-        input_value = tf.eye(layer_factory.constant_size)
+        size = layer_factory.program.get_constant_size(atom.predicate, 0)
+        input_value = tf.eye(size)
         evaluated = layer_factory.build_atom(atom)(input_value).numpy()
 
-        self.assertEqual((layer_factory.constant_size, 1), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        self.assertEqual((size, 1), evaluated.shape)
+        for i in range(size):
             self.assertAlmostEqual(
                 0.0, evaluated[i][0], places=EQUAL_DELTA,
                 msg="Incorrect value for constant {}: {}".format(
-                    i, layer_factory.program.iterable_constants[i]))
+                    i, layer_factory.program.get_constant_by_index(
+                        atom.predicate, 0, i)))
 
     def test_arity_2_2_not_trainable_variable_iterable_constant(self):
         layer_factory = self.layer_factory  # type: LayerFactory
-        value = ["X", "james"]
-        atom = Atom("daughter", *value)
-        correct = np.array([0.0, 0.0, 0.0, 0.0, 0.947, 0.0, 0.0,
-                            0.0, 0.0, 0.0, 0.0, 0.094, 0.0, 0.0,
+        value = ["X", "jennifer"]
+        atom = Atom("it_husband_2", *value)
+        correct = np.array([0.0, 0.0, 0.563, 0.0, 0.0,
                             0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_2_2_not_trainable_variable_iterable_constant.
                 __func__,
             layer_factory.function[key])
-        input_value = tf.eye(layer_factory.constant_size)
+        size = layer_factory.program.get_constant_size(atom.predicate, 0)
+        input_value = tf.eye(size)
         evaluated = layer_factory.build_atom(atom)(input_value).numpy()
 
-        self.assertEqual((layer_factory.constant_size, 1), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        self.assertEqual((size, 1), evaluated.shape)
+        self.assertEqual((size,), correct.shape)
+        for i in range(size):
             self.assertAlmostEqual(
                 correct[i], evaluated[i], places=EQUAL_DELTA,
                 msg="Incorrect value for constant {}: {}".format(
-                    i, layer_factory.program.iterable_constants[i]))
+                    i, layer_factory.program.get_constant_by_index(
+                        atom.predicate, 0, i)))
 
     def test_arity_2_2_not_trainable_variable_variable(self):
         layer_factory = self.layer_factory  # type: LayerFactory
@@ -1616,19 +1651,22 @@ class TestLayerFactory(unittest.TestCase):
             layer_factory.arity_2_2_not_trainable_variable_variable.
                 __func__,
             layer_factory.function[key])
-        evaluated = layer_factory.build_atom(atom)(
-            tf.eye(layer_factory.constant_size))
+        size_0 = layer_factory.program.get_constant_size(atom.predicate, 0)
+        size_1 = layer_factory.program.get_constant_size(atom.predicate, 1)
 
-        self.assertEqual(
-            (layer_factory.constant_size, layer_factory.constant_size),
-            evaluated.shape)
-        for i in range(layer_factory.constant_size):
-            for j in range(layer_factory.constant_size):
+        evaluated = layer_factory.build_atom(atom)(tf.eye(size_0))
+        self.assertEqual((size_0, size_1), evaluated.shape)
+        self.assertEqual((size_0, size_1), correct.shape)
+        for i in range(size_0):
+            for j in range(size_1):
                 self.assertAlmostEqual(
                     correct[i, j], evaluated[i, j], places=EQUAL_DELTA,
                     msg="Incorrect value for constants {}, {}: {}, {}".format(
-                        i, j, layer_factory.program.iterable_constants[i],
-                        layer_factory.program.iterable_constants[j]))
+                        i, j,
+                        layer_factory.program.get_constant_by_index(
+                            atom.predicate, 0, i),
+                        layer_factory.program.get_constant_by_index(
+                            atom.predicate, 1, j)))
 
     def test_arity_2_2_not_trainable_same_variables(self):
         layer_factory = self.layer_factory  # type: LayerFactory
@@ -1645,12 +1683,15 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size,), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        size = layer_factory.program.get_constant_size(atom.predicate, 0)
+        self.assertEqual((size,), evaluated.shape)
+        self.assertEqual((size,), correct.shape)
+        for i in range(size):
             self.assertAlmostEqual(
                 correct[i], evaluated[i], places=EQUAL_DELTA,
                 msg="Incorrect value for constants {}: {}".format(
-                    i, layer_factory.program.iterable_constants[i]))
+                    i, layer_factory.program.get_constant_by_index(
+                        atom.predicate, 0, i)))
 
     def test_arity_2_2_trainable_constant_constant(self):
         layer_factory = self.layer_factory  # type: LayerFactory
@@ -1713,8 +1754,8 @@ class TestLayerFactory(unittest.TestCase):
 
     def test_arity_2_2_trainable_constant_iterable_constant(self):
         layer_factory = self.layer_factory  # type: LayerFactory
-        value = ["some_female", "charlotte"]
-        atom = Atom("aunt", *value, weight=0.33)
+        value = ["arthur", "charlotte"]
+        atom = Atom("it_uncle", *value, weight=0.449)
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_2_2_trainable_constant_iterable_constant.
@@ -1728,11 +1769,9 @@ class TestLayerFactory(unittest.TestCase):
 
     def test_arity_2_2_trainable_constant_variable(self):
         layer_factory = self.layer_factory  # type: LayerFactory
-        value = ["some_female", "X"]
-        atom = Atom("aunt", *value)
-        weight = np.array([0.21, 0.0, 0.0, 0.31, 0.33, 0.0, 0.0, 0.0, 0.0,
-                           0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                           0.0])
+        value = ["emilio", "X"]
+        atom = Atom("it_uncle", *value)
+        weight = np.array([0.463, 0.0, 0.0, 0.0, 0.013, 0.0, 0.467])
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_2_2_trainable_constant_variable.__func__,
@@ -1740,10 +1779,13 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size,), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        size = layer_factory.program.get_constant_size(atom.predicate, 1)
+        self.assertEqual((size,), evaluated.shape)
+        self.assertEqual((size,), weight.shape)
+        for i in range(size):
             error_message = "Incorrect value for constant {}: {}".format(
-                i, layer_factory.program.iterable_constants[i])
+                i, layer_factory.program.get_constant_by_index(
+                    atom.predicate, 1, i))
             if np.isclose(weight[i], 0.0):
                 self.assertGreaterEqual(evaluated[i], WEIGHT_MIN_VALUE,
                                         msg=error_message)
@@ -1765,10 +1807,12 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size,), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        size = layer_factory.program.get_constant_size(atom.predicate, 1)
+        self.assertEqual((size,), evaluated.shape)
+        for i in range(size):
             error_message = "Incorrect value for constant {}: {}".format(
-                i, layer_factory.program.iterable_constants[i])
+                i, layer_factory.program.get_constant_by_index(
+                    atom.predicate, 1, i))
             self.assertGreaterEqual(evaluated[i], WEIGHT_MIN_VALUE,
                                     msg=error_message)
             self.assertLessEqual(evaluated[i], WEIGHT_MAX_VALUE,
@@ -1776,8 +1820,8 @@ class TestLayerFactory(unittest.TestCase):
 
     def test_arity_2_2_trainable_iterable_constant_constant(self):
         layer_factory = self.layer_factory  # type: LayerFactory
-        value = ["jennifer", "some_male"]
-        atom = Atom("aunt", *value, weight=0.0433)
+        value = ["sophia", "tomaso"]
+        atom = Atom("it_niece", *value, weight=0.149)
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_2_2_trainable_iterable_constant_constant.
@@ -1792,7 +1836,7 @@ class TestLayerFactory(unittest.TestCase):
     def test_arity_2_2_trainable_iterable_constant_iterable_constant(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = ["jennifer", "charlotte"]
-        atom = Atom("aunt", *value, weight=0.433)
+        atom = Atom("it_aunt", *value, weight=0.433)
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.
@@ -1809,9 +1853,8 @@ class TestLayerFactory(unittest.TestCase):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = ["alfonso", "X"]
         atom = Atom("nephew", *value)
-        weight = np.array([0.0, 0.0, 0.73, 0.079, 0.083, 0.0,
-                           0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                           0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        weight = np.array([0.03, 0.73, 0.079, 0.0, 0.083, 0.0, 0.79, 0.0,
+                           0.0, 0.083])
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_2_2_trainable_iterable_constant_variable.
@@ -1820,10 +1863,13 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((1, layer_factory.constant_size), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        size = layer_factory.program.get_constant_size(atom.predicate, 1)
+        self.assertEqual((1, size), evaluated.shape)
+        self.assertEqual((size,), weight.shape)
+        for i in range(size):
             error_message = "Incorrect value for constant {}: {}".format(
-                i, layer_factory.program.iterable_constants[i])
+                i, layer_factory.program.get_constant_by_index(
+                    atom.predicate, 1, i))
             if np.isclose(weight[i], 0.0):
                 self.assertGreaterEqual(evaluated[0][i], WEIGHT_MIN_VALUE,
                                         msg=error_message)
@@ -1837,22 +1883,24 @@ class TestLayerFactory(unittest.TestCase):
     def test_arity_2_2_trainable_variable_constant(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = ["X", "some_female"]
-        atom = Atom("niece", *value)
-        weight = np.array([0.0, 0.0, 0.0113, 0.0, 0.0127, 0.0, 0.0, 0.0, 0.0,
-                           0.0, 0.0, 0.0107, 0.0109, 0.0, 0.0, 0.0, 0.0, 0.0,
-                           0.0, 0.0])
+        atom = Atom("it_niece", *value)
+        weight = np.array([0.0113, 0.0127, 0.0107, 0.0109, 0.0])
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_2_2_trainable_variable_constant.__func__,
             layer_factory.function[key])
-        input_value = tf.eye(layer_factory.constant_size)
+        size = layer_factory.program.get_constant_size(atom.predicate, 0)
+        input_value = tf.eye(size)
         tensor = layer_factory.build_atom(atom)(input_value)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size, 1), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        self.assertEqual((size, 1), evaluated.shape)
+        self.assertEqual((size,), weight.shape)
+        for i in range(size):
             error_message = "Incorrect value for constant {}: {}".format(
-                i, layer_factory.program.iterable_constants[i])
+                i,
+                layer_factory.program.get_constant_by_index(
+                    atom.predicate, 0, i))
             if np.isclose(weight[i], 0.0):
                 self.assertGreaterEqual(evaluated[i], WEIGHT_MIN_VALUE,
                                         msg=error_message)
@@ -1865,22 +1913,24 @@ class TestLayerFactory(unittest.TestCase):
     def test_arity_2_2_trainable_variable_constant_not_in_kb(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = ["X", "some_female2"]
-        atom = Atom("niece", *value)
-        weight = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                           0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                           0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        atom = Atom("it_niece", *value)
+        weight = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_2_2_trainable_variable_constant.__func__,
             layer_factory.function[key])
-        input_value = tf.eye(layer_factory.constant_size)
+        size = layer_factory.program.get_constant_size(atom.predicate, 0)
+        input_value = tf.eye(size)
         tensor = layer_factory.build_atom(atom)(input_value)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size, 1), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        self.assertEqual((size, 1), evaluated.shape)
+        self.assertEqual((size,), weight.shape)
+        for i in range(size):
             error_message = "Incorrect value for constant {}: {}".format(
-                i, layer_factory.program.iterable_constants[i])
+                i,
+                layer_factory.program.get_constant_by_index(
+                    atom.predicate, 0, i))
             if np.isclose(weight[i], 0.0):
                 self.assertGreaterEqual(evaluated[i], WEIGHT_MIN_VALUE,
                                         msg=error_message)
@@ -1893,24 +1943,25 @@ class TestLayerFactory(unittest.TestCase):
 
     def test_arity_2_2_trainable_variable_iterable_constant(self):
         layer_factory = self.layer_factory  # type: LayerFactory
-        value = ["X", "jennifer"]
-        atom = Atom("niece", *value)
-        weight = np.array([0.0, 0.0, 0.0131, 0.0, 0.113, 0.0,
-                           0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0149,
-                           0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        value = ["X", "colin"]
+        atom = Atom("it_aunt", *value)
+        weight = np.array([0.0, 0.0, 0.439, 0.449, 0.0])
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_2_2_trainable_variable_iterable_constant.
                 __func__,
             layer_factory.function[key])
-        input_value = tf.eye(layer_factory.constant_size)
+        size = layer_factory.program.get_constant_size(atom.predicate, 0)
+        input_value = tf.eye(size)
         tensor = layer_factory.build_atom(atom)(input_value)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size, 1), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        self.assertEqual((size, 1), evaluated.shape)
+        self.assertEqual((size,), weight.shape)
+        for i in range(size):
             error_message = "Incorrect value for constant {}: {}".format(
-                i, layer_factory.program.iterable_constants[i])
+                i, layer_factory.program.get_constant_by_index(
+                    atom.predicate, 0, i))
             if np.isclose(weight[i], 0.0):
                 self.assertGreaterEqual(evaluated[i], WEIGHT_MIN_VALUE,
                                         msg=error_message)
@@ -1924,66 +1975,33 @@ class TestLayerFactory(unittest.TestCase):
     def test_arity_2_2_trainable_variable_variable(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = ["X", "Y"]
-        atom = Atom("nephew", *value)
+        atom = Atom("it_aunt", *value)
         weight = np.array([
-            [0.0, 0.0, 0.730, 0.079, 0.083, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.089, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.101,
-             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+            [0.419, 0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.421, 0.0, 0.0, 0.0, 0.0, 0.431],
+            [0.0, 0.0, 0.433, 0.439, 0.0433, 0.0],
+            [0.0, 0.0, 0.443, 0.449, 0.0, 0.0],
+            [0.21, 0.31, 0.33, 0.0, 0.0, 0.0],
         ])
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_2_2_trainable_variable_variable.
                 __func__,
             layer_factory.function[key])
-        evaluated = layer_factory.build_atom(atom)(
-            tf.eye(layer_factory.constant_size))
+        size_0 = layer_factory.program.get_constant_size(atom.predicate, 0)
+        size_1 = layer_factory.program.get_constant_size(atom.predicate, 1)
 
-        self.assertEqual(
-            (layer_factory.constant_size, layer_factory.constant_size),
-            evaluated.shape)
-        for i in range(layer_factory.constant_size):
-            for j in range(layer_factory.constant_size):
+        evaluated = layer_factory.build_atom(atom)(tf.eye(size_0)).numpy()
+        self.assertEqual((size_0, size_1), evaluated.shape)
+        self.assertEqual((size_0, size_1), weight.shape)
+        for i in range(size_0):
+            for j in range(size_1):
                 error_message = \
                     "Incorrect value for constants {}, {}: {}, {}".format(
-                        i, j, layer_factory.program.iterable_constants[i],
-                        layer_factory.program.iterable_constants[j])
+                        i, j, layer_factory.program.get_constant_by_index(
+                            atom.predicate, 0, i),
+                        layer_factory.program.get_constant_by_index(
+                            atom.predicate, 1, j))
                 if np.isclose(weight[i, j], 0.0):
                     self.assertGreaterEqual(evaluated[i, j], WEIGHT_MIN_VALUE,
                                             msg=error_message)
@@ -1997,10 +2015,8 @@ class TestLayerFactory(unittest.TestCase):
     def test_arity_2_2_trainable_same_variables(self):
         layer_factory = self.layer_factory  # type: LayerFactory
         value = ["X", "X"]
-        atom = Atom("uncle", *value)
-        weight = np.array([0.0, 0.0, 0.0, 0.029, 0.0, 0.0, 0.0, 0.0, 0.013,
-                           0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                           0.0, 0.0])
+        atom = Atom("nephew", *value)
+        weight = np.array([0.03, 0.0, 0.0, 0.0, 0.0, 0.012, 0.0, 0.0, 0.0, 0.0])
         key = layer_factory.get_atom_key(atom)
         self.assertEqual(
             layer_factory.arity_2_2_trainable_variable_variable.
@@ -2010,10 +2026,13 @@ class TestLayerFactory(unittest.TestCase):
         tensor = layer(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
-        self.assertEqual((layer_factory.constant_size,), evaluated.shape)
-        for i in range(layer_factory.constant_size):
+        size = layer_factory.program.get_constant_size(atom.predicate, 0)
+        self.assertEqual((size,), evaluated.shape)
+        self.assertEqual((size,), weight.shape)
+        for i in range(size):
             error_message = "Incorrect value for constants {}: {}".format(
-                i, layer_factory.program.iterable_constants[i])
+                i, layer_factory.program.get_constant_by_index(
+                    atom.predicate, 0, i))
             if np.isclose(weight[i], 0.0):
                 self.assertGreaterEqual(evaluated[i], WEIGHT_MIN_VALUE,
                                         msg=error_message)

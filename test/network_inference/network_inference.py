@@ -5,7 +5,6 @@ import unittest
 from typing import List
 
 import numpy as np
-import tensorflow as tf
 
 from src.knowledge.program import NeuralLogProgram
 from src.language.parser.ply.neural_log_parser import NeuralLogLexer
@@ -175,18 +174,21 @@ class TestNetworkInference(unittest.TestCase):
         if len(predicates) == 1:
             # noinspection PyTypeChecker
             predictions = [predictions]
-        x_numpy = features.numpy()
         print("*" * 10, "predictions", "*" * 10)
         for i in range(len(predicates)):
+            x_numpy = features[i].numpy()
+            if x_numpy.max() == 0.0:
+                continue
             prediction = predictions[i]
-            if predicates[i][0].arity == 2:
+            predicate = predicates[i][0]
+            if predicate.arity == 2:
                 for j in range(len(prediction)):
                     indices = np.where(prediction[j] != 0.0)[0]
                     if len(indices) == 0:
                         continue
-                    sub = self.program.iterable_constants[
-                        np.argmax(x_numpy[j])]
-                    name = predicates[i][0].name
+                    sub = self.program.get_constant_by_index(
+                        predicate, 0, np.argmax(x_numpy[j]))
+                    name = predicate.name
                     if predicates[i][1]:
                         name += "^{-1}"
                     print(name, "(", sub, ", X):", sep="")
@@ -194,19 +196,21 @@ class TestNetworkInference(unittest.TestCase):
                         # if np.isnan(prediction[j][index]):
                         #     continue
                         pred = prediction[j][index]
-                        obj = self.program.iterable_constants[index]
+                        obj = self.program.get_constant_by_index(
+                            predicate, 1, index)
                         print(pred, obj, sep=":\t")
+                        # noinspection PyUnresolvedReferences
                         expected = CORRECT[name][sub.value][obj.value]
                         self.assertAlmostEqual(expected, pred, EQUAL_DELTA)
                     print()
             else:
-                name = predicates[i][0].name
+                name = predicate.name
                 if predicates[i][1]:
                     name += "^{-1}"
                 print(name, "(X):", sep="")
                 for j in range(x_numpy.shape[0]):
-                    sub = self.program.iterable_constants[
-                        np.argmax(x_numpy[j])]
+                    sub = self.program.get_constant_by_index(
+                        predicate, 0, np.argmax(x_numpy[j]))
                     pred = prediction[j]
                     # print(name, "(", sub, "):\t", pred, sep="")
                     print(pred, sub, sep=":\t")
@@ -217,5 +221,5 @@ class TestNetworkInference(unittest.TestCase):
 
     def test_inference(self):
         features, _ = self.dataset.build(example_set=DATASET_NAME)
-        dense_feature = tf.one_hot(features, self.model.constant_size)
+        dense_feature, _ = self.dataset.call(features, _)
         self.predict(dense_feature)

@@ -28,7 +28,7 @@ from src.network.network_functions import get_literal_function, \
 # WARNING: Do not support constants in the head of rules.
 # WARNING: Do not support literals with constant numbers in the rules.
 
-# TODO: For now, we only use a generic rule to predict a specific
+# WARNING: For now, we only use a generic rule to predict a specific
 #  fact. For instance, h(X, Y) :- ... to predict h(X, a).
 #  We should also use the other way around, use a rule
 #  h(X, a) :- ... to predict facts h(X, Y). which will return
@@ -116,20 +116,18 @@ def print_neural_log_predictions(model, neural_program, dataset,
     :type dataset_name: str
     """
     for features, _ in dataset:
-        y_scores = model.predict(features)
+        y_scores = model.call(features)
         for i in range(len(model.predicates)):
             predicate, inverted = model.predicates[i]
             if inverted:
                 continue
-            if isinstance(y_scores, list):
-                output_scores = y_scores[i]
-            else:
-                output_scores = y_scores
-
-            for feature, y_score in zip(features, output_scores):
+            for feature, y_score in zip(features[i], y_scores[i]):
                 x = feature.numpy()
+                if x.max() == 0.0:
+                    continue
                 subject_index = np.argmax(x)
-                subject = neural_program.iterable_constants[subject_index]
+                subject = neural_program.get_constant_by_index(
+                    predicate, 0, subject_index)
                 if predicate.arity == 1:
                     clause = AtomClause(Atom(predicate, subject,
                                              weight=float(y_score)))
@@ -137,7 +135,8 @@ def print_neural_log_predictions(model, neural_program, dataset,
                 else:
                     clauses = []
                     for index in range(len(y_score)):
-                        object_term = neural_program.iterable_constants[index]
+                        object_term = neural_program.get_constant_by_index(
+                            predicate, 1, index)
                         prediction = Atom(predicate, subject, object_term,
                                           weight=float(y_score[index]))
                         if dataset_name is not None and \
@@ -286,7 +285,6 @@ class NeuralLogNetwork(keras.Model):
         """
         super(NeuralLogNetwork, self).__init__(name="NeuralLogNetwork")
         self.program = program
-        self.constant_size = len(self.program.iterable_constants)
         self.layer_factory = LayerFactory(self.program, train=train)
         # noinspection PyTypeChecker
         self.predicates = data_structures.NoDependency(list())
@@ -420,8 +418,8 @@ class NeuralLogNetwork(keras.Model):
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, training=None, mask=None):
         results = []
-        for predicate_layer in self.predicate_layers:
-            results.append(predicate_layer(inputs))
+        for i in range(len(self.predicate_layers)):
+            results.append(self.predicate_layers[i](inputs[i]))
         return tuple(results)
 
     # noinspection PyMissingOrEmptyDocstring
@@ -478,16 +476,16 @@ class NeuralLogNetwork(keras.Model):
         :return: the literal layer
         :rtype: LiteralLayer
         """
-        depth = predicates_depths[renamed_literal.predicate] - 1
-        if depth < self.get_recursion_depth(renamed_literal.predicate):
+        predicate = renamed_literal.predicate
+        depth = predicates_depths[predicate]
+        if depth < self.get_recursion_depth(predicate) + 1:
             inputs = []
-            if renamed_literal.predicate in self.program.facts_by_predicate:
-                # TODO: skip adding facts if depth > 0, we only need to add
-                #  the facts once.
+            if (predicate in self.program.facts_by_predicate or
+                    predicate in self.program.trainable_predicates):
                 inputs = [self._build_fact(renamed_literal, inverted=inverted)]
             input_clauses = dict()  # type: Dict[RuleLayer, HornClause]
             for clause in self.program.clauses_by_predicate.get(
-                    renamed_literal.predicate, []):
+                    predicate, []):
                 if is_clause_fact(clause):
                     continue
                 substitution = get_substitution(clause.head, renamed_literal)
@@ -510,7 +508,7 @@ class NeuralLogNetwork(keras.Model):
         negation_function = None
         if isinstance(renamed_literal, Literal) and renamed_literal.negated:
             negation_function = self.get_literal_negation_function(
-                renamed_literal.predicate)
+                predicate)
         return LiteralLayer(
             "literal_layer_{}".format(
                 get_standardised_name(renamed_literal.__str__())), inputs,
@@ -558,15 +556,17 @@ class NeuralLogNetwork(keras.Model):
             output_extract_func = None
 
             if source.is_constant() and source in substitution_terms:
-                input_constant = self.layer_factory.get_one_hot_tensor(source)
+                term_index = 1 if inverted else 0
+                input_constant = self.layer_factory.get_one_hot_tensor(
+                    literal, term_index)
                 input_combining_function = \
                     self.layer_factory.get_and_combining_function(predicate)
             if destination.is_constant() and destination in substitution_terms:
+                term_index = 0 if inverted else 1
                 output_constant = \
-                    self.layer_factory.get_constant_lookup(destination)
+                    self.layer_factory.get_constant_lookup(literal, term_index)
                 output_extract_func = \
                     self.layer_factory.get_output_extract_function(predicate)
-
             rule = SpecificFactLayer(
                 layer_name, rule,
                 input_constant=input_constant,
@@ -615,7 +615,7 @@ class NeuralLogNetwork(keras.Model):
         inputs = None
         term = renamed_literal.terms[0]
         if term.is_constant():
-            inputs = self.layer_factory.get_one_hot_tensor(term)
+            inputs = self.layer_factory.get_one_hot_tensor(renamed_literal, 0)
         name = "literal_layer_{}".format(
             get_standardised_name(renamed_literal.__str__()))
         return FunctionLayer(name, function_value, inputs=inputs)
@@ -720,25 +720,54 @@ class NeuralLogNetwork(keras.Model):
             variable_indices = get_variable_indices(atom)
             rank = len(variable_indices)
             values = tensor.numpy()
+            size_0 = self.program.get_constant_size(atom.predicate, 0)
             if rank == 0:
                 fact = Atom(atom.predicate, *atom.terms, weight=values)
                 self.program.add_fact(fact)
             elif rank == 1:
-                for i in range(self.constant_size):
+                for i in range(size_0):
                     fact = Atom(atom.predicate, *atom.terms, weight=values[i])
                     fact.terms[variable_indices[0]] = \
-                        self.program.iterable_constants[i]
+                        self.program.get_constant_by_index(
+                            atom.predicate, 0, i)
                     self.program.add_fact(fact)
             elif rank == 2:
-                for i in range(self.constant_size):
-                    for j in range(self.constant_size):
+                size_1 = self.program.get_constant_size(atom.predicate, 1)
+                for i in range(size_0):
+                    for j in range(size_1):
                         fact = Atom(atom.predicate, *atom.terms,
                                     weight=values[i, j])
                         fact.terms[variable_indices[0]] = \
-                            self.program.iterable_constants[i]
+                            self.program.get_constant_by_index(
+                                atom.predicate, 0, i)
                         fact.terms[variable_indices[1]] = \
-                            self.program.iterable_constants[j]
+                            self.program.get_constant_by_index(
+                                atom.predicate, 1, j)
                         self.program.add_fact(fact)
+
+
+def get_predicate_indices(predicate, inverted):
+    """
+    Gets the indices of the predicate's input and output.
+
+    :param predicate: the predicate
+    :type predicate: Predicate
+    :param inverted: if the predicate is inverted
+    :type inverted: bool
+    :return: the input and output indices
+    :rtype: (int, int)
+    """
+    if predicate.arity == 1:
+        input_index = 0
+        output_index = 0
+    else:
+        if inverted:
+            input_index = 1
+            output_index = 0
+        else:
+            input_index = 0
+            output_index = 1
+    return input_index, output_index
 
 
 class NeuralLogDataset:
@@ -759,6 +788,7 @@ class NeuralLogDataset:
         :type network: NeuralLogNetwork
         """
         self.network = network
+        self.program = network.program
 
     # noinspection PyUnusedLocal
     def call(self, features, labels, *args, **kwargs):
@@ -767,7 +797,7 @@ class NeuralLogDataset:
         representation to dense in order to train the network.
 
         :param features: A dense index tensor of the features
-        :type features: tf.Tensor
+        :type features: tuple[tf.SparseTensor]
         :param labels: A tuple sparse tensor of labels
         :type labels: tuple[tf.SparseTensor]
         :param args: additional arguments
@@ -775,12 +805,25 @@ class NeuralLogDataset:
         :param kwargs: additional arguments
         :type kwargs: dict
         :return: the features and label tensors
-        :rtype: (tf.Tensor, tuple[tf.Tensor])
+        :rtype: (tf.Tensor or tuple[tf.Tensor], tuple[tf.Tensor])
         """
-        features = tf.one_hot(features, self.network.constant_size)
+        dense_features = []
+        for i in range(len(self.network.predicates)):
+            predicate, inverted = self.network.predicates[i]
+            index, _ = get_predicate_indices(predicate, inverted)
+            feature = tf.one_hot(
+                features[i],
+                self.program.get_constant_size(predicate, index))
+            dense_features.append(feature)
+
+        # features = tf.one_hot(features, self.network.constant_size)
         labels = tuple(map(lambda x: tf.sparse.to_dense(x), labels))
 
-        return features, labels
+        if len(dense_features) > 1:
+            dense_features = tuple(dense_features)
+        return dense_features, labels
+
+        # return tuple(dense_features), labels
 
     __call__ = call
 
@@ -795,10 +838,13 @@ class NeuralLogDataset:
         :return: the dataset
         :rtype: tf.data.Dataset
         """
-        features, labels = self.build(example_set=example_set,
-                                      sparse_features=False)
+        features, labels = self.build(example_set=example_set)
+        # noinspection PyTypeChecker
+        dataset_size = len(features[0])
         dataset = tf.data.Dataset.from_tensor_slices((features, labels))
-        dataset_size = features.shape[0]
+        # features_ds = tf.data.Dataset.from_tensor_slices(features)
+        # labels_ds = tf.data.Dataset.from_tensor_slices(labels)
+        # dataset = tf.data.Dataset.zip((features_ds, labels_ds))
         if shuffle:
             dataset = dataset.shuffle(dataset_size)
         dataset = dataset.map(self)
@@ -806,7 +852,7 @@ class NeuralLogDataset:
                     dataset_size)
         return dataset
 
-    def build(self, example_set=NO_EXAMPLE_SET, sparse_features=False):
+    def build(self, example_set=NO_EXAMPLE_SET):
         """
         Builds the features and label to train the neural network based on
         the `example_set`.
@@ -815,85 +861,72 @@ class NeuralLogDataset:
 
         :param example_set: the name of the set of examples
         :type example_set: str
-        :param sparse_features: If `True`, the features are generate as a
         sparse tensor. If `False`, the features are generated as a dense
         tensor of indices, for each index a one hot vector creation is
         necessary.
-        :type sparse_features: bool
         :return: the features and labels
-        :rtype: (tf.Tensor or tf.SparseTensor, tf.SparseTensor)
+        :rtype: (tuple[tf.SparseTensor], tuple[tf.SparseTensor])
         """
-        constant_size = self.network.constant_size
-        index_by_term = OrderedDict()  # type: OrderedDict[Term, int]
-        predicates = []
-        labels_values = []
-        labels_indices = []
-        index = 0
-        examples = self.network.program.examples.get(example_set, OrderedDict())
+        output_by_term = OrderedDict()
+        input_terms = []
+        examples = self.program.examples.get(example_set, OrderedDict())
         for predicate, inverted in self.network.predicates:
-            predicates.append((predicate, inverted))
             facts = examples.get(predicate, dict()).values()
-            values = []
-            indices = []
             for fact in facts:
-                weight = fact.weight
-                if weight == 0.0:
-                    continue
                 input_term = fact.terms[-1 if inverted else 0]
-                term_index = index_by_term.get(input_term, None)
-                if term_index is None:
-                    term_index = index
-                    index_by_term[input_term] = term_index
-                    index += 1
-                values.append(weight)
+                input_terms.append(input_term)
+                output = output_by_term.setdefault(input_term, dict())
                 if predicate.arity == 1:
-                    indices.append([term_index, 0])
+                    output[(predicate, inverted)] = fact.weight
                 else:
                     output_term = fact.terms[0 if inverted else -1]
-                    indices.append(
-                        [term_index,
-                         self.network.program.index_for_constant(
-                             output_term)])
-            labels_indices.append(indices)
-            labels_values.append(values)
+                    output.setdefault((predicate, inverted), []).append(
+                        (output_term, fact.weight))
 
-        labels = []
-        for i in range(len(predicates)):
-            if predicates[i][0].arity == 1:
-                dense_shape = [len(index_by_term), 1]
+        all_features = []
+        all_labels = []
+        for predicate, inverted in self.network.predicates:
+            features = []
+            label_values = []
+            label_indices = []
+            input_index, output_index = get_predicate_indices(predicate,
+                                                              inverted)
+            for i in range(len(input_terms)):
+                index = self.program.get_index_of_constant(
+                    predicate, input_index, input_terms[i]) or -1
+                features.append(index)
+                outputs = output_by_term[input_terms[i]].get(
+                    (predicate, inverted), None)
+                if outputs is not None:
+                    if predicate.arity == 1:
+                        label_indices.append([i, 0])
+                        label_values.append(outputs)
+                    else:
+                        for output_term, output_value in outputs:
+                            output_term_index = \
+                                self.program.get_index_of_constant(
+                                    predicate, output_index, output_term)
+                            label_indices.append([i, output_term_index])
+                            label_values.append(output_value)
+
+            all_features.append(features)
+            if predicate.arity == 1:
+                dense_shape = [len(input_terms), 1]
                 empty_index = [[0, 0]]
             else:
-                dense_shape = [len(index_by_term), constant_size]
+                dense_shape = [
+                    len(input_terms),
+                    self.program.get_constant_size(predicate, output_index)]
                 empty_index = [[0, 0]]
-            if len(labels_values[i]) == 0:
+            if len(label_values) == 0:
                 sparse_tensor = tf.SparseTensor(indices=empty_index,
                                                 values=[0.0],
                                                 dense_shape=dense_shape)
             else:
-                sparse_tensor = tf.SparseTensor(indices=labels_indices[i],
-                                                values=labels_values[i],
+                sparse_tensor = tf.SparseTensor(indices=label_indices,
+                                                values=label_values,
                                                 dense_shape=dense_shape)
             sparse_tensor = tf.sparse.reorder(sparse_tensor)
-            labels.append(sparse_tensor)
+            all_labels.append(sparse_tensor)
 
-        if sparse_features:
-            feature_indices = []
-            index = 0
-            for x in index_by_term.keys():
-                feature_indices.append(
-                    [index, self.network.program.index_for_constant(x)])
-                index += 1
-
-            number_of_examples = len(feature_indices)
-            features_shape = [number_of_examples, constant_size]
-            feature_values = [1.0] * number_of_examples
-            features = tf.SparseTensor(
-                indices=feature_indices, values=feature_values,
-                dense_shape=features_shape)
-        else:
-            features = tf.constant(
-                list(map(
-                    lambda key: self.network.program.index_for_constant(key),
-                    index_by_term.keys())))
-
-        return features, tuple(labels)
+        return tuple(all_features), tuple(all_labels)

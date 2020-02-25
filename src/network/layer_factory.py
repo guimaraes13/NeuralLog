@@ -11,8 +11,9 @@ import numpy as np
 import tensorflow as tf
 from scipy.sparse import csr_matrix
 
+from src.knowledge.program import NeuralLogProgram
 from src.language.language import Predicate, Atom, Variable, \
-    Term, get_variable_atom, get_renamed_atom
+    get_variable_atom, get_renamed_atom
 from src.network.network_functions import get_initializer, \
     get_combining_function, SPARSE_FUNCTION_SUFFIX, FactLayer, \
     AttributeFactLayer, SpecificFactLayer, DiagonalFactLayer, \
@@ -164,7 +165,7 @@ class LayerFactory:
     variable_cache: Dict[Atom, tf.Tensor] = dict()
     "Caches the variable tensors of the atoms"
 
-    _tensor_by_name: Dict[str, tf.Tensor] = dict()
+    _tensor_by_name: Dict[str or tuple, tf.Tensor] = dict()
     "The tensors by name"
 
     _matrix_representation: Dict[Predicate, Any] = dict()
@@ -177,6 +178,8 @@ class LayerFactory:
     "Caches the diagonal matrices representations."
 
     tensor_function = decorate_factory_function()
+
+    program: NeuralLogProgram
 
     def __init__(self, program, layer_name_format="fact_layer_{}", train=True):
         """
@@ -193,7 +196,6 @@ class LayerFactory:
         :type program: NeuralLogProgram
         """
         self.program = program
-        self.constant_size = len(self.program.iterable_constants)
         # noinspection PyUnresolvedReferences
         self.function = self.tensor_function.functions
         self.train = train
@@ -229,7 +231,8 @@ class LayerFactory:
             if types[i].number:
                 term_types.append(FactoryTermType.NUMBER)
             elif atom.terms[i].is_constant():
-                if atom.terms[i] in self.program.iterable_constants.inverse:
+                # if atom.terms[i] in self.program.iterable_constants.inverse:
+                if self.program.is_iterable_constant(atom, i):
                     term_types.append(FactoryTermType.ITERABLE_CONSTANT)
                 else:
                     term_types.append(FactoryTermType.CONSTANT)
@@ -677,35 +680,46 @@ class LayerFactory:
         """
         return self.program.get_parameter_value("initial_value", predicate)
 
-    def get_constant_lookup(self, term):
+    def get_constant_lookup(self, atom, term_index):
         """
-        Builds the constant lookup for the term.
+        Builds the constant lookup for the term in the atom.
 
-        :param term: the term
-        :type term: Term
+        :param atom: the atom
+        :type atom: Atom
+        :param term_index: the index of the term
+        :type term_index: int
         :return: the constant lookup tensor
         :rtype: tf.Tensor
         """
+        term = atom.terms[term_index]
         name = get_standardised_name(term.value)
-        tensor = self._tensor_by_name.get(name, None)
+        key = atom.predicate, term_index, name
+        tensor = self._tensor_by_name.get(key, None)
         if tensor is None:
-            constant = self.program.index_for_constant(term)
+            constant = self.program.get_index_of_constant(
+                atom.predicate, term_index, term)
             tensor = tf.constant(constant, name=name)
-            self._tensor_by_name[name] = tensor
+            self._tensor_by_name[key] = tensor
         return tensor
 
-    def get_one_hot_tensor(self, constant):
+    def get_one_hot_tensor(self, atom, term_index):
         """
-        Gets an one-hot row tensor for the iterable constant.
+        Gets an one-hot row tensor for the iterable constant in the atom.
 
-        :param constant: the iterable constant
-        :type constant: Term
+        :param atom: the atom
+        :type atom: Atom
+        :param term_index: the index of the term
+        :type term_index: int
         :return: the one-hot row tensor
         :rtype: tf.Tensor
         """
-        return tf.one_hot([self.program.index_for_constant(constant)],
-                          depth=self.constant_size, dtype=tf.float32,
-                          name=get_standardised_name(constant.value))
+        term = atom.terms[term_index]
+        return tf.one_hot(
+            [self.program.get_index_of_constant(
+                atom.predicate, term_index, term)],
+            depth=self.program.get_constant_size(atom.predicate, term_index),
+            dtype=tf.float32,
+            name=get_standardised_name(term.value))
 
     def _get_layer_name(self, atom):
         return get_standardised_name(self.layer_name_format.format(
@@ -839,7 +853,9 @@ class LayerFactory:
     def _get_weights_and_values_for_attribute_predicate(
             self, atom, trainable=False, constant_value=None):
         weight, value = self.get_matrix_representation(atom.predicate)
-        shape = [self.constant_size]
+        term_index = \
+            1 if self.program.predicates[atom.predicate][0].number else 0
+        shape = [self.program.get_constant_size(atom.predicate, term_index)]
         if atom.arity() == 2 and atom.terms[0] == atom.terms[1]:
             # This case, we have an attribute fact with the same variable in
             # both position, since one of the variables must be an entity and
@@ -860,7 +876,7 @@ class LayerFactory:
                     "for any entry for atom: %s at %d:%d.",
                     atom, atom.provenance.start_line,
                     atom.provenance.start_column)
-            weight = csr_matrix((self.constant_size, 1), dtype=np.float32)
+            weight = csr_matrix((shape[0], 1), dtype=np.float32)
             w_tensor = self._matrix_to_constant(atom, weight.todense(),
                                                 shape=shape,
                                                 name_format="w:{}")
@@ -901,7 +917,7 @@ class LayerFactory:
         else:
             variable_atom = Atom(atom.predicate, atom.terms[0], "X0")
             output_index = 1
-        output_constant = self.get_constant_lookup(atom.terms[output_index])
+        output_constant = self.get_constant_lookup(atom, output_index)
         fact_layer = self.build_atom(variable_atom)
         return SpecificFactLayer(
             name, fact_layer,
@@ -928,10 +944,10 @@ class LayerFactory:
     def _get_arity_2_2_trainable_variable_and_constant(self, atom):
         initializer_name = self._get_initializer_name(atom.predicate)
         if atom.terms[0].is_constant():
-            shape = [self.constant_size]
+            shape = [self.program.get_constant_size(atom.predicate, 1)]
             constant_term = atom.terms[0]
         else:
-            shape = [self.constant_size, 1]
+            shape = [self.program.get_constant_size(atom.predicate, 0), 1]
             constant_term = atom.terms[1]
         initial_value = get_initial_value_by_name(initializer_name, shape)
         kernel = self._matrix_to_variable_with_value(
@@ -956,14 +972,16 @@ class LayerFactory:
         w = self.get_vector_representation_with_constant(atom)
         if isinstance(w, csr_matrix):
             w = w.todense()
-        kernel = self._matrix_to_constant(atom, w,
-                                          shape=[self.constant_size])
+        kernel = self._matrix_to_constant(
+            atom, w,
+            shape=[self.program.get_constant_size(atom.predicate, 1)])
         return self._build_simple_fact_layer(atom, kernel)
 
     def _get_arity_2_2_not_trainable_variable_constant(self, atom):
         w = self.get_vector_representation_with_constant(atom)
-        kernel = self._matrix_to_constant(atom, w,
-                                          shape=[self.constant_size, 1])
+        kernel = self._matrix_to_constant(
+            atom, w,
+            shape=[self.program.get_constant_size(atom.predicate, 0), 1])
         return self._build_simple_fact_layer(atom, kernel)
 
     # noinspection PyMissingOrEmptyDocstring
@@ -1004,7 +1022,8 @@ class LayerFactory:
     @tensor_function(TensorFunctionKey(1, 1, False, FactoryTermType.VARIABLE))
     def arity_1_1_not_trainable_variable(self, atom):
         w = self.get_matrix_representation(atom.predicate)
-        kernel = self._matrix_to_constant(atom, w, [self.constant_size])
+        shape = [self.program.get_constant_size(atom.predicate, 0)]
+        kernel = self._matrix_to_constant(atom, w, shape)
         return self._build_simple_fact_layer(atom, kernel)
 
     # noinspection PyMissingOrEmptyDocstring
@@ -1018,7 +1037,7 @@ class LayerFactory:
     @tensor_function(TensorFunctionKey(1, 1, True,
                                        FactoryTermType.ITERABLE_CONSTANT))
     def arity_1_1_trainable_iterable_constant(self, atom):
-        output_constant = self.get_constant_lookup(atom.terms[0])
+        output_constant = self.get_constant_lookup(atom, 0)
         output_extract_func = self.get_output_extract_function(atom.predicate)
         return self._get_arity_x_x_trainable_iterable_constant_variable(
             atom, output_constant=output_constant,
@@ -1030,7 +1049,7 @@ class LayerFactory:
         name = self._get_layer_name(atom)
         predicate = atom.predicate
         initializer_name = self._get_initializer_name(predicate)
-        shape = [self.constant_size]
+        shape = [self.program.get_constant_size(atom.predicate, 0)]
         initial_value = get_initial_value_by_name(initializer_name, shape)
         kernel = self._matrix_to_variable_with_value(atom, initial_value, shape)
         fact_combining_function = self.get_edge_combining_function(predicate)
@@ -1184,8 +1203,8 @@ class LayerFactory:
         if atom.terms[0] == atom.terms[1]:
             # Both terms are equal variables
             w = self.get_diagonal_matrix_representation(atom.predicate)
-            kernel = self._matrix_to_constant(atom, w,
-                                              shape=[self.constant_size])
+            shape = [self.program.get_constant_size(atom.predicate, 0)]
+            kernel = self._matrix_to_constant(atom, w, shape=shape)
         else:
             w = self.get_matrix_representation(atom.predicate)
             kernel = self._matrix_to_constant(atom, w)
@@ -1208,7 +1227,7 @@ class LayerFactory:
                              weight=atom.weight)
         name = self._get_layer_name(atom)
         fact_layer = self.build_atom(variable_atom)
-        output_constant = self.get_constant_lookup(atom.terms[1])
+        output_constant = self.get_constant_lookup(atom, 1)
         output_extract_func = self.get_output_extract_function(atom.predicate)
         return SpecificFactLayer(name, fact_layer,
                                  output_constant=output_constant,
@@ -1229,7 +1248,7 @@ class LayerFactory:
         variable_atom = Atom(atom.predicate, Variable("X"), atom.terms[1],
                              weight=atom.weight)
         fact_layer = self.build_atom(variable_atom)
-        input_constant = self.get_one_hot_tensor(atom.terms[0])
+        input_constant = self.get_one_hot_tensor(atom, 0)
         input_combining_func = self.get_and_combining_function(atom.predicate)
         return SpecificFactLayer(name, fact_layer,
                                  input_constant=input_constant,
@@ -1241,10 +1260,10 @@ class LayerFactory:
                                        FactoryTermType.ITERABLE_CONSTANT))
     def arity_2_2_trainable_iterable_constant_iterable_constant(self, atom):
         predicate = atom.predicate
-        input_constant = self.get_one_hot_tensor(atom.terms[0])
+        input_constant = self.get_one_hot_tensor(atom, 0)
         input_combining_function = self.get_and_combining_function(predicate)
 
-        output_constant = self.get_constant_lookup(atom.terms[1])
+        output_constant = self.get_constant_lookup(atom, 1)
         output_extract_func = self.get_output_extract_function(atom.predicate)
         return self._get_arity_x_x_trainable_iterable_constant_variable(
             atom, input_constant=input_constant,
@@ -1258,7 +1277,7 @@ class LayerFactory:
                                        FactoryTermType.VARIABLE))
     def arity_2_2_trainable_iterable_constant_variable(self, atom):
         predicate = atom.predicate
-        input_constant = self.get_one_hot_tensor(atom.terms[0])
+        input_constant = self.get_one_hot_tensor(atom, 0)
         input_combining_function = self.get_and_combining_function(predicate)
         return self._get_arity_x_x_trainable_iterable_constant_variable(
             atom, input_constant=input_constant,
@@ -1281,7 +1300,7 @@ class LayerFactory:
         predicate = atom.predicate
         fact_layer = InvertedFactLayer(fact_layer, self, predicate)
         fact_combining_function = self.get_edge_combining_function_2d(predicate)
-        output_constant = self.get_one_hot_tensor(atom.terms[1])
+        output_constant = self.get_one_hot_tensor(atom, 1)
         return InvertedSpecificFactLayer(
             name, fact_layer, fact_combining_function,
             output_constant=output_constant)
@@ -1299,7 +1318,9 @@ class LayerFactory:
             return DiagonalFactLayer(name, kernel, fact_combining_func)
         else:
             initializer_name = self._get_initializer_name(predicate)
-            shape = [self.constant_size, self.constant_size]
+            size_0 = self.program.get_constant_size(atom.predicate, 0)
+            size_1 = self.program.get_constant_size(atom.predicate, 1)
+            shape = [size_0, size_1]
             initial_value = get_initial_value_by_name(initializer_name,
                                                       shape)
             kernel = self._matrix_to_variable_with_value(

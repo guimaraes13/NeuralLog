@@ -539,8 +539,8 @@ class Train(Command):
             end_reading = end_test
         self.neural_program.build_program()
         end_func = time.perf_counter()
-        logger.info("Total number of predictable constants:\t%d",
-                    len(self.neural_program.iterable_constants))
+        # logger.info("Total number of predictable constants:\t%d",
+        #             len(self.neural_program.iterable_constants))
         logger.info("Program reading time:   \t%0.3fs",
                     end_program - start_func)
         if self.train:
