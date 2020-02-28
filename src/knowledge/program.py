@@ -3,6 +3,7 @@ Defines a NeuralLog Program.
 """
 import collections
 import logging
+import re
 import sys
 from collections import OrderedDict, deque
 from typing import TypeVar, MutableMapping, Dict, Any, List, Set, Tuple
@@ -16,6 +17,9 @@ from src.language.language import Number, TermType, Predicate, Atom, \
 
 ANY_PREDICATE_NAME = "any"
 NO_EXAMPLE_SET = ":none:"
+
+PREDICATE_TYPE_MATCH = re.compile("\\$([a-zA-Z_-][a-zA-Z0-9_-]*)"
+                                  "/([1-9][0-9]*)\\[([0-9]+)\\]")
 
 KT = TypeVar('KT')  # Key type.
 VT = TypeVar('VT')  # Value type.
@@ -652,7 +656,8 @@ class NeuralLogProgram:
         "example": [Predicate("example", -1)],
         "learn": [Predicate("learn", 1)],
         "set_parameter": [Predicate("set_parameter", -1)],
-        "set_predicate_parameter": [Predicate("set_predicate_parameter", -1)]
+        "set_predicate_parameter": [Predicate("set_predicate_parameter", -1)],
+        "set_predicate_function": [Predicate("set_predicate_function", -1)]
     }
 
     builtin = build_builtin_predicate()
@@ -695,6 +700,12 @@ class NeuralLogProgram:
     parameters: Dict[Any, Any] = dict()
     "A dictionary with the parameters defined in the program"
 
+    # predicate_functions: Dict[Any, Any] = dict()
+    # "A dictionary with the functions defined for predicates in the program"
+
+    _predicate_parameters_to_add: List[Atom] = list()
+    _parameters_to_add: List[Atom] = list()
+
     def __init__(self):
         """
         Creates a NeuralLog Program.
@@ -710,7 +721,7 @@ class NeuralLogProgram:
         """
         self._expand_clauses()
         self._get_constants()
-        self._add_default_parameters()
+        self._add_parameters()
 
     def add_clauses(self, clauses, *args, **kwargs):
         """
@@ -1303,7 +1314,7 @@ class NeuralLogProgram:
 
     # noinspection PyUnusedLocal
     @builtin("example")
-    def _handle_example(self, example, *args, **kwargs):
+    def _example(self, example, *args, **kwargs):
         """
         Process the builtin `example` predicate.
 
@@ -1353,18 +1364,10 @@ class NeuralLogProgram:
         :param clause: the set parameter clause
         :type clause: AtomClause
         """
-        # predicate = get_predicate_from_string(clause.atom.terms[0].get_name())
-        atom = clause.atom
-        arity = atom.arity()
-        if arity < 2:
+        if clause.atom.arity() < 2:
             return
 
-        parameter_dict = self.parameters
-        for i in range(arity - 2):
-            parameter_dict = parameter_dict.setdefault(
-                atom.terms[i].value, dict())
-        value = _convert_to_bool(atom.terms[-1].value)
-        parameter_dict[atom.terms[-2].value] = value
+        self._parameters_to_add.append(clause.atom)
 
     # noinspection PyUnusedLocal
     @builtin("set_predicate_parameter")
@@ -1375,10 +1378,38 @@ class NeuralLogProgram:
         :param clause: the set predicate parameter clause
         :type clause: AtomClause
         """
-        atom = clause.atom
-        arity = atom.arity()
-        if arity < 2:
+        if clause.atom.arity() < 3:
             return
+
+        self._predicate_parameters_to_add.append(clause.atom)
+
+    # noinspection PyUnusedLocal
+    def _add_parameters(self):
+        for parameter in self._parameters_to_add:
+            self._set_parameter_to_dict(parameter)
+        for parameter in self._predicate_parameters_to_add:
+            self._set_predicate_parameter_to_dict(parameter)
+        for parameter in DEFAULT_PARAMETERS:
+            key, value = parameter[0], parameter[1]
+            self.parameters.setdefault(key, value)
+
+    def _set_parameter_to_dict(self, atom):
+        arity = atom.arity()
+        parameter_dict = self.parameters
+        for i in range(arity - 2):
+            parameter_dict = parameter_dict.setdefault(
+                atom.terms[i].value, dict())
+        value = self._convert_value(atom.terms[-1].value)
+        parameter_dict[atom.terms[-2].value] = value
+
+    def _set_predicate_parameter_to_dict(self, atom):
+        """
+        Sets the atom parameter to `parameters` dictionary.
+
+        :param atom: the atom
+        :type atom: Atom
+        """
+        arity = atom.arity()
 
         parameter_dict = self.parameters
         predicate = get_predicate_from_string(atom.terms[0].value)
@@ -1386,13 +1417,40 @@ class NeuralLogProgram:
         for i in range(1, arity - 2):
             parameter_dict = parameter_dict.setdefault(atom.terms[i].value,
                                                        dict())
-        value = _convert_to_bool(atom.terms[-1].value)
+        value = self._convert_value(atom.terms[-1].value)
         parameter_dict[atom.terms[-2].value] = value
 
-    def _add_default_parameters(self):
-        for parameter in DEFAULT_PARAMETERS:
-            key, value = parameter[0], parameter[1]
-            self.parameters.setdefault(key, value)
+    def _convert_value(self, value):
+        """
+        Converts the value.
+
+        If the value is the form `$<predicate>[<index>]`, returns a function
+        to get the size of the type of the `predicate` term defined by `index`.
+
+        If the value is `true` of `false`, returns its boolean form. This
+        check is case insensitive.
+
+        Otherwise, return the value.
+
+        :param value: the value
+        :type value: str or int or float
+        :return: the converted value
+        :rtype: int or float or str or bool or function
+        """
+        if isinstance(value, str):
+            match = PREDICATE_TYPE_MATCH.match(value)
+            if match is not None:
+                predicate_name, arity, index = match.groups()
+                predicate = Predicate(predicate_name, int(arity))
+                return self.get_constant_size(predicate, int(index))
+
+            lower_value = value.lower()
+            if lower_value == "true":
+                value = True
+            elif lower_value == "false":
+                value = False
+
+        return value
 
 
 DEFAULT_PARAMETERS = [

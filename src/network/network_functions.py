@@ -10,6 +10,8 @@ import src.network.layer_factory
 from src.language.language import Predicate
 from src.network import registry
 
+EMPTY_DICT = dict()
+
 TENSOR_FLOAT32_MAX = tf.constant(tf.float32.max)
 
 CLIP_VALUE_MIN = tf.constant(1.0)
@@ -142,6 +144,19 @@ def get_literal_function(identifier):
     """
     return _get(identifier, literal_functions,
                 tensorflow.keras.activations.get, name_only=True)
+
+
+def get_literal_layer(identifier):
+    """
+    Gets the literal function from `identifier`.
+
+    :param identifier: the identifier
+    :type identifier: str or dict[str, str or dict]
+    :raise ValueError: if the function is not found
+    :return: the function
+    :rtype: function
+    """
+    return _get(identifier, EMPTY_DICT, tensorflow.keras.layers.deserialize)
 
 
 def get_combining_function(identifier):

@@ -139,7 +139,9 @@ def format_arguments(message, arguments):
                  "<value_1>).\n...\n" \
                  "set_predicate_parameter(<predicate>, <name>, config, " \
                  "<config_n>, " \
-                 "<value_n>).\n\n"
+                 "<value_n>).\n\n" \
+                 "One can use $<predicate>[<index>] to access the size of " \
+                 "the predicate term\nwhen setting parameters."
     formatted += "\n\n"
     max_key_size = max(map(lambda x: len(x[0]), arguments))
     stride = max_key_size + TAB_SIZE

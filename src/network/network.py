@@ -4,7 +4,7 @@ Compiles the language into a neural network.
 import logging
 import sys
 from collections import OrderedDict
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Any
 
 import numpy as np
 import tensorflow as tf
@@ -14,15 +14,15 @@ from tensorflow.python.training.tracking import data_structures
 from src.knowledge.program import NeuralLogProgram, NO_EXAMPLE_SET, \
     ANY_PREDICATE_NAME, RuleGraph
 from src.language.language import Atom, Term, HornClause, Literal, \
-    get_renamed_literal, get_substitution, TooManyArgumentsFunction, \
-    get_variable_indices, Predicate, get_renamed_atom, AtomClause
+    get_renamed_literal, get_substitution, get_variable_indices, Predicate, \
+    get_renamed_atom, AtomClause
 from src.network.layer_factory import LayerFactory, \
     get_standardised_name
 from src.network.network_functions import get_literal_function, \
     get_combining_function, FactLayer, \
     InvertedFactLayer, SpecificFactLayer, LiteralLayer, FunctionLayer, \
     AnyLiteralLayer, RuleLayer, ExtractUnaryLiteralLayer, DiagonalRuleLayer, \
-    EmptyLayer
+    EmptyLayer, get_literal_layer
 
 # WARNING: Do not support literals with same variable in the head of rules.
 # WARNING: Do not support constants in the head of rules.
@@ -265,6 +265,9 @@ class NeuralLogNetwork(keras.Model):
 
     _rule_layers: Dict[Tuple[HornClause, bool], RuleLayer] = dict()
     "The rule layer by clause"
+
+    _function_by_predicate: Dict[Predicate, Any] = dict()
+    "The function by predicate"
 
     program: NeuralLogProgram
     "The NeuralLog program"
@@ -624,9 +627,8 @@ class NeuralLogNetwork(keras.Model):
             "function_value", renamed_literal.predicate)
         if function_identifier is None:
             function_identifier = renamed_literal.predicate.name
-        function_value = get_literal_function(function_identifier)
-        if renamed_literal.arity() > 1:
-            raise TooManyArgumentsFunction(renamed_literal.predicate)
+        function_value = self._get_predicate_function(
+            renamed_literal.predicate, function_identifier)
         inputs = None
         term = renamed_literal.terms[0]
         if term.is_constant():
@@ -634,6 +636,26 @@ class NeuralLogNetwork(keras.Model):
         name = "literal_layer_{}".format(
             get_standardised_name(renamed_literal.__str__()))
         return FunctionLayer(name, function_value, inputs=inputs)
+
+    def _get_predicate_function(self, predicate, function_identifier):
+        """
+        Gets the predicate function for the predicate.
+
+        :param predicate: the predicate
+        :type predicate: Predicate
+        :param function_identifier: the function identifier
+        :type function_identifier: str or dict
+        :return: the predicate function
+        :rtype: function
+        """
+        function_value = self._function_by_predicate.get(predicate, None)
+        if function_value is None:
+            try:
+                function_value = get_literal_function(function_identifier)
+            except (ValueError, TypeError):
+                function_value = get_literal_layer(function_identifier)
+            self._function_by_predicate[predicate] = function_value
+        return function_value
 
     def _build_rule(self, clause, predicates_depths, inverted=False):
         """
