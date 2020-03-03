@@ -657,7 +657,7 @@ class NeuralLogProgram:
         "learn": [Predicate("learn", 1)],
         "set_parameter": [Predicate("set_parameter", -1)],
         "set_predicate_parameter": [Predicate("set_predicate_parameter", -1)],
-        "set_predicate_function": [Predicate("set_predicate_function", -1)]
+        "mega_example": [Predicate("mega_example", -1)]
     }
 
     builtin = build_builtin_predicate()
@@ -669,12 +669,20 @@ class NeuralLogProgram:
     of the same atom with different weights, in this way, only the last 
     definition will be considered"""
 
-    examples: Dict[str, Dict[Predicate, Dict[Any, Atom]]] = dict()
+    examples: Dict[str, Dict[Predicate, Dict[Any, Atom]]] = OrderedDict()
     """The examples. The values of this variable are dictionaries where the key 
     are the predicate and a tuple of the terms and the values are the atoms 
     itself. It was done this way in order to collapse different definitions 
     of the same atom with different weights, in this way, only the last 
     definition will be considered"""
+
+    mega_examples: Dict[str, Dict[Any, Dict[Predicate, Dict[Any, Atom]]]] = \
+        OrderedDict()
+    """The mega examples. The values of this variable are dictionaries where 
+    the key are the predicate and a tuple of the terms and the values are the 
+    atoms itself. It was done this way in order to collapse different 
+    definitions of the same atom with different weights, in this way, only the 
+    last definition will be considered"""
 
     clauses_by_predicate: Dict[Predicate, List[HornClause]] = dict()
     "The clauses by predicate"
@@ -720,6 +728,7 @@ class NeuralLogProgram:
         Builds the program after all the clauses had been added.
         """
         self._expand_clauses()
+        self._add_specific_parameter("avoid_constant")
         self._get_constants()
         self._add_parameters()
 
@@ -829,7 +838,6 @@ class NeuralLogProgram:
         """
         Gets the constants from the clauses.
         """
-        _iterable_constants = set()
         grouped_types = self._get_grouped_types()
         _iterable_constants_per_term = dict()
         for type_terms in grouped_types:
@@ -837,33 +845,100 @@ class NeuralLogProgram:
             for predicate_term in type_terms:
                 _iterable_constants_per_term[predicate_term] = iterable_constant
 
-        for facts in self.facts_by_predicate.values():
-            for fact in facts.values():
-                self._get_constants_from_atom(fact, _iterable_constants,
-                                              _iterable_constants_per_term)
-                fact.provenance = None
-        for sets in self.examples.values():
-            for examples in sets.values():
-                for example in examples.values():
-                    self._get_constants_from_atom(example, _iterable_constants,
-                                                  _iterable_constants_per_term,
-                                                  is_example=True)
-                    example.provenance = None
-        for clauses in self.clauses_by_predicate.values():
-            for clause in clauses:
-                self._get_constants_from_atom(clause.head, _iterable_constants,
-                                              _iterable_constants_per_term)
-                clause.head.provenance = None
-                for literal in clause.body:
-                    self._get_constants_from_atom(literal, _iterable_constants,
-                                                  _iterable_constants_per_term)
-                    literal.provenance = None
+        self._get_constants_from_facts(_iterable_constants_per_term)
+        self._get_constants_from_examples(_iterable_constants_per_term)
+        self._get_constants_from_mega_examples(_iterable_constants_per_term)
+        self._get_constants_from_clauses(_iterable_constants_per_term)
         self.iterable_constants_per_term = dict()
         for type_terms in grouped_types:
             value = _iterable_constants_per_term[list(type_terms)[0]]
             dictionary = _build_constant_dict(value)
             for predicate_term in type_terms:
                 self.iterable_constants_per_term[predicate_term] = dictionary
+
+    def _get_constants_from_facts(self, _constants_per_term):
+        """
+        Gets the constants from the facts
+
+        :param _constants_per_term: the dictionary of iterable constants per
+        atom term
+        :type _constants_per_term: dict[tuple[Predicate, int], set[Term]]
+        """
+        for facts in self.facts_by_predicate.values():
+            for fact in facts.values():
+                self._get_constants_from_atom(fact, _constants_per_term)
+                fact.provenance = None
+
+    def _get_constants_from_examples(self, _constants_per_term):
+        """
+        Gets the constants from the examples
+
+        :param _constants_per_term: the dictionary of iterable constants per
+        atom term
+        :type _constants_per_term: dict[tuple[Predicate, int], set[Term]]
+        """
+        for sets in self.examples.values():
+            for predicate, examples in sets.items():
+                indices = self._get_indices_to_add(predicate)
+                for example in examples.values():
+                    self._get_constants_from_atom(
+                        example, _constants_per_term,
+                        is_example=True, indices=indices)
+                    example.provenance = None
+
+    def _get_constants_from_mega_examples(self, _constants_per_term):
+        """
+        Gets the constants from the mega examples
+
+        :param _constants_per_term: the dictionary of iterable constants per
+        atom term
+        :type _constants_per_term: dict[tuple[Predicate, int], set[Term]]
+        """
+        for sets in self.mega_examples.values():
+            for id_sets in sets.values():
+                for pred, examples in id_sets.items():
+                    indices = self._get_indices_to_add(pred)
+                    for example in examples.values():
+                        self._get_constants_from_atom(
+                            example, _constants_per_term,
+                            is_example=True, indices=indices)
+                        example.provenance = None
+
+    def _get_indices_to_add(self, predicate):
+        """
+        Gets the indices to add by the predicate
+        :param predicate: the predicate
+        :type predicate: Predicate
+        :return: the indices to add
+        :rtype: set[int]
+        """
+        avoid = self.get_parameter_value("avoid_constant", predicate)
+        indices = None
+        if avoid is not None:
+            if isinstance(avoid, dict):
+                avoid = set(avoid.values())
+            else:
+                avoid = {avoid}
+            indices = set(range(predicate.arity)) - avoid
+        return indices
+
+    def _get_constants_from_clauses(self, _constants_per_term):
+        """
+        Gets the constants from the clauses
+
+        :param _constants_per_term: the dictionary of iterable constants per
+        atom term
+        :type _constants_per_term: dict[tuple[Predicate, int], set[Term]]
+        """
+        for clauses in self.clauses_by_predicate.values():
+            for clause in clauses:
+                self._get_constants_from_atom(
+                    clause.head, _constants_per_term)
+                clause.head.provenance = None
+                for literal in clause.body:
+                    self._get_constants_from_atom(
+                        literal, _constants_per_term)
+                    literal.provenance = None
 
     def _get_grouped_types(self):
         """
@@ -915,16 +990,13 @@ class NeuralLogProgram:
 
         return term_types
 
-    def _get_constants_from_atom(self, atom, iterable_constants,
-                                 iterable_constant_per_term,
-                                 is_example=False):
+    def _get_constants_from_atom(self, atom, iterable_constant_per_term,
+                                 is_example=False, indices=None):
         """
         Gets the constants from an atom.
 
         :param atom: the atom
         :type atom: Atom
-        :param iterable_constants: the iterable constants
-        :type iterable_constants: set[Term]
         :param iterable_constant_per_term: the iterable constants per
         (predicate, term position)
         :type iterable_constant_per_term: dict[tuple[Predicate, int], set[Term]]
@@ -932,13 +1004,15 @@ class NeuralLogProgram:
         :type is_example: bool
         """
         types = self.predicates[atom.predicate]
-        for i in range(len(types)):
+        if indices is None:
+            indices = range(len(types))
+
+        for i in indices:
             if not atom[i].is_constant() or types[i].number:
                 continue
             self.constants.add(atom[i])
             if is_example or types[i].variable:
                 iterable_constant_per_term[(atom.predicate, i)].add(atom[i])
-                iterable_constants.add(atom[i])
 
     def get_constant_size(self, predicate, index):
         """
@@ -1343,6 +1417,40 @@ class NeuralLogProgram:
                            atom.provenance.start_line)
         example_dict[key] = atom
 
+    # noinspection PyUnusedLocal,DuplicatedCode
+    @builtin("mega_example")
+    def _mega_example(self, example, *args, **kwargs):
+        """
+        Process the builtin `mega_example` predicate.
+
+        :param example: the example clause
+        :type example: AtomClause
+        """
+        example_id = example.atom.terms[0].value
+        atom = Atom(
+            example.atom.terms[1].value,
+            weight=example.atom.weight,
+            *example.atom.terms[2:],
+            provenance=example.atom.provenance
+        )
+
+        # noinspection DuplicatedCode
+        example_set = kwargs.get("example_set", NO_EXAMPLE_SET)
+        example_dict = self.mega_examples.setdefault(example_set, OrderedDict())
+        example_dict = example_dict.setdefault(example_id, OrderedDict())
+        example_dict = example_dict.setdefault(atom.predicate, OrderedDict())
+        key = atom.simple_key()
+        old_atom = example_dict.get(key, None)
+        if old_atom is not None:
+            logger.warning("Warning: mega example %s defined in file %s at "
+                           "line %d replaced by Example %s defined in file %s "
+                           "at line %d.",
+                           old_atom, old_atom.provenance.filename,
+                           old_atom.provenance.start_line,
+                           atom, atom.provenance.filename,
+                           atom.provenance.start_line)
+        example_dict[key] = atom
+
     # noinspection PyUnusedLocal
     @builtin("learn")
     def _learn_predicate(self, clause, *args, **kwargs):
@@ -1386,11 +1494,28 @@ class NeuralLogProgram:
     # noinspection PyUnusedLocal
     def _add_parameters(self):
         for parameter in self._parameters_to_add:
+            # parameter.terms[0].value
             self._set_parameter_to_dict(parameter)
         for parameter in self._predicate_parameters_to_add:
             self._set_predicate_parameter_to_dict(parameter)
         for parameter in DEFAULT_PARAMETERS:
             key, value = parameter[0], parameter[1]
+            self.parameters.setdefault(key, value)
+
+    # noinspection PyUnusedLocal
+    def _add_specific_parameter(self, parameter_name):
+        for parameter in self._parameters_to_add:
+            if parameter.terms[0].value != parameter_name:
+                continue
+            self._set_parameter_to_dict(parameter)
+        for parameter in self._predicate_parameters_to_add:
+            if parameter.terms[1].value != parameter_name:
+                continue
+            self._set_predicate_parameter_to_dict(parameter)
+        for parameter in DEFAULT_PARAMETERS:
+            key, value = parameter[0], parameter[1]
+            if key != parameter_name:
+                continue
             self.parameters.setdefault(key, value)
 
     def _set_parameter_to_dict(self, atom):
@@ -1454,6 +1579,17 @@ class NeuralLogProgram:
 
 
 DEFAULT_PARAMETERS = [
+    ("dataset_class", "default_dataset",
+     "the class to handle the examples.", False),
+
+    ("avoid_constant", {},
+     "Skips adding the constants that appears in the index specified by this "
+     "parameter, when reading the examples. "
+     "This may cause entities, that only appears in the examples, to not "
+     "appear in the knowledge base. "
+     "This must be handled by the dataset; otherwise, an exception will be "
+     "raised."),
+
     ("initial_value", {
         "class_name": "random_normal",
         "config": {"mean": 0.5, "stddev": 0.125}

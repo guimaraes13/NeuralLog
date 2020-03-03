@@ -3,19 +3,18 @@ Compiles the language into a neural network.
 """
 import logging
 import sys
-from collections import OrderedDict
 from typing import Dict, List, Tuple, Any
 
-import numpy as np
 import tensorflow as tf
 from tensorflow.python import keras
 from tensorflow.python.training.tracking import data_structures
 
-from src.knowledge.program import NeuralLogProgram, NO_EXAMPLE_SET, \
-    ANY_PREDICATE_NAME, RuleGraph
+from src.knowledge.program import NeuralLogProgram, ANY_PREDICATE_NAME, \
+    RuleGraph
+from src.network.dataset import NeuralLogDataset
 from src.language.language import Atom, Term, HornClause, Literal, \
     get_renamed_literal, get_substitution, get_variable_indices, Predicate, \
-    get_renamed_atom, AtomClause
+    get_renamed_atom
 from src.network.layer_factory import LayerFactory, \
     get_standardised_name
 from src.network.network_functions import get_literal_function, \
@@ -96,69 +95,6 @@ class LossMaskWrapper:
     def __repr__(self):
         return "{}({})".format(self.__class__.__name__,
                                self.loss_function.__repr__())
-
-
-# noinspection PyTypeChecker
-def print_neural_log_predictions(model, neural_program, dataset,
-                                 writer=sys.stdout, dataset_name=None):
-    """
-    Prints the predictions of `model` to `writer`.
-
-    :param model: the model
-    :type model: NeuralLogNetwork
-    :param neural_program: the neural program
-    :type neural_program: NeuralLogProgram
-    :param dataset: the dataset
-    :type dataset: tf.data.Dataset
-    :param writer: the writer. Default is to print to the standard output
-    :type writer: Any
-    :param dataset_name: the name of the dataset
-    :type dataset_name: str
-    """
-    for features, _ in dataset:
-        y_scores = model.predict(features)
-        if len(model.predicates) == 1:
-            y_scores = [y_scores]
-            features = [features]
-        for i in range(len(model.predicates)):
-            predicate, inverted = model.predicates[i]
-            if inverted:
-                continue
-            for feature, y_score in zip(features[i], y_scores[i]):
-                x = feature.numpy()
-                if x.max() == 0.0:
-                    continue
-                subject_index = np.argmax(x)
-                subject = neural_program.get_constant_by_index(
-                    predicate, 0, subject_index)
-                if predicate.arity == 1:
-                    clause = AtomClause(Atom(predicate, subject,
-                                             weight=float(y_score)))
-                    print(clause, file=writer)
-                else:
-                    clauses = []
-                    for index in range(len(y_score)):
-                        object_term = neural_program.get_constant_by_index(
-                            predicate, 1, index)
-                        prediction = Atom(predicate, subject, object_term,
-                                          weight=float(y_score[index]))
-                        if dataset_name is not None and \
-                                prediction.simple_key() not in \
-                                neural_program.examples[
-                                    dataset_name][predicate]:
-                            continue
-                        clauses.append(AtomClause(prediction))
-
-                    if len(clauses) > 0:
-                        clause = AtomClause(Atom(predicate, subject, "X"))
-                        print("%%", clause, file=writer, sep=" ")
-                        for clause in sorted(
-                                clauses,
-                                key=lambda c: c.atom.weight,
-                                reverse=True):
-                            print(clause, file=writer)
-                        print(file=writer)
-            # print(file=writer)
 
 
 def is_cyclic(atom, previous_atoms):
@@ -274,12 +210,12 @@ class NeuralLogNetwork(keras.Model):
 
     predicates: List[Tuple[Predicate, bool]]
 
-    def __init__(self, program, train=True, inverse_relations=True):
+    def __init__(self, dataset, train=True, inverse_relations=True):
         """
         Creates a NeuralLogNetwork.
 
-        :param program: the neural language
-        :type program: NeuralLogProgram
+        :param dataset: the NeuralLog dataset
+        :type dataset: NeuralLogDataset
         :param train: if `False`, all the literals will be considered as not
         trainable/learnable, this is useful to build neural networks for
         inference only. In this way, the unknown facts will be treated as
@@ -290,7 +226,8 @@ class NeuralLogNetwork(keras.Model):
         :type train: bool
         """
         super(NeuralLogNetwork, self).__init__(name="NeuralLogNetwork")
-        self.program = program
+        self.dataset = dataset
+        self.program = dataset.program
         self.layer_factory = LayerFactory(self.program, train=train)
         # noinspection PyTypeChecker
         self.predicates = data_structures.NoDependency(list())
@@ -379,31 +316,22 @@ class NeuralLogNetwork(keras.Model):
         """
         Builds the layers of the network.
         """
-        for example_set in self.program.examples.values():
-            for predicate in example_set:
-                logger.debug("Building output layer for predicate: %s",
-                             predicate)
-                literal = Literal(Atom(predicate,
-                                       *list(map(lambda x: "X{}".format(x),
-                                                 range(predicate.arity)))))
-                if (predicate, False) not in self.predicates:
-                    predicate_layer = self._build_literal(literal, dict())
-                    if predicate.arity == 1:
-                        combining_func = \
-                            self.get_unary_literal_extraction_function(
-                                predicate)
-                        predicate_layer = ExtractUnaryLiteralLayer(
-                            predicate_layer, combining_func)
-                    self.predicates.append((predicate, False))
-                    self.predicate_layers.append(predicate_layer)
-                key = (predicate, True)
-                if self.inverse_relations and predicate.arity == 2 and \
-                        key not in self.predicates:
-                    predicate_layer = self._build_literal(literal, dict(),
-                                                          inverted=True)
-                    self.predicates.append(key)
-                    self.predicate_layers.append(predicate_layer)
-        if len(self.predicates) == 1:
+        for predicate, inverted in self.dataset.get_target_predicates():
+            logger.debug("Building output layer for predicate: %s", predicate)
+            literal = Literal(Atom(
+                predicate, *list(map(
+                    lambda x: "X{}".format(x), range(predicate.arity)))))
+            predicate_layer = self._build_literal(
+                literal, dict(), inverted=inverted)
+            if predicate.arity == 1:
+                combining_func = self.get_unary_literal_extraction_function(
+                    predicate)
+                predicate_layer = ExtractUnaryLiteralLayer(
+                    predicate_layer, combining_func)
+            self.predicates.append((predicate, inverted))
+            self.predicate_layers.append(predicate_layer)
+
+        if len(self.predicate_layers) == 1:
             self.call = self.call_single_input
         else:
             # noinspection PyAttributeOutsideInit
@@ -781,197 +709,3 @@ class NeuralLogNetwork(keras.Model):
                             self.program.get_constant_by_index(
                                 atom.predicate, 1, j)
                         self.program.add_fact(fact)
-
-
-def get_predicate_indices(predicate, inverted):
-    """
-    Gets the indices of the predicate's input and output.
-
-    :param predicate: the predicate
-    :type predicate: Predicate
-    :param inverted: if the predicate is inverted
-    :type inverted: bool
-    :return: the input and output indices
-    :rtype: (int, int)
-    """
-    if predicate.arity == 1:
-        input_index = 0
-        output_index = 0
-    else:
-        if inverted:
-            input_index = 1
-            output_index = 0
-        else:
-            input_index = 0
-            output_index = 1
-    return input_index, output_index
-
-
-class NeuralLogDataset:
-    """
-    Represents a NeuralLog dataset to train a NeuralLog network.
-    """
-
-    network: NeuralLogNetwork
-    "The NeuralLog program"
-
-    examples: Dict[Term, Dict[Predicate, Dict[Term, float] or float]]
-
-    def __init__(self, network):
-        """
-        Creates a NeuralLogNetwork.
-
-        :param network: the NeuralLog network
-        :type network: NeuralLogNetwork
-        """
-        self.network = network
-        self.program = network.program
-
-    # noinspection PyUnusedLocal
-    def call(self, features, labels, *args, **kwargs):
-        """
-        Used to transform the features and examples from the sparse
-        representation to dense in order to train the network.
-
-        :param features: A dense index tensor of the features
-        :type features: tuple[tf.SparseTensor]
-        :param labels: A tuple sparse tensor of labels
-        :type labels: tuple[tf.SparseTensor]
-        :param args: additional arguments
-        :type args: list
-        :param kwargs: additional arguments
-        :type kwargs: dict
-        :return: the features and label tensors
-        :rtype: (tf.Tensor or tuple[tf.Tensor], tuple[tf.Tensor])
-        """
-        dense_features = []
-        for i in range(len(self.network.predicates)):
-            predicate, inverted = self.network.predicates[i]
-            index, _ = get_predicate_indices(predicate, inverted)
-            feature = tf.one_hot(
-                features[i],
-                self.program.get_constant_size(predicate, index))
-            dense_features.append(feature)
-
-        labels = tuple(map(lambda x: tf.sparse.to_dense(x), labels))
-
-        if len(dense_features) > 1:
-            dense_features = tuple(dense_features)
-        else:
-            dense_features = dense_features[0]
-
-        return dense_features, labels
-
-    __call__ = call
-
-    def get_dataset(self, example_set=NO_EXAMPLE_SET,
-                    batch_size=1, shuffle=False):
-        """
-        Gets the data set for the example set.
-
-        :param example_set: the name of the example set
-        :type example_set: str
-        :param batch_size: the batch size
-        :type batch_size: int
-        :param shuffle: if `True`, shuffles the dataset.
-        :type shuffle: bool
-        :return: the dataset
-        :rtype: tf.data.Dataset
-        """
-        features, labels = self.build(example_set=example_set)
-        # noinspection PyTypeChecker
-        dataset_size = len(features[0])
-        dataset = tf.data.Dataset.from_tensor_slices((features, labels))
-        if shuffle:
-            dataset = dataset.shuffle(dataset_size)
-        dataset = dataset.batch(batch_size)
-        dataset = dataset.map(self)
-        logger.info("Dataset %s created with %d example(s)", example_set,
-                    dataset_size)
-        return dataset
-
-    def build(self, example_set=NO_EXAMPLE_SET):
-        """
-        Builds the features and label to train the neural network based on
-        the `example_set`.
-
-        The labels are always a sparse tensor.
-
-        :param example_set: the name of the set of examples
-        :type example_set: str
-        sparse tensor. If `False`, the features are generated as a dense
-        tensor of indices, for each index a one hot vector creation is
-        necessary.
-        :return: the features and labels
-        :rtype: (tuple[tf.SparseTensor], tuple[tf.SparseTensor])
-        """
-        output_by_term = OrderedDict()
-        input_terms = []
-        examples = self.program.examples.get(example_set, OrderedDict())
-        for predicate, inverted in self.network.predicates:
-            facts = examples.get(predicate, dict()).values()
-            for fact in facts:
-                input_term = fact.terms[-1 if inverted else 0]
-                if input_term not in output_by_term:
-                    output = dict()
-                    output_by_term[input_term] = output
-                    input_terms.append(input_term)
-                else:
-                    output = output_by_term[input_term]
-                if predicate.arity == 1:
-                    output[(predicate, inverted)] = fact.weight
-                else:
-                    output_term = fact.terms[0 if inverted else -1]
-                    # noinspection PyTypeChecker
-                    output.setdefault((predicate, inverted), []).append(
-                        (output_term, fact.weight))
-
-        all_features = []
-        all_labels = []
-        for predicate, inverted in self.network.predicates:
-            features = []
-            label_values = []
-            label_indices = []
-            input_index, output_index = get_predicate_indices(predicate,
-                                                              inverted)
-            for i in range(len(input_terms)):
-                index = self.program.get_index_of_constant(
-                    predicate, input_index, input_terms[i])
-                if index is None:
-                    index = -1
-                features.append(index)
-                outputs = output_by_term[input_terms[i]].get(
-                    (predicate, inverted), None)
-                if outputs is not None:
-                    if predicate.arity == 1:
-                        label_indices.append([i, 0])
-                        label_values.append(outputs)
-                    else:
-                        for output_term, output_value in outputs:
-                            output_term_index = \
-                                self.program.get_index_of_constant(
-                                    predicate, output_index, output_term)
-                            label_indices.append([i, output_term_index])
-                            label_values.append(output_value)
-
-            all_features.append(features)
-            if predicate.arity == 1:
-                dense_shape = [len(input_terms), 1]
-                empty_index = [[0, 0]]
-            else:
-                dense_shape = [
-                    len(input_terms),
-                    self.program.get_constant_size(predicate, output_index)]
-                empty_index = [[0, 0]]
-            if len(label_values) == 0:
-                sparse_tensor = tf.SparseTensor(indices=empty_index,
-                                                values=[0.0],
-                                                dense_shape=dense_shape)
-            else:
-                sparse_tensor = tf.SparseTensor(indices=label_indices,
-                                                values=label_values,
-                                                dense_shape=dense_shape)
-            sparse_tensor = tf.sparse.reorder(sparse_tensor)
-            all_labels.append(sparse_tensor)
-
-        return tuple(all_features), tuple(all_labels)

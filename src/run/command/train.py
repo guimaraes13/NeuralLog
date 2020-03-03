@@ -20,8 +20,8 @@ from src.language.parser.ply.neural_log_parser import NeuralLogParser, \
     NeuralLogLexer
 from src.network.callbacks import EpochLogger, get_neural_log_callback, \
     AbstractNeuralLogCallback, get_formatted_name
-from src.network.network import NeuralLogNetwork, NeuralLogDataset, \
-    LossMaskWrapper, print_neural_log_predictions
+from src.network.dataset import print_neural_log_predictions, get_dataset_class
+from src.network.network import NeuralLogNetwork, LossMaskWrapper
 from src.run.command import Command, command, print_args, create_log_file, \
     TRAIN_SET_NAME, VALIDATION_SET_NAME, TEST_SET_NAME
 
@@ -571,10 +571,8 @@ class Train(Command):
         """
         start_func = time.perf_counter()
         logger.info("Building model...")
-        inverse_relations = self.neural_program.parameters.get(
-            "inverse_relations", DEFAULT_INVERTED_RELATIONS)
-        self.model = NeuralLogNetwork(self.neural_program, train=self.train,
-                                      inverse_relations=inverse_relations)
+        self._create_dataset()
+        self.model = NeuralLogNetwork(self.neural_dataset, train=self.train)
         self.model.build_layers()
         if self.load_model is not None:
             self.model.load_weights(self.load_model)
@@ -591,12 +589,24 @@ class Train(Command):
             regularizer=self.parameters["regularizer"],
             metrics=self.parameters["metrics"]
         )
-        # self.model.build([None, len(self.neural_program.iterable_constants)])
-        # self.model.summary(print_fn=logger.info)
-        self.neural_dataset = NeuralLogDataset(self.model)
+
         end_func = time.perf_counter()
 
         logger.info("\nModel building time:\t%0.3fs", end_func - start_func)
+
+    def _create_dataset(self):
+        inverse_relations = self.neural_program.parameters.get(
+            "inverse_relations", DEFAULT_INVERTED_RELATIONS)
+        dataset_class = self.neural_program.parameters["dataset_class"]
+        config = dict()
+        if isinstance(dataset_class, dict):
+            class_name = dataset_class["class_name"]
+            config.update(dataset_class["config"])
+        else:
+            class_name = dataset_class
+        config["program"] = self.neural_program
+        config["inverse_relations"] = inverse_relations
+        self.neural_dataset = get_dataset_class(class_name)(**config)
 
     def _get_output_map(self):
         output_map = BiDict()  # type: BiDict[Predicate, str]
@@ -707,7 +717,7 @@ class Train(Command):
         logger.info("Creating training dataset...")
         shuffle = self.neural_program.parameters.get("shuffle", False)
         batch_size = self.parameters["batch_size"]
-        self._log_parameters(["batch_size", "shuffle"])
+        self._log_parameters(["dataset_class", "batch_size", "shuffle"])
         end_func = time.perf_counter()
         train_set_time = 0
         validation_set_time = 0

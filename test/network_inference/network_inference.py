@@ -9,8 +9,8 @@ import numpy as np
 from src.knowledge.program import NeuralLogProgram
 from src.language.parser.ply.neural_log_parser import NeuralLogLexer
 from src.language.parser.ply.neural_log_parser import NeuralLogParser
-from src.network.network import NeuralLogNetwork, NeuralLogDataset, \
-    get_predicate_indices
+from src.network.dataset import get_predicate_indices, DefaultDataset
+from src.network.network import NeuralLogNetwork
 
 RESOURCES = "network_inference"
 PROGRAM = "kinship.pl"
@@ -161,13 +161,13 @@ class TestNetworkInference(unittest.TestCase):
         cls.program.add_clauses(examples, example_set=DATASET_NAME)
         cls.program.build_program()
 
+        # Create the dataset
+        cls.dataset = DefaultDataset(cls.program)
+
         # Creates the NeuralLog Model
-        cls.model = NeuralLogNetwork(cls.program)
+        cls.model = NeuralLogNetwork(cls.dataset)
         cls.model.build_layers()
         # cls.model.compile()
-
-        # Create the dataset
-        cls.dataset = NeuralLogDataset(cls.model)
 
     def predict(self, features):
         predictions = self.model.predict(features)  # type: List[np.ndarray]

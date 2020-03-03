@@ -357,6 +357,79 @@ def inverse(a):
     return tf.math.divide_no_nan(1.0, a)
 
 
+@neural_log_literal_function("pad_1d")
+def pad_1d(a, before=0, after=0, value=0):
+    """
+    Pads the tensor a if `before` time the `value` before the tensor and
+    `after` times after the tensor.
+
+    :param a: the tensor
+    :type a: tf.Tensor
+    :param before: the length of the padding before the tensor
+    :type before: int
+    :param after: the length of the padding after the tensor
+    :type after: int
+    :param value: the constant value
+    :type value: int or float
+    :return: the padded tensor
+    :rtype: tf.Tensor
+    """
+    padding = tf.constant([[before, after], [0, 0]])
+    return tf.pad(a, padding, constant_values=value)
+
+
+@neural_log_literal_function("partial")
+class Partial:
+    """
+    Defines a literal function that call another function passing the values
+    as parameters.
+    """
+
+    def __init__(self, function_name, mode="before", *args, **kwargs):
+        """
+        Creates the Partial function.
+
+        :param function_name: the name of the literal function
+        :type function_name: str
+        :param mode: the mode of the function. If `before`, the arguments of
+        the call function will came before the arguments of the constructor;
+        otherwise, it will came after.
+        :type mode: str
+        :param args: the arguments of the constructor
+        :type args: Any
+        :param kwargs: the arguments of the constructor
+        :type kwargs: Any
+        """
+        self._function = self._get_function(function_name)
+        self.mode = mode
+        self.args = args
+        self.kwargs = kwargs
+
+    @staticmethod
+    def _get_function(function_name):
+        if function_name.startswith("tf."):
+            names = function_name.split(".")[1:]
+            func = tf
+            for name in names:
+                func = getattr(func, name)
+            return func
+
+        return get_literal_function(function_name)
+
+    # noinspection PyMissingOrEmptyDocstring
+    def call(self, *args, **kwargs):
+        if self.mode.lower() == "before":
+            new_kwargs = dict(self.kwargs)
+            new_kwargs.update(kwargs)
+            return self._function(*args, *self.args, **new_kwargs)
+        else:
+            new_kwargs = dict(kwargs)
+            new_kwargs.update(self.kwargs)
+            return self._function(*self.args, *args, **new_kwargs)
+
+    __call__ = call
+
+
 class NeuralLogLayer(keras.layers.Layer):
     """
     Represents a NeuralLogLayer.
@@ -913,7 +986,7 @@ class FunctionLayer(NeuralLogLayer):
         :param name: the name of the layer
         :type name: str
         :param function: the function
-        :type function: function
+        :type function: callable
         """
         self.function = function
         self.inputs = inputs
@@ -943,6 +1016,8 @@ class FunctionLayer(NeuralLogLayer):
 
     # noinspection PyMissingOrEmptyDocstring
     def compute_output_shape(self, input_shape):
+        if hasattr(self.function, "compute_output_shape"):
+            return self.function.compute_output_shape(input_shape)
         return tf.TensorShape(input_shape)
 
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
