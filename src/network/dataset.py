@@ -10,7 +10,8 @@ import numpy as np
 import tensorflow as tf
 
 from src.knowledge.program import NeuralLogProgram, NO_EXAMPLE_SET
-from src.language.language import AtomClause, Atom, Constant, Predicate
+from src.language.language import AtomClause, Atom, Constant, Predicate, \
+    get_constant_from_string
 from src.network import registry
 
 logger = logging.getLogger()
@@ -458,7 +459,7 @@ class SequenceDataset(DefaultDataset):
         :type expand_one_hot: bool
         """
         super(SequenceDataset, self).__init__(program, inverse_relations)
-        self.out_of_vocabulary = Constant(out_of_vocabulary)
+        self.out_of_vocabulary = get_constant_from_string(out_of_vocabulary)
         self.expand_one_hot = expand_one_hot
         self.example_keys = self._load_example_keys()
         self._output_types = None

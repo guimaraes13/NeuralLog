@@ -13,13 +13,14 @@ from scipy.sparse import csr_matrix
 
 from src.language.language import Number, TermType, Predicate, Atom, \
     HornClause, Term, AtomClause, ClauseMalformedException, TooManyArguments, \
-    PredicateTypeError, UnsupportedMatrixRepresentation, Literal
+    PredicateTypeError, UnsupportedMatrixRepresentation, Literal, Constant, \
+    get_constant_from_string
 
 ANY_PREDICATE_NAME = "any"
 NO_EXAMPLE_SET = ":none:"
 
 PREDICATE_TYPE_MATCH = re.compile("\\$([a-zA-Z_-][a-zA-Z0-9_-]*)"
-                                  "/([1-9][0-9]*)\\[([0-9]+)\\]")
+                                  "/([1-9][0-9]*)\\[([0-9]+)\\](\\[.+\\])?")
 
 KT = TypeVar('KT')  # Key type.
 VT = TypeVar('VT')  # Value type.
@@ -1565,9 +1566,16 @@ class NeuralLogProgram:
         if isinstance(value, str):
             match = PREDICATE_TYPE_MATCH.match(value)
             if match is not None:
-                predicate_name, arity, index = match.groups()
+                groups = match.groups()
+                predicate_name = groups[0]
+                arity = groups[1]
+                index = int(groups[2])
                 predicate = Predicate(predicate_name, int(arity))
-                return self.get_constant_size(predicate, int(index))
+                if len(groups) > 3 and groups[3] is not None:
+                    term = get_constant_from_string(groups[3][1:-1])
+                    return self.get_index_of_constant(predicate, index, term)
+                else:
+                    return self.get_constant_size(predicate, index)
 
             lower_value = value.lower()
             if lower_value == "true":

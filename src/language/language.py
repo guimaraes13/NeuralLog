@@ -34,6 +34,22 @@ def get_term_from_string(string):
         raise TermMalformedException()
 
 
+def get_constant_from_string(string):
+    """
+    Transforms the string into a constant term.
+
+    :param string: the string
+    :type string: str
+    :raise TermMalformedException case the term is malformed
+    :return: the term
+    :rtype: Term
+    """
+    if string[0] == string[-1] and (string[0] == "'" or string[0] == '"'):
+        return Quote(string)
+
+    return Constant(string)
+
+
 def build_terms(arguments):
     """
     Builds a list of terms from the arguments.
