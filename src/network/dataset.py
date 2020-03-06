@@ -10,7 +10,7 @@ import numpy as np
 import tensorflow as tf
 
 from src.knowledge.program import NeuralLogProgram, NO_EXAMPLE_SET
-from src.language.language import AtomClause, Atom, Constant, Predicate, \
+from src.language.language import AtomClause, Atom, Predicate, \
     get_constant_from_string
 from src.network import registry
 
@@ -80,11 +80,13 @@ def print_neural_log_predictions(model, neural_program, dataset,
                 continue
             for feature, y_score in zip(features[i], y_scores[i]):
                 x = feature.numpy()
-                if x.max() == 0.0:
-                    continue
                 if len(x.shape) == 1:
                     subject_index = x[0]
+                    if subject_index < 0:
+                        continue
                 else:
+                    if x.max() == 0.0:
+                        continue
                     subject_index = np.argmax(x)
                 subject = neural_program.get_constant_by_index(
                     predicate, 0, subject_index)
@@ -353,7 +355,8 @@ class DefaultDataset(NeuralLogDataset):
         output_by_term = OrderedDict()
         input_terms = []
         for predicate, inverted in self._target_predicates:
-            facts = examples.get(predicate, dict()).values()
+            facts = examples.get(predicate, dict())
+            facts = facts.values()
             for fact in facts:
                 input_term = fact.terms[-1 if inverted else 0]
                 if input_term not in output_by_term:
@@ -362,6 +365,7 @@ class DefaultDataset(NeuralLogDataset):
                     input_terms.append(input_term)
                 else:
                     output = output_by_term[input_term]
+
                 if predicate.arity == 1:
                     output[(predicate, inverted)] = fact.weight
                 else:
@@ -441,13 +445,16 @@ class SequenceDataset(DefaultDataset):
     The sequence dataset.
     """
 
-    def __init__(self, program, inverse_relations=True,
+    def __init__(self, program, empty_entry, inverse_relations=True,
                  out_of_vocabulary="<OOV>", expand_one_hot=True):
         """
         Creates a SequenceDataset.
 
         :param program: the NeuralLog program
         :type program: NeuralLogProgram
+        :param empty_entry: the index of an entity that is not found in any
+        example, to represent an empty entry
+        :type empty_entry: int
         :param inverse_relations: whether the dataset must consider the
         inverse relations
         :type inverse_relations: bool
@@ -459,6 +466,7 @@ class SequenceDataset(DefaultDataset):
         :type expand_one_hot: bool
         """
         super(SequenceDataset, self).__init__(program, inverse_relations)
+        self.empty_entry = empty_entry
         self.out_of_vocabulary = get_constant_from_string(out_of_vocabulary)
         self.expand_one_hot = expand_one_hot
         self.example_keys = self._load_example_keys()
@@ -471,8 +479,8 @@ class SequenceDataset(DefaultDataset):
         for mega_examples in self.program.mega_examples.values():
             for example_set in mega_examples.values():
                 for examples_by_predicate in example_set.values():
-                    for keys in examples_by_predicate.keys():
-                        example_keys.add(keys)
+                    for example in examples_by_predicate:
+                        example_keys.add(example.simple_key())
         return example_keys
 
     def _compute_target_predicates(self):
@@ -544,12 +552,12 @@ class SequenceDataset(DefaultDataset):
     def get_dataset(self, example_set=NO_EXAMPLE_SET,
                     batch_size=1, shuffle=False):
         # noinspection PyTypeChecker
-        dataset_size = len(self.program.mega_examples)
         dataset = tf.data.Dataset.from_generator(
             partial(self.build, example_set),
             output_types=self._output_types,
             output_shapes=self._output_shapes
         )
+        dataset_size = len(self.program.mega_examples.get(example_set, []))
         if shuffle:
             dataset = dataset.shuffle(dataset_size)
         dataset = dataset.map(self)
@@ -578,6 +586,86 @@ class SequenceDataset(DefaultDataset):
             features, labels = self._build(examples)
             labels = tuple(map(lambda x: tf.sparse.to_dense(x), labels))
             yield features, labels
+
+    # TODO: do not assume that the input features are unique, at least for
+    #  the SequenceDataset
+    def _build(self, examples, not_found_value=0):
+        """
+        Builds the features and label to train the neural network based on
+        the `example_set`.
+
+        The labels are always a sparse tensor.
+
+        :param examples: the set of examples
+        :type examples: dict[Predicate, List[Atom]]
+        sparse tensor. If `False`, the features are generated as a dense
+        tensor of indices, for each index a one hot vector creation is
+        necessary.
+        :return: the features and labels
+        :rtype: (tuple[list[int]], tuple[tf.SparseTensor])
+        """
+        all_features = []
+        all_label_indices = []
+        all_label_values = []
+        row_index = 0
+        for predicate, inverted in self._target_predicates:
+            input_index, output_index = get_predicate_indices(
+                predicate, inverted)
+            feature = []
+            label_indices = []
+            label_values = []
+            facts = examples.get(predicate, [])
+            for fact in facts:
+                input_term = fact.terms[input_index]
+                input_value = self.program.get_index_of_constant(
+                    predicate, input_index, input_term)
+                if input_value is None:
+                    input_value = self._get_out_of_vocabulary_index(
+                        predicate, input_index)
+                feature.append(input_value)
+                if predicate.arity == 1:
+                    label_indices.append([row_index, 0])
+                else:
+                    output_term = fact.terms[output_index]
+                    output_value = self.program.get_index_of_constant(
+                        predicate, output_index, output_term)
+                    label_indices.append([row_index, output_value])
+                label_values.append(fact.weight)
+                row_index += 1
+            all_label_indices.append(label_indices)
+            all_label_values.append(label_values)
+            all_features.append(feature)
+
+        all_labels = []
+        offset = 0
+        for i in range(len(self._target_predicates)):
+            all_features[i] = \
+                ([self.empty_entry] * offset) + all_features[i]
+            length = len(all_features[i])
+            all_features[i] += \
+                [self.empty_entry] * (row_index - offset - length)
+            offset += length
+
+            predicate, index = self._target_predicates[i]
+            _, output_index = get_predicate_indices(predicate, index)
+            if predicate.arity == 1:
+                dense_shape = [row_index, 1]
+                empty_index = [[0, 0]]
+            else:
+                dense_shape = [
+                    row_index,
+                    self.program.get_constant_size(predicate, output_index)]
+                empty_index = [[0, 0]]
+            if len(all_label_values[i]) == 0:
+                sparse_tensor = tf.SparseTensor(
+                    indices=empty_index, values=[0.0], dense_shape=dense_shape)
+            else:
+                sparse_tensor = tf.SparseTensor(
+                    indices=all_label_indices[i], values=all_label_values[i],
+                    dense_shape=dense_shape)
+            all_labels.append(sparse_tensor)
+
+        return tuple(all_features), tuple(all_labels)
 
     def _get_out_of_vocabulary_index(self, predicate, term_index):
         """

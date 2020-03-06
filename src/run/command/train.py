@@ -6,6 +6,7 @@ import argparse
 import logging
 import os
 import time
+from functools import reduce
 from typing import Dict
 
 import numpy as np
@@ -461,6 +462,7 @@ class Train(Command):
                     all_metrics.append((key, values))
             all_metrics = sorted(all_metrics, key=lambda x: x[0])
             all_metrics = list(map(lambda x: x[1], all_metrics))
+            all_metrics = reduce(list.__add__, all_metrics)
             for key in output_map.values():
                 values = results.get(key, [])
                 default_loss = loss.get(key) if isinstance(loss, dict) else loss

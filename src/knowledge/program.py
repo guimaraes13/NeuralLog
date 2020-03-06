@@ -13,7 +13,7 @@ from scipy.sparse import csr_matrix
 
 from src.language.language import Number, TermType, Predicate, Atom, \
     HornClause, Term, AtomClause, ClauseMalformedException, TooManyArguments, \
-    PredicateTypeError, UnsupportedMatrixRepresentation, Literal, Constant, \
+    PredicateTypeError, UnsupportedMatrixRepresentation, Literal, \
     get_constant_from_string
 
 ANY_PREDICATE_NAME = "any"
@@ -677,7 +677,7 @@ class NeuralLogProgram:
     of the same atom with different weights, in this way, only the last 
     definition will be considered"""
 
-    mega_examples: Dict[str, Dict[Any, Dict[Predicate, Dict[Any, Atom]]]] = \
+    mega_examples: Dict[str, Dict[Any, Dict[Predicate, List[Atom]]]] = \
         OrderedDict()
     """The mega examples. The values of this variable are dictionaries where 
     the key are the predicate and a tuple of the terms and the values are the 
@@ -899,7 +899,7 @@ class NeuralLogProgram:
             for id_sets in sets.values():
                 for pred, examples in id_sets.items():
                     indices = self._get_indices_to_add(pred)
-                    for example in examples.values():
+                    for example in examples:
                         self._get_constants_from_atom(
                             example, _constants_per_term,
                             is_example=True, indices=indices)
@@ -1439,18 +1439,18 @@ class NeuralLogProgram:
         example_set = kwargs.get("example_set", NO_EXAMPLE_SET)
         example_dict = self.mega_examples.setdefault(example_set, OrderedDict())
         example_dict = example_dict.setdefault(example_id, OrderedDict())
-        example_dict = example_dict.setdefault(atom.predicate, OrderedDict())
-        key = atom.simple_key()
-        old_atom = example_dict.get(key, None)
-        if old_atom is not None:
-            logger.warning("Warning: mega example %s defined in file %s at "
-                           "line %d replaced by Example %s defined in file %s "
-                           "at line %d.",
-                           old_atom, old_atom.provenance.filename,
-                           old_atom.provenance.start_line,
-                           atom, atom.provenance.filename,
-                           atom.provenance.start_line)
-        example_dict[key] = atom
+        example_dict = example_dict.setdefault(atom.predicate, [])
+        # key = atom.simple_key()
+        # old_atom = example_dict.get(key, None)
+        # if old_atom is not None:
+        #     logger.warning("Warning: mega example %s defined in file %s at "
+        #                    "line %d replaced by Example %s defined in file "
+        #                    "%s at line %d.",
+        #                    old_atom, old_atom.provenance.filename,
+        #                    old_atom.provenance.start_line,
+        #                    atom, atom.provenance.filename,
+        #                    atom.provenance.start_line)
+        example_dict.append(atom)
 
     # noinspection PyUnusedLocal
     @builtin("learn")

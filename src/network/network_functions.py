@@ -385,7 +385,7 @@ class Partial:
     as parameters.
     """
 
-    def __init__(self, function_name, mode="before", *args, **kwargs):
+    def __init__(self, function_name, mode="before", **kwargs):
         """
         Creates the Partial function.
 
@@ -395,14 +395,11 @@ class Partial:
         the call function will came before the arguments of the constructor;
         otherwise, it will came after.
         :type mode: str
-        :param args: the arguments of the constructor
-        :type args: Any
         :param kwargs: the arguments of the constructor
         :type kwargs: Any
         """
         self._function = self._get_function(function_name)
         self.mode = mode
-        self.args = args
         self.kwargs = kwargs
 
     @staticmethod
@@ -417,15 +414,15 @@ class Partial:
         return get_literal_function(function_name)
 
     # noinspection PyMissingOrEmptyDocstring
-    def call(self, *args, **kwargs):
+    def call(self, inputs, **kwargs):
         if self.mode.lower() == "before":
             new_kwargs = dict(self.kwargs)
             new_kwargs.update(kwargs)
-            return self._function(*args, *self.args, **new_kwargs)
+            return self._function(inputs, **new_kwargs)
         else:
             new_kwargs = dict(kwargs)
             new_kwargs.update(self.kwargs)
-            return self._function(*self.args, *args, **new_kwargs)
+            return self._function(inputs, **new_kwargs)
 
     __call__ = call
 
