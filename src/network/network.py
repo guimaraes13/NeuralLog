@@ -10,11 +10,11 @@ from tensorflow.python import keras
 from tensorflow.python.training.tracking import data_structures
 
 from src.knowledge.program import NeuralLogProgram, ANY_PREDICATE_NAME, \
-    RuleGraph
-from src.network.dataset import NeuralLogDataset
+    SimpleRulePath
 from src.language.language import Atom, Term, HornClause, Literal, \
     get_renamed_literal, get_substitution, get_variable_indices, Predicate, \
     get_renamed_atom
+from src.network.dataset import NeuralLogDataset
 from src.network.layer_factory import LayerFactory, \
     get_standardised_name
 from src.network.network_functions import get_literal_function, \
@@ -32,6 +32,14 @@ from src.network.network_functions import get_literal_function, \
 #  We should also use the other way around, use a rule
 #  h(X, a) :- ... to predict facts h(X, Y). which will return
 #  the values for h(X, a); and zero for every Y != a.
+
+# WARNING: We assume that all literals with arity higher than two have
+#  distinct terms and the output of those literals are always the last term.
+
+# WARNING: We do not support facts with arity bigger than two. Since the
+#  current version of tensorflow does not have operation to efficiently
+#  handle sparse tensor with more than two dimensions, we would have to
+#  create such facts as dense tensors, which would consume too much memory.
 
 logger = logging.getLogger()
 
@@ -185,6 +193,30 @@ def log_equivalent_clause(current_clause, older_clause):
             old_clause_filename,
             old_start_line
         )
+
+
+def arity_bigger_than(clause, value):
+    """
+    Returns `True`, if the arity of the `clause` is bigger than `value`. The
+    arity of a clause is defined by the maximum arity of the literals in the
+    clause.
+
+    :param clause: the clause
+    :type clause: HornClause
+    :param value: the value
+    :type value: int
+    :return: `True`, if the arity of the `clause` is bigger than `value`;
+    otherwise, `False`
+    :rtype: bool
+    """
+    if clause.head.arity() > value:
+        return True
+
+    for atom in clause.body:
+        if atom.arity() > value:
+            return True
+
+    return False
 
 
 class NeuralLogNetwork(keras.Model):
@@ -437,11 +469,17 @@ class NeuralLogNetwork(keras.Model):
                 substitution = get_substitution(clause.head, renamed_literal)
                 if substitution is None:
                     continue
-                rule = self._build_rule(clause, predicates_depths, inverted)
-                if rule is None:
-                    continue
-                rule = self._build_specific_rule(
-                    renamed_literal, inverted, rule, substitution)
+                if arity_bigger_than(clause, 2):
+                    rule = self._build_high_arity_rule(
+                        clause, predicates_depths, inverted)
+                else:
+                    rule = self._build_rule(clause, predicates_depths, inverted)
+                    if rule is None:
+                        continue
+                    # TODO: create specific rule for rule with head arity
+                    #  bigger than 2
+                    rule = self._build_specific_rule(
+                        renamed_literal, inverted, rule, substitution)
                 if rule in input_clauses:
                     log_equivalent_clause(clause, input_clauses[rule])
                     continue
@@ -604,7 +642,57 @@ class NeuralLogNetwork(keras.Model):
         rule_layer = self._rule_layers.get(key, None)
         if rule_layer is None:
             logger.debug("Building layer for rule: %s", clause)
-            rule_graph = RuleGraph(clause)
+            rule_graph = SimpleRulePath(clause)
+            paths, grounds = rule_graph.find_clause_paths(inverted)
+
+            layer_paths = []
+            for path in paths:
+                layer_path = []
+                for i in range(len(path)):
+                    if path[i].predicate.name == ANY_PREDICATE_NAME:
+                        literal_layer = self._get_any_literal()
+                    else:
+                        literal_layer = self._build_literal(
+                            path[i], predicates_depths, path.inverted[i])
+                    layer_path.append(literal_layer)
+                layer_paths.append(layer_path)
+
+            grounded_layers = []
+            for grounded in grounds:
+                literal_layer = self._build_literal(grounded, predicates_depths)
+                grounded_layers.append(literal_layer)
+            layer_name = "rule_layer_{}".format(
+                get_standardised_name(clause.__str__()))
+            rule_layer = \
+                RuleLayer(
+                    layer_name, layer_paths, grounded_layers,
+                    self._get_path_combining_function(clause.head.predicate),
+                    self.neutral_element)
+            self._rule_layers[key] = rule_layer
+
+        return rule_layer
+
+    def _build_high_arity_rule(self, clause, predicates_depths, inverted=False):
+        """
+        Builds the Rule Node for rules with arity bigger than two.
+
+        :param clause: the clause
+        :type clause: HornClause
+        :param predicates_depths: the depths of the predicates
+        :type predicates_depths: dict[Predicate, int]
+        :param inverted: if `True`, creates the layer for the inverted rule;
+            this is, the rule in the format (output, input). If `False`,
+            creates the layer for standard (input, output) rule format.
+        :type inverted: bool
+        :return: the rule layer
+        :rtype: RuleLayer
+        """
+        # TODO: Build the rule layer for rules with arity bigger than two
+        key = (clause, inverted)
+        rule_layer = self._rule_layers.get(key, None)
+        if rule_layer is None:
+            logger.debug("Building layer for rule: %s", clause)
+            rule_graph = SimpleRulePath(clause)
             paths, grounds = rule_graph.find_clause_paths(inverted)
 
             layer_paths = []

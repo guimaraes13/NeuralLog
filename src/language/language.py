@@ -184,31 +184,6 @@ def get_variable_indices(atom):
     return indexes
 
 
-class TooManyArguments(Exception):
-    """
-    Represents an exception raised by an atom with too many arguments.
-    """
-
-    MAX_NUMBER_OF_ARGUMENTS = 2
-
-    def __init__(self, atom, found) -> None:
-        """
-        Creates a too many arguments exception.
-
-        :param atom: the atom
-        :type atom: Atom
-        :param found: the number of arguments found
-        :type found: int
-        """
-        super().__init__("Too many arguments found for {} at line {} in file "
-                         "{}. Found {} arguments, the maximum number of "
-                         "arguments allowed is {}."
-                         .format(atom,
-                                 atom.provenance.start_line,
-                                 atom.provenance.filename,
-                                 found, self.MAX_NUMBER_OF_ARGUMENTS))
-
-
 class TooManyArgumentsFunction(Exception):
     """
     Represents an exception raised by function literal with too many arguments.

@@ -587,8 +587,6 @@ class SequenceDataset(DefaultDataset):
             labels = tuple(map(lambda x: tf.sparse.to_dense(x), labels))
             yield features, labels
 
-    # TODO: do not assume that the input features are unique, at least for
-    #  the SequenceDataset
     def _build(self, examples, not_found_value=0):
         """
         Builds the features and label to train the neural network based on

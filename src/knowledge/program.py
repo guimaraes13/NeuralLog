@@ -12,12 +12,15 @@ import numpy as np
 from scipy.sparse import csr_matrix
 
 from src.language.language import Number, TermType, Predicate, Atom, \
-    HornClause, Term, AtomClause, ClauseMalformedException, TooManyArguments, \
-    PredicateTypeError, UnsupportedMatrixRepresentation, Literal, \
+    HornClause, Term, AtomClause, ClauseMalformedException, \
+    PredicateTypeError, \
+    UnsupportedMatrixRepresentation, Literal, \
     get_constant_from_string
 
 ANY_PREDICATE_NAME = "any"
 NO_EXAMPLE_SET = ":none:"
+
+MAX_NUMBER_OF_ARGUMENTS = 2
 
 PREDICATE_TYPE_MATCH = re.compile("\\$([a-zA-Z_-][a-zA-Z0-9_-]*)"
                                   "/([1-9][0-9]*)\\[([0-9]+)\\](\\[.+\\])?")
@@ -182,7 +185,94 @@ def get_value_from_parameter(names, parameters):
     return value
 
 
-class RuleGraph:
+def _convert_to_bool(value):
+    """
+    If the value is `true` or `false`, return the boolean equivalent form of
+    the value. This method is case insensitive.
+
+    :param value: the string value
+    :type value: str
+    :return: the string value or the boolean value
+    :rtype: str or bool
+    """
+    if isinstance(value, str):
+        lower_value = value.lower()
+        if lower_value == "true":
+            value = True
+        elif lower_value == "false":
+            value = False
+    return value
+
+
+def _build_constant_dict(_iterable_constants):
+    """
+    Builds the dictionary of iterable constants.
+
+    :param _iterable_constants: the iterable constants
+    :type _iterable_constants: collection.Iterable[Term]
+    :return: the dictionary of iterable constants
+    :rtype: BiDict[int, Term]
+    """
+    count = 0
+    dictionary = BiDict()
+    for constant in sorted(_iterable_constants, key=lambda x: x.__str__()):
+        dictionary[count] = constant
+        count += 1
+    return dictionary
+
+
+def _join_sets_with_common_elements(sets):
+    """
+    Groups sets that has common elements and returns a list of disjoint
+    sets.
+
+    :param sets: the sets of elements
+    :type sets: list[set]
+    :return: the list of disjoint sets
+    :rtype: list[set]
+    """
+    current_sets = list(sets)
+    join_sets = list()  # type: List[set]
+    while True:
+        for elements_set in current_sets:
+            not_joined = True
+            for join_set in join_sets:
+                if not join_set.isdisjoint(elements_set):
+                    not_joined = False
+                    join_set.update(elements_set)
+            if not_joined:
+                join_sets.append(elements_set)
+        if len(join_sets) == len(current_sets):
+            break
+        current_sets = join_sets
+        join_sets = list()
+
+    return join_sets
+
+
+class TooManyArguments(Exception):
+    """
+    Represents an exception raised by an atom with too many arguments.
+    """
+
+    def __init__(self, clause, found) -> None:
+        """
+        Creates a too many arguments exception.
+
+        :param clause: the atom
+        :type clause: Clause
+        :param found: the number of arguments found
+        :type found: int
+        """
+        super().__init__(
+            "Too many arguments found for {} at line {} in file {}. "
+            "Found {} arguments, the maximum number of arguments "
+            "allowed is {}.".format(clause, clause.provenance.start_line,
+                                    clause.provenance.filename, found,
+                                    MAX_NUMBER_OF_ARGUMENTS))
+
+
+class SimpleRulePath:
     """
     Represents a rule graph
     """
@@ -197,7 +287,6 @@ class RuleGraph:
         :param clause: the clause
         :type clause: HornClause
         """
-
         self.clause = clause
         self._build_graph()
 
@@ -490,6 +579,7 @@ class RulePath:
                 else:
                     last_inverted = True
 
+        # Detects if there is a loop in the path
         if item.arity() != 1 and \
                 item.terms[0] != item.terms[-1] and \
                 output_variable in self.terms:
@@ -581,71 +671,6 @@ class BiDict(dict, MutableMapping[KT, VT]):
         if self[key] in self.inverse and not self.inverse[self[key]]:
             del self.inverse[self[key]]
         super(BiDict, self).__delitem__(key)
-
-
-def _convert_to_bool(value):
-    """
-    If the value is `true` or `false`, return the boolean equivalent form of
-    the value. This method is case insensitive.
-
-    :param value: the string value
-    :type value: str
-    :return: the string value or the boolean value
-    :rtype: str or bool
-    """
-    if isinstance(value, str):
-        lower_value = value.lower()
-        if lower_value == "true":
-            value = True
-        elif lower_value == "false":
-            value = False
-    return value
-
-
-def _join_sets_with_common_elements(sets):
-    """
-    Groups sets that has common elements and returns a list of disjoint
-    sets.
-
-    :param sets: the sets of elements
-    :type sets: list[set]
-    :return: the list of disjoint sets
-    :rtype: list[set]
-    """
-    current_sets = list(sets)
-    join_sets = list()  # type: List[set]
-    while True:
-        for elements_set in current_sets:
-            not_joined = True
-            for join_set in join_sets:
-                if not join_set.isdisjoint(elements_set):
-                    not_joined = False
-                    join_set.update(elements_set)
-            if not_joined:
-                join_sets.append(elements_set)
-        if len(join_sets) == len(current_sets):
-            break
-        current_sets = join_sets
-        join_sets = list()
-
-    return join_sets
-
-
-def _build_constant_dict(_iterable_constants):
-    """
-    Builds the dictionary of iterable constants.
-
-    :param _iterable_constants: the iterable constants
-    :type _iterable_constants: collection.Iterable[Term]
-    :return: the dictionary of iterable constants
-    :rtype: BiDict[int, Term]
-    """
-    count = 0
-    dictionary = BiDict()
-    for constant in sorted(_iterable_constants, key=lambda x: x.__str__()):
-        dictionary[count] = constant
-        count += 1
-    return dictionary
 
 
 class NeuralLogProgram:
@@ -819,7 +844,7 @@ class NeuralLogProgram:
         :raise TooManyArguments if the atom has more than 2 arguments
         """
         atom_predicate = atom.predicate
-        if atom_predicate.arity > 2:
+        if 0 < MAX_NUMBER_OF_ARGUMENTS < atom_predicate.arity:
             raise TooManyArguments(atom, atom_predicate.arity)
         # atom.context = None
         types = get_predicate_type(atom)
