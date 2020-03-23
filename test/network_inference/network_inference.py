@@ -47,19 +47,19 @@ CORRECT = {
     },
     "similarity^{-1}": {
         "andrew": {
-            "andrew": 1.0,
-            "christopher": 0.96586794,
-            "james": 0.8659618
+            "andrew": 15.998591,
+            "christopher": 15.453886,
+            "james": 13.85539
         },
         "christopher": {
-            "andrew": 0.96586794,
-            "christopher": 1.0,
-            "james": 0.96586794
+            "andrew": 15.453888,
+            "christopher": 15.999384,
+            "james": 15.453888
         },
         "james": {
-            "andrew": 0.8659618,
-            "christopher": 0.96586794,
-            "james": 1.0
+            "andrew": 13.85539,
+            "christopher": 15.453886,
+            "james": 15.998591
         }
     },
     "grand_mother": {

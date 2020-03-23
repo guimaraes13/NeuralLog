@@ -128,18 +128,22 @@ def get_predicate_indices(predicate, inverted):
     :param inverted: if the predicate is inverted
     :type inverted: bool
     :return: the input and output indices
-    :rtype: (int, int)
+    :rtype: (list[int], int)
     """
     if predicate.arity == 1:
-        input_index = 0
+        input_index = [0]
         output_index = 0
-    else:
+    elif predicate.arity == 2:
         if inverted:
-            input_index = 1
+            input_index = [1]
             output_index = 0
         else:
-            input_index = 0
+            input_index = [0]
             output_index = 1
+    else:
+        input_index = [x for x in range(predicate.arity - 1)]
+        output_index = predicate.arity - 1
+
     return input_index, output_index
 
 
@@ -217,6 +221,7 @@ class NeuralLogDataset:
         pass
 
 
+# TODO: adjust dataset to predicates with higher arity
 @neural_log_dataset("default_dataset")
 class DefaultDataset(NeuralLogDataset):
     """
@@ -283,14 +288,19 @@ class DefaultDataset(NeuralLogDataset):
         :return: the features and label tensors
         :rtype: (tf.Tensor or tuple[tf.Tensor], tuple[tf.Tensor])
         """
+        if len(self._target_predicates) == 1:
+            features = [features]
         dense_features = []
         for i in range(len(self._target_predicates)):
             predicate, inverted = self._target_predicates[i]
-            index, _ = get_predicate_indices(predicate, inverted)
-            feature = tf.one_hot(
-                features[i],
-                self.program.get_constant_size(predicate, index))
-            dense_features.append(feature)
+            indices, _ = get_predicate_indices(predicate, inverted)
+            count = 0
+            for index in indices:
+                feature = tf.one_hot(
+                    features[i][count],
+                    self.program.get_constant_size(predicate, index))
+                dense_features.append(feature)
+                count += 1
 
         labels = tuple(map(lambda x: tf.sparse.to_dense(x), labels))
 
@@ -298,6 +308,8 @@ class DefaultDataset(NeuralLogDataset):
             dense_features = tuple(dense_features)
         else:
             dense_features = dense_features[0]
+
+        # all_dense_features = tuple(all_dense_features)
 
         return dense_features, labels
 
@@ -308,7 +320,10 @@ class DefaultDataset(NeuralLogDataset):
                     batch_size=1, shuffle=False):
         features, labels = self.build(example_set=example_set)
         # noinspection PyTypeChecker
-        dataset_size = len(features[0])
+        if len(self._target_predicates) == 1:
+            dataset_size = len(features[0])
+        else:
+            dataset_size = len(features[0][0])
         dataset = tf.data.Dataset.from_tensor_slices((features, labels))
         if shuffle:
             dataset = dataset.shuffle(dataset_size)
@@ -332,7 +347,8 @@ class DefaultDataset(NeuralLogDataset):
         tensor of indices, for each index a one hot vector creation is
         necessary.
         :return: the features and labels
-        :rtype: (tuple[tf.SparseTensor], tuple[tf.SparseTensor])
+        :rtype: (tuple[tf.SparseTensor], tuple[tf.SparseTensor]) or
+        (list[tuple[tf.SparseTensor]], tuple[tf.SparseTensor])
         """
         examples = self.program.examples.get(example_set, OrderedDict())
         return self._build(examples)
@@ -358,7 +374,10 @@ class DefaultDataset(NeuralLogDataset):
             facts = examples.get(predicate, dict())
             facts = facts.values()
             for fact in facts:
-                input_term = fact.terms[-1 if inverted else 0]
+                if predicate.arity < 3:
+                    input_term = (fact.terms[-1 if inverted else 0],)
+                else:
+                    input_term = tuple(fact.terms[0:predicate.arity - 1])
                 if input_term not in output_by_term:
                     output = dict()
                     output_by_term[input_term] = output
@@ -377,18 +396,22 @@ class DefaultDataset(NeuralLogDataset):
         all_features = []
         all_labels = []
         for predicate, inverted in self._target_predicates:
-            features = []
+            features = [[] for _ in range(max(1, predicate.arity - 1))]
             label_values = []
             label_indices = []
-            input_index, output_index = get_predicate_indices(predicate,
-                                                              inverted)
+
+            in_indices, out_index = get_predicate_indices(predicate, inverted)
             for i in range(len(input_terms)):
-                index = self.program.get_index_of_constant(
-                    predicate, input_index, input_terms[i])
-                if index is None:
-                    index = self._get_out_of_vocabulary_index(
-                        predicate, input_index)
-                features.append(index)
+                constant_index = 0
+                for input_index in in_indices:
+                    index = self.program.get_index_of_constant(
+                        predicate, input_index, input_terms[i][constant_index])
+                    if index is None:
+                        index = self._get_out_of_vocabulary_index(
+                            predicate, input_index)
+                    features[constant_index].append(index)
+                    constant_index += 1
+
                 outputs = output_by_term[input_terms[i]].get(
                     (predicate, inverted), None)
                 if outputs is not None:
@@ -399,7 +422,7 @@ class DefaultDataset(NeuralLogDataset):
                         for output_term, output_value in outputs:
                             output_term_index = \
                                 self.program.get_index_of_constant(
-                                    predicate, output_index, output_term)
+                                    predicate, out_index, output_term)
                             label_indices.append([i, output_term_index])
                             label_values.append(output_value)
 
@@ -410,7 +433,7 @@ class DefaultDataset(NeuralLogDataset):
             else:
                 dense_shape = [
                     len(input_terms),
-                    self.program.get_constant_size(predicate, output_index)]
+                    self.program.get_constant_size(predicate, out_index)]
                 empty_index = [[0, 0]]
             if len(label_values) == 0:
                 sparse_tensor = tf.SparseTensor(indices=empty_index,
@@ -422,6 +445,9 @@ class DefaultDataset(NeuralLogDataset):
                                                 dense_shape=dense_shape)
             sparse_tensor = tf.sparse.reorder(sparse_tensor)
             all_labels.append(sparse_tensor)
+
+        if len(self._target_predicates) == 1:
+            all_features = all_features[0]
 
         return tuple(all_features), tuple(all_labels)
 

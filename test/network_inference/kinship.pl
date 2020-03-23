@@ -80,14 +80,14 @@ grand_grand_father(X, Y) :- father(X, james), parent(james, victoria),
 avgAgeFriends(X) :- father(X, Z), age(Z, Y), mean(Y).
 ageFriends(X, Y) :- father(X, Z), age(Z, Y).
 
-0.8660::l_1(andrew).
-0.5::l_2(andrew).
+1.732::l_1(andrew).
+1.0::l_2(andrew).
 
-0.7071::l_1(christopher).
-0.7071::l_2(christopher).
+1.4142::l_1(christopher).
+1.4142::l_2(christopher).
 
-0.5::l_1(james).
-0.8660::l_2(james).
+1.0::l_1(james).
+1.732::l_2(james).
 
 h_1(X, Y) :- l_1(X), l_1(Y). %% X_1 * Y_1
 h_2(X, Y) :- l_2(X), l_2(Y). %% X_2 * Y_2

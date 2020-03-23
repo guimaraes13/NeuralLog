@@ -17,10 +17,10 @@ from src.language.language import Number, TermType, Predicate, Atom, \
     UnsupportedMatrixRepresentation, Literal, \
     get_constant_from_string
 
-ANY_PREDICATE_NAME = "any"
+ANY_PREDICATE_NAME = ":any:"
 NO_EXAMPLE_SET = ":none:"
 
-MAX_NUMBER_OF_ARGUMENTS = 2
+MAX_NUMBER_OF_ARGUMENTS = -1
 
 PREDICATE_TYPE_MATCH = re.compile("\\$([a-zA-Z_-][a-zA-Z0-9_-]*)"
                                   "/([1-9][0-9]*)\\[([0-9]+)\\](\\[.+\\])?")
@@ -272,7 +272,7 @@ class TooManyArguments(Exception):
                                     MAX_NUMBER_OF_ARGUMENTS))
 
 
-class SimpleRulePath:
+class SimpleRulePathFinder:
     """
     Represents a rule graph
     """
@@ -318,7 +318,7 @@ class SimpleRulePath:
         :type inverted: bool
         :return: the completed paths between the terms of the clause and the
         remaining grounded literals
-        :rtype: (List[RulePath], List[Literal])
+        :rtype: (List[SimpleRulePath], List[Literal])
         """
         # Defining variables
         source = self.clause.head.terms[0]
@@ -377,9 +377,9 @@ class SimpleRulePath:
         :param visited_literals: the set of visited literals
         :type visited_literals: Set[Literal]
         :return: the completed forward paths between source and destination
-        :rtype: List[RulePath]
+        :rtype: List[SimpleRulePath]
         """
-        partial_paths = deque()  # type: deque[RulePath]
+        partial_paths = deque()  # type: deque[SimpleRulePath]
 
         initial_path = self.build_initial_path(source, visited_literals)
         for literal in self.edges.get(source, []):
@@ -405,11 +405,11 @@ class SimpleRulePath:
         end of the path and the destination.
 
         :param dead_end_paths: the paths to be completed
-        :type dead_end_paths: collections.Iterable[RulePath]
+        :type dead_end_paths: collections.Iterable[SimpleRulePath]
         :param destination: the destination
         :type destination: Term
         :return: the completed paths
-        :rtype: List[RulePath]
+        :rtype: List[SimpleRulePath]
         """
         completed_paths = []
         for path in dead_end_paths:
@@ -428,10 +428,10 @@ class SimpleRulePath:
         :param visited_literals: the set of visited literals
         :type visited_literals: set[Literal]
         :return: the path or `None`
-        :rtype: RulePath
+        :rtype: SimpleRulePath
         """
         loop_literals = self.loops.get(source, [])
-        path = RulePath(source, loop_literals)
+        path = SimpleRulePath(source, loop_literals)
         visited_literals.update(path.literals)
         return path
 
@@ -441,15 +441,15 @@ class SimpleRulePath:
         literals from clause.
 
         :param partial_paths: The initial partial paths
-        :type partial_paths: deque[RulePath]
+        :type partial_paths: deque[SimpleRulePath]
         :param destination: the destination term
         :type destination: Term
         :param visited_literals: the visited literals
         :type visited_literals: Set[Literal]
         :return: the completed paths
-        :rtype: List[RulePath]
+        :rtype: List[SimpleRulePath]
         """
-        completed_paths = deque()  # type: deque[RulePath]
+        completed_paths = deque()  # type: deque[SimpleRulePath]
         while len(partial_paths) > 0:
             size = len(partial_paths)
             for i in range(size):
@@ -497,7 +497,7 @@ class SimpleRulePath:
         return self.clause.__repr__()
 
 
-class RulePath:
+class SimpleRulePath:
     """
     Represents a rule path.
     """
@@ -599,9 +599,9 @@ class RulePath:
         :type item: Literal or None
         :return: the new path, if its is possible to append the item; None,
         otherwise
-        :rtype: RulePath or None
+        :rtype: SimpleRulePath or None
         """
-        path = RulePath(self.source, self.path)
+        path = SimpleRulePath(self.source, self.path)
         # path = self._copy()
         return path if path.append(item) else None
 
@@ -610,10 +610,10 @@ class RulePath:
         Gets a reverse path.
 
         :return: the reverse path
-        :rtype: RulePath
+        :rtype: SimpleRulePath
         """
         source = self.path[-1].terms[0 if self.inverted[-1] else -1]
-        return RulePath(source, reversed(self.path))
+        return SimpleRulePath(source, reversed(self.path))
 
     def __getitem__(self, item):
         return self.path.__getitem__(item)
@@ -643,7 +643,7 @@ class RulePath:
         return hash((self.source, tuple(self.path)))
 
     def __eq__(self, other):
-        if not isinstance(other, RulePath):
+        if not isinstance(other, SimpleRulePath):
             return False
         return self.source == other.source, self.path == other.path
 

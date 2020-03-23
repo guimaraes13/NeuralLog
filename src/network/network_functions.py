@@ -1,12 +1,14 @@
 """
 File to define custom functions to use in the network.
 """
+from functools import reduce
 
 import tensorflow as tf
 import tensorflow.keras
 from tensorflow_core.python import keras
 
 import src.network.layer_factory
+from src.knowledge.graph import RuleGraph
 from src.language.language import Predicate
 from src.network import registry
 
@@ -1194,6 +1196,149 @@ class RuleLayer(NeuralLogLayer):
             return False
 
         return True
+
+
+class RuleGraphLayer(NeuralLogLayer):
+    """
+    A Layer to represent a logic graph rule.
+    """
+
+    def __init__(self, name, rule_graph, literal_layers, grounded_layers,
+                 path_combining_function, and_combining_function,
+                 neutral_element, **kwargs):
+        """
+        Creates a GraphRuleLayer.
+
+        :param name: the name of the layer
+        :type name: str
+        :param rule_graph: the rule graph
+        :type rule_graph: RuleGraph
+        :param literal_layers: the literal layers
+        :type literal_layers: Dict[Edge, LiteralLayer]
+        :param grounded_layers: the grounded literal layers
+        :type grounded_layers: List[LiteralLayer]
+        :param path_combining_function: the path combining function for the
+        destination
+        :type and_combining_function: function
+        :param and_combining_function: the path combining function for the
+        intermediary paths
+        :type path_combining_function: function
+        :param neutral_element: the neural element to be passed to the
+        grounded layer
+        :type neutral_element: tf.Tensor
+        :param kwargs: additional arguments
+        :type kwargs: dict[str, Any]
+        """
+        self.rule_graph = rule_graph
+        self.destination = rule_graph.destination
+        self.literal_layers = literal_layers
+        self.grounded_layers = grounded_layers
+        self.path_combining_function = path_combining_function
+        self.and_combining_function = and_combining_function
+        self.neutral_element = neutral_element
+        self._is_empty = self._compute_empty()
+        self.cache = None
+        super(RuleGraphLayer, self).__init__(name, **kwargs)
+
+    def _compute_empty(self):
+        # TODO: To implement
+        for layer in self.literal_layers.values():
+            if layer.is_empty():
+                return True
+        return False
+
+    # noinspection PyMissingOrEmptyDocstring
+    def call(self, inputs, **kwargs):
+        self.cache = dict()
+        path_result = self._compute_term(inputs, self.destination)
+        if path_result is None:
+            path_result = self.neutral_element
+
+        for grounded_layer in self.grounded_layers:
+            grounded_result = grounded_layer(self.neutral_element)
+            path_result = self.path_combining_function(path_result,
+                                                       grounded_result)
+        return path_result
+
+    # TODO: treaty for free variables
+    def _compute_term(self, inputs, term):
+        if term in self.rule_graph.sources:
+            if len(self.rule_graph.sources) == 1:
+                tensor = inputs
+            else:
+                tensor = inputs[self.rule_graph.sources.index(term)]
+        else:
+            tensor = self.cache.get(term, None)
+            if tensor is None:
+                tensors = list()
+                for edge in self.rule_graph.input_edges_by_nodes[term]:
+                    input_term = edge.get_input_term()
+                    self._compute_term(inputs, input_term)
+                    new_inputs = self._build_input_for_edge(edge, self.cache)
+                    # TODO: treaty for any predicate
+                    tensor = self.literal_layers[edge](new_inputs)
+                    for loop in self.rule_graph.loops_by_nodes.get(term, []):
+                        tensor = self.literal_layers[loop](tensor)
+                    tensors.append(tensor)
+
+                if len(tensors) == 1:
+                    self.cache[term] = tensors[0]
+                elif len(tensors) > 1:
+                    if term == self.destination:
+                        combining_function = self.path_combining_function
+                    else:
+                        combining_function = self.and_combining_function
+                    tensor = reduce(combining_function, tensors)
+        self.cache[term] = tensor
+        return tensor
+
+    def _build_input_for_edge(self, edge, cache):
+        """
+        Creates the input for the edge.
+
+        :param edge: the edge
+        :type edge: Edge
+        :param cache: the cache of tensors
+        :type cache: Dict[Term, Tensor]
+        :return: the inputs for the edge
+        :rtype: Tensor or List[Tensor]
+        """
+        inputs = []
+        for term in edge.literal.terms:
+            if term != edge.get_output_term():
+                inputs.append(cache[term])
+
+        if len(inputs) == 1:
+            return inputs[0]
+
+        return inputs
+
+    def is_empty(self):
+        """
+        Checks if a Layer is empty.
+
+        A RuleLayer is empty if there is, at least, a path with a empty layer
+        in it.
+
+        If there is no paths in the rule layer, it is not empty.
+
+        :return: `True`, if the layer is empty; `False`, otherwise
+        :rtype: bool
+        """
+        return self._is_empty
+
+    # noinspection PyMissingOrEmptyDocstring
+    def compute_output_shape(self, input_shape):
+        return tf.TensorShape(input_shape)
+
+    # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
+    def get_config(self):
+        return super(RuleGraphLayer, self).get_config()
+
+    # noinspection PyMissingOrEmptyDocstring
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
 
 
 class DiagonalRuleLayer(NeuralLogLayer):

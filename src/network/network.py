@@ -9,8 +9,9 @@ import tensorflow as tf
 from tensorflow.python import keras
 from tensorflow.python.training.tracking import data_structures
 
+from src.knowledge.graph import RulePathFinder
 from src.knowledge.program import NeuralLogProgram, ANY_PREDICATE_NAME, \
-    SimpleRulePath
+    SimpleRulePathFinder
 from src.language.language import Atom, Term, HornClause, Literal, \
     get_renamed_literal, get_substitution, get_variable_indices, Predicate, \
     get_renamed_atom
@@ -21,7 +22,7 @@ from src.network.network_functions import get_literal_function, \
     get_combining_function, FactLayer, \
     InvertedFactLayer, SpecificFactLayer, LiteralLayer, FunctionLayer, \
     AnyLiteralLayer, RuleLayer, ExtractUnaryLiteralLayer, DiagonalRuleLayer, \
-    EmptyLayer, get_literal_layer
+    EmptyLayer, get_literal_layer, RuleGraphLayer
 
 # WARNING: Do not support literals with same variable in the head of rules.
 # WARNING: Do not support constants in the head of rules.
@@ -642,8 +643,8 @@ class NeuralLogNetwork(keras.Model):
         rule_layer = self._rule_layers.get(key, None)
         if rule_layer is None:
             logger.debug("Building layer for rule: %s", clause)
-            rule_graph = SimpleRulePath(clause)
-            paths, grounds = rule_graph.find_clause_paths(inverted)
+            rule_path_finder = SimpleRulePathFinder(clause)
+            paths, grounds = rule_path_finder.find_clause_paths(inverted)
 
             layer_paths = []
             for path in paths:
@@ -692,35 +693,38 @@ class NeuralLogNetwork(keras.Model):
         rule_layer = self._rule_layers.get(key, None)
         if rule_layer is None:
             logger.debug("Building layer for rule: %s", clause)
-            rule_graph = SimpleRulePath(clause)
-            paths, grounds = rule_graph.find_clause_paths(inverted)
+            rule_path_finder = RulePathFinder(clause)
+            rule_graph = rule_path_finder.find_clause_paths(-1)
 
-            layer_paths = []
-            for path in paths:
-                layer_path = []
-                for i in range(len(path)):
-                    if path[i].predicate.name == ANY_PREDICATE_NAME:
-                        literal_layer = self._get_any_literal()
-                    else:
-                        literal_layer = self._build_literal(
-                            path[i], predicates_depths, path.inverted[i])
-                    layer_path.append(literal_layer)
-                layer_paths.append(layer_path)
+            literal_layers = dict()
+            for edge in rule_graph.edges:
+                if edge.literal.predicate.name == ANY_PREDICATE_NAME:
+                    literal_layer = self._get_any_literal()
+                else:
+                    inverted = edge.get_input_term() > edge.get_output_term()
+                    literal_layer = self._build_literal(
+                        edge.literal, predicates_depths, inverted)
+                literal_layers[edge] = literal_layer
 
             grounded_layers = []
-            for grounded in grounds:
+            for grounded in rule_graph.grounds:
                 literal_layer = self._build_literal(grounded, predicates_depths)
                 grounded_layers.append(literal_layer)
+
             layer_name = "rule_layer_{}".format(
                 get_standardised_name(clause.__str__()))
             rule_layer = \
-                RuleLayer(
-                    layer_name, layer_paths, grounded_layers,
+                RuleGraphLayer(
+                    layer_name, rule_graph, literal_layers, grounded_layers,
                     self._get_path_combining_function(clause.head.predicate),
+                    self.layer_factory.get_and_combining_function(),
                     self.neutral_element)
             self._rule_layers[key] = rule_layer
 
         return rule_layer
+
+    def _create_layer_for_edge(self, edge):
+        pass
 
     def _build_fact(self, atom, inverted=False):
         """
