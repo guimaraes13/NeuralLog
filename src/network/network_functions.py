@@ -1272,6 +1272,11 @@ class RuleGraphLayer(NeuralLogLayer):
             if tensor is None:
                 tensors = list()
                 for edge in self.rule_graph.input_edges_by_nodes[term]:
+                    # TODO: call the function to compute the input term for
+                    #  all inputs of the literal in the edge
+                    # TODO: Change the edge class to support multiple inputs
+                    # TODO: Merge all inputs from the same edge in the same
+                    #  edge class
                     input_term = edge.get_input_term()
                     self._compute_term(inputs, input_term)
                     new_inputs = self._build_input_for_edge(edge, self.cache)

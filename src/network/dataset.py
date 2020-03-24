@@ -288,16 +288,14 @@ class DefaultDataset(NeuralLogDataset):
         :return: the features and label tensors
         :rtype: (tf.Tensor or tuple[tf.Tensor], tuple[tf.Tensor])
         """
-        if len(self._target_predicates) == 1:
-            features = [features]
         dense_features = []
+        count = 0
         for i in range(len(self._target_predicates)):
             predicate, inverted = self._target_predicates[i]
             indices, _ = get_predicate_indices(predicate, inverted)
-            count = 0
             for index in indices:
                 feature = tf.one_hot(
-                    features[i][count],
+                    features[count],
                     self.program.get_constant_size(predicate, index))
                 dense_features.append(feature)
                 count += 1
@@ -320,10 +318,7 @@ class DefaultDataset(NeuralLogDataset):
                     batch_size=1, shuffle=False):
         features, labels = self.build(example_set=example_set)
         # noinspection PyTypeChecker
-        if len(self._target_predicates) == 1:
-            dataset_size = len(features[0])
-        else:
-            dataset_size = len(features[0][0])
+        dataset_size = len(features[0])
         dataset = tf.data.Dataset.from_tensor_slices((features, labels))
         if shuffle:
             dataset = dataset.shuffle(dataset_size)
@@ -402,18 +397,22 @@ class DefaultDataset(NeuralLogDataset):
 
             in_indices, out_index = get_predicate_indices(predicate, inverted)
             for i in range(len(input_terms)):
+                outputs = output_by_term[input_terms[i]].get(
+                    (predicate, inverted), None)
+
                 constant_index = 0
                 for input_index in in_indices:
-                    index = self.program.get_index_of_constant(
-                        predicate, input_index, input_terms[i][constant_index])
+                    index = None
+                    if outputs is not None:
+                        index = self.program.get_index_of_constant(
+                            predicate, input_index,
+                            input_terms[i][constant_index])
                     if index is None:
                         index = self._get_out_of_vocabulary_index(
                             predicate, input_index)
                     features[constant_index].append(index)
                     constant_index += 1
 
-                outputs = output_by_term[input_terms[i]].get(
-                    (predicate, inverted), None)
                 if outputs is not None:
                     if predicate.arity == 1:
                         label_indices.append([i, 0])
@@ -426,7 +425,7 @@ class DefaultDataset(NeuralLogDataset):
                             label_indices.append([i, output_term_index])
                             label_values.append(output_value)
 
-            all_features.append(features)
+            all_features += features
             if predicate.arity == 1:
                 dense_shape = [len(input_terms), 1]
                 empty_index = [[0, 0]]
@@ -446,8 +445,8 @@ class DefaultDataset(NeuralLogDataset):
             sparse_tensor = tf.sparse.reorder(sparse_tensor)
             all_labels.append(sparse_tensor)
 
-        if len(self._target_predicates) == 1:
-            all_features = all_features[0]
+        # if len(self._target_predicates) == 1:
+        #     all_features = all_features[0]
 
         return tuple(all_features), tuple(all_labels)
 

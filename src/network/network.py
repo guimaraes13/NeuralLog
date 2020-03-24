@@ -269,6 +269,7 @@ class NeuralLogNetwork(keras.Model):
         self.neutral_element = tf.reshape(self.neutral_element, [1, 1])
         self.inverse_relations = inverse_relations
         self.empty_layer = EmptyLayer("empty")
+        self.input_sizes = []
 
     def get_recursion_depth(self, predicate=None):
         """
@@ -349,7 +350,9 @@ class NeuralLogNetwork(keras.Model):
         """
         Builds the layers of the network.
         """
+        self.input_sizes = []
         for predicate, inverted in self.dataset.get_target_predicates():
+            self.input_sizes.append(max(predicate.arity - 1, 1))
             logger.debug("Building output layer for predicate: %s", predicate)
             literal = Literal(Atom(
                 predicate, *list(map(
@@ -389,16 +392,19 @@ class NeuralLogNetwork(keras.Model):
 
     # noinspection PyMissingOrEmptyDocstring,PyUnusedLocal
     def call_single_input(self, inputs, training=None, mask=None):
-        results = []
-        for i in range(len(self.predicate_layers)):
-            results.append(self.predicate_layers[i](inputs))
-        return tuple(results)
+        return self.predicate_layers[0](inputs),
 
     # noinspection PyMissingOrEmptyDocstring,PyUnusedLocal
     def call_multiples_inputs(self, inputs, training=None, mask=None):
         results = []
-        for i in range(len(self.predicate_layers)):
-            results.append(self.predicate_layers[i](inputs[i]))
+        offset = 0
+        for layer, size in zip(self.predicate_layers, self.input_sizes):
+            if size > 1:
+                layer_input = inputs[offset:offset + size]
+            else:
+                layer_input = inputs[offset]
+            results.append(layer(layer_input))
+            offset += size
         return tuple(results)
 
     # noinspection PyMissingOrEmptyDocstring
@@ -688,7 +694,6 @@ class NeuralLogNetwork(keras.Model):
         :return: the rule layer
         :rtype: RuleLayer
         """
-        # TODO: Build the rule layer for rules with arity bigger than two
         key = (clause, inverted)
         rule_layer = self._rule_layers.get(key, None)
         if rule_layer is None:

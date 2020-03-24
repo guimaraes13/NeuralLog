@@ -594,6 +594,7 @@ class RuleGraph:
         """
         self.sources = sources
         self.destination = destination
+        self.paths = paths
         self._build_graph(paths)
         self.grounds = grounds
 
