@@ -429,6 +429,28 @@ class Partial:
     __call__ = call
 
 
+def build_input_for_edge(edge, cache):
+    """
+    Creates the input for the edge.
+
+    :param edge: the edge
+    :type edge: Edge
+    :param cache: the cache of tensors
+    :type cache: Dict[Term, Tensor]
+    :return: the inputs for the edge
+    :rtype: Tensor or List[Tensor]
+    """
+    inputs = []
+    for term in edge.literal.terms:
+        if term != edge.get_output_term():
+            inputs.append(cache[term])
+
+    if len(inputs) == 1:
+        return inputs[0]
+
+    return inputs
+
+
 class NeuralLogLayer(keras.layers.Layer):
     """
     Represents a NeuralLogLayer.
@@ -1198,7 +1220,7 @@ class RuleLayer(NeuralLogLayer):
         return True
 
 
-class RuleGraphLayer(NeuralLogLayer):
+class GraphRuleLayer(NeuralLogLayer):
     """
     A Layer to represent a logic graph rule.
     """
@@ -1238,7 +1260,7 @@ class RuleGraphLayer(NeuralLogLayer):
         self.neutral_element = neutral_element
         self._is_empty = self._compute_empty()
         self.cache = None
-        super(RuleGraphLayer, self).__init__(name, **kwargs)
+        super(GraphRuleLayer, self).__init__(name, **kwargs)
 
     def _compute_empty(self):
         # TODO: To implement
@@ -1267,6 +1289,8 @@ class RuleGraphLayer(NeuralLogLayer):
                 tensor = inputs
             else:
                 tensor = inputs[self.rule_graph.sources.index(term)]
+            for loop in self.rule_graph.loops_by_nodes.get(term, []):
+                tensor = self.literal_layers[loop](tensor)
         else:
             tensor = self.cache.get(term, None)
             if tensor is None:
@@ -1279,7 +1303,7 @@ class RuleGraphLayer(NeuralLogLayer):
                     #  edge class
                     input_term = edge.get_input_term()
                     self._compute_term(inputs, input_term)
-                    new_inputs = self._build_input_for_edge(edge, self.cache)
+                    new_inputs = build_input_for_edge(edge, self.cache)
                     # TODO: treaty for any predicate
                     tensor = self.literal_layers[edge](new_inputs)
                     for loop in self.rule_graph.loops_by_nodes.get(term, []):
@@ -1296,27 +1320,6 @@ class RuleGraphLayer(NeuralLogLayer):
                     tensor = reduce(combining_function, tensors)
         self.cache[term] = tensor
         return tensor
-
-    def _build_input_for_edge(self, edge, cache):
-        """
-        Creates the input for the edge.
-
-        :param edge: the edge
-        :type edge: Edge
-        :param cache: the cache of tensors
-        :type cache: Dict[Term, Tensor]
-        :return: the inputs for the edge
-        :rtype: Tensor or List[Tensor]
-        """
-        inputs = []
-        for term in edge.literal.terms:
-            if term != edge.get_output_term():
-                inputs.append(cache[term])
-
-        if len(inputs) == 1:
-            return inputs[0]
-
-        return inputs
 
     def is_empty(self):
         """
@@ -1338,7 +1341,7 @@ class RuleGraphLayer(NeuralLogLayer):
 
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):
-        return super(RuleGraphLayer, self).get_config()
+        return super(GraphRuleLayer, self).get_config()
 
     # noinspection PyMissingOrEmptyDocstring
     @classmethod

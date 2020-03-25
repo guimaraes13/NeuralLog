@@ -1084,6 +1084,8 @@ class NeuralLogProgram:
         :return: the constant
         :rtype: Term
         """
+        if term_index < 0:
+            term_index = predicate.arity + term_index
         # noinspection PyTypeChecker
         return self.iterable_constants_per_term[
             (predicate, term_index)][constant_index]

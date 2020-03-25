@@ -22,7 +22,7 @@ from src.network.network_functions import get_literal_function, \
     get_combining_function, FactLayer, \
     InvertedFactLayer, SpecificFactLayer, LiteralLayer, FunctionLayer, \
     AnyLiteralLayer, RuleLayer, ExtractUnaryLiteralLayer, DiagonalRuleLayer, \
-    EmptyLayer, get_literal_layer, RuleGraphLayer
+    EmptyLayer, get_literal_layer, GraphRuleLayer
 
 # WARNING: Do not support literals with same variable in the head of rules.
 # WARNING: Do not support constants in the head of rules.
@@ -719,7 +719,7 @@ class NeuralLogNetwork(keras.Model):
             layer_name = "rule_layer_{}".format(
                 get_standardised_name(clause.__str__()))
             rule_layer = \
-                RuleGraphLayer(
+                GraphRuleLayer(
                     layer_name, rule_graph, literal_layers, grounded_layers,
                     self._get_path_combining_function(clause.head.predicate),
                     self.layer_factory.get_and_combining_function(),

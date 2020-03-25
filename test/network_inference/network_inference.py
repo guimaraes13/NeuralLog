@@ -190,7 +190,7 @@ class TestNetworkInference(unittest.TestCase):
                     input_index, output_index = get_predicate_indices(
                         *(predicates[i]))
                     sub = self.program.get_constant_by_index(
-                        predicate, input_index, np.argmax(x_numpy[j]))
+                        predicate, input_index[0], np.argmax(x_numpy[j]))
                     name = predicate.name
                     if predicates[i][1]:
                         name += "^{-1}"
@@ -212,6 +212,8 @@ class TestNetworkInference(unittest.TestCase):
                     name += "^{-1}"
                 print(name, "(X):", sep="")
                 for j in range(x_numpy.shape[0]):
+                    if x_numpy[j].sum() == 0.0:
+                        continue
                     sub = self.program.get_constant_by_index(
                         predicate, 0, np.argmax(x_numpy[j]))
                     pred = prediction[j]

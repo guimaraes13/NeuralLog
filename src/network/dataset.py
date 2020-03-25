@@ -66,40 +66,67 @@ def print_neural_log_predictions(model, neural_program, dataset,
     """
     neural_dataset = model.dataset  # type: NeuralLogDataset
     count = 0
+    batches = None
+    empty_entry = None
+    if isinstance(neural_dataset, SequenceDataset):
+        if print_batch_header and dataset_name is not None:
+            batches = list(neural_program.mega_examples[dataset_name].keys())
+        empty_entry = neural_dataset.empty_entry
     for features, _ in dataset:
         if print_batch_header:
-            print("%% Batch:", count, file=writer, sep="\t")
+            batch = batches[count] if batches is not None else count
+            print("%% Batch:", batch, file=writer, sep="\t")
             count += 1
         y_scores = model.predict(features)
         if len(model.predicates) == 1:
             y_scores = [y_scores]
-            features = [features]
+            if model.predicates[0][0].arity < 3:
+                features = [features]
         for i in range(len(model.predicates)):
             predicate, inverted = model.predicates[i]
             if inverted:
                 continue
-            for feature, y_score in zip(features[i], y_scores[i]):
-                x = feature.numpy()
-                if len(x.shape) == 1:
-                    subject_index = x[0]
-                    if subject_index < 0:
-                        continue
-                else:
-                    if x.max() == 0.0:
-                        continue
-                    subject_index = np.argmax(x)
-                subject = neural_program.get_constant_by_index(
-                    predicate, 0, subject_index)
+            row_scores = y_scores[i]
+            if len(row_scores.shape) == 3:
+                row_scores = np.squeeze(row_scores, axis=1)
+            for j in range(len(row_scores)):
+                y_score = row_scores[j]
+                x = []
+                subjects = []
+                stop = False
+                offset = sum(model.input_sizes[:i])
+                for k in range(model.input_sizes[i]):
+                    x_k = features[offset + k][j].numpy()
+                    if x_k.shape[-1] == 1:
+                        arg_max = x_k[0]
+                        if arg_max < 0 or arg_max == empty_entry:
+                            stop = True
+                            break
+                    else:
+                        if np.max(x_k) == 0:
+                            stop = True
+                            break
+                        arg_max = np.argmax(x_k)
+                        if arg_max == empty_entry:
+                            stop = True
+                            break
+                    subjects.append(neural_program.get_constant_by_index(
+                        predicate, k, arg_max))
+                    x.append(x_k)
+                offset += model.input_sizes[i]
+                if stop:
+                    continue
+
                 if predicate.arity == 1:
-                    clause = AtomClause(Atom(predicate, subject,
+                    clause = AtomClause(Atom(predicate, subjects[0],
                                              weight=float(y_score)))
                     print(clause, file=writer)
                 else:
                     clauses = []
                     for index in range(len(y_score)):
                         object_term = neural_program.get_constant_by_index(
-                            predicate, 1, index)
-                        prediction = Atom(predicate, subject, object_term,
+                            predicate, -1, index)
+                        prediction = Atom(predicate, *subjects, object_term,
                                           weight=float(y_score[index]))
                         if dataset_name is not None and \
                                 not neural_dataset.has_example_key(
@@ -108,7 +135,7 @@ def print_neural_log_predictions(model, neural_program, dataset,
                         clauses.append(AtomClause(prediction))
 
                     if len(clauses) > 0:
-                        clause = AtomClause(Atom(predicate, subject, "X"))
+                        clause = AtomClause(Atom(predicate, *subjects, "X"))
                         print("%%", clause, file=writer, sep=" ")
                         for clause in sorted(
                                 clauses,
@@ -445,9 +472,6 @@ class DefaultDataset(NeuralLogDataset):
             sparse_tensor = tf.sparse.reorder(sparse_tensor)
             all_labels.append(sparse_tensor)
 
-        # if len(self._target_predicates) == 1:
-        #     all_features = all_features[0]
-
         return tuple(all_features), tuple(all_labels)
 
     def _get_out_of_vocabulary_index(self, predicate, term_index):
@@ -523,10 +547,11 @@ class SequenceDataset(DefaultDataset):
         return target_predicates
 
     def _compute_output_format(self):
-        length = len(self._target_predicates)
+        length = 0
         output_types = []
         output_shapes = []
         for predicate, inverted in self._target_predicates:
+            length += max(predicate.arity - 1, 1)
             _, index = get_predicate_indices(predicate, inverted)
             size = self.program.get_constant_size(predicate, index)
             output_types.append(tf.float32)
@@ -553,16 +578,19 @@ class SequenceDataset(DefaultDataset):
         :rtype: (tf.Tensor or tuple[tf.Tensor], tuple[tf.Tensor])
         """
         dense_features = []
+        count = 0
         for i in range(len(self._target_predicates)):
             predicate, inverted = self._target_predicates[i]
-            index, _ = get_predicate_indices(predicate, inverted)
-            if self.expand_one_hot:
-                feature = tf.one_hot(
-                    features[i],
-                    self.program.get_constant_size(predicate, index))
-            else:
-                feature = tf.reshape(features[i], [-1, 1])
-            dense_features.append(feature)
+            indices, _ = get_predicate_indices(predicate, inverted)
+            for index in indices:
+                if self.expand_one_hot:
+                    feature = tf.one_hot(
+                        features[count],
+                        self.program.get_constant_size(predicate, index))
+                else:
+                    feature = tf.reshape(features[count], [-1, 1])
+                dense_features.append(feature)
+                count += 1
 
         if len(dense_features) > 1:
             dense_features = tuple(dense_features)
@@ -632,20 +660,28 @@ class SequenceDataset(DefaultDataset):
         all_label_values = []
         row_index = 0
         for predicate, inverted in self._target_predicates:
-            input_index, output_index = get_predicate_indices(
+            input_indices, output_index = get_predicate_indices(
                 predicate, inverted)
-            feature = []
+            feature = [[] for _ in range(max(1, predicate.arity - 1))]
             label_indices = []
             label_values = []
             facts = examples.get(predicate, [])
             for fact in facts:
-                input_term = fact.terms[input_index]
-                input_value = self.program.get_index_of_constant(
-                    predicate, input_index, input_term)
-                if input_value is None:
-                    input_value = self._get_out_of_vocabulary_index(
-                        predicate, input_index)
-                feature.append(input_value)
+                if predicate.arity < 3:
+                    input_terms = (fact.terms[-1 if inverted else 0],)
+                else:
+                    input_terms = tuple(fact.terms[0:predicate.arity - 1])
+
+                count = 0
+                for input_index, input_term in zip(input_indices, input_terms):
+                    input_value = self.program.get_index_of_constant(
+                        predicate, input_index, input_term)
+                    if input_value is None:
+                        input_value = self._get_out_of_vocabulary_index(
+                            predicate, input_index)
+                    feature[count].append(input_value)
+                    count += 1
+
                 if predicate.arity == 1:
                     label_indices.append([row_index, 0])
                 else:
@@ -657,18 +693,25 @@ class SequenceDataset(DefaultDataset):
                 row_index += 1
             all_label_indices.append(label_indices)
             all_label_values.append(label_values)
-            all_features.append(feature)
+            all_features += feature
 
         all_labels = []
-        offset = 0
+        examples_offset = 0
+        features_offset = 0
         for i in range(len(self._target_predicates)):
-            all_features[i] = \
-                ([self.empty_entry] * offset) + all_features[i]
-            length = len(all_features[i])
-            all_features[i] += \
-                [self.empty_entry] * (row_index - offset - length)
-            offset += length
+            # Features
+            number_of_features = max(self._target_predicates[i][0].arity - 1, 1)
+            length = len(all_features[features_offset])
+            for j in range(number_of_features):
+                all_features[features_offset + j] = \
+                    ([self.empty_entry] * examples_offset) + \
+                    all_features[features_offset + j]
+                all_features[features_offset + j] += \
+                    [self.empty_entry] * (row_index - examples_offset - length)
+            examples_offset += length
+            features_offset += number_of_features
 
+            # Labels
             predicate, index = self._target_predicates[i]
             _, output_index = get_predicate_indices(predicate, index)
             if predicate.arity == 1:
