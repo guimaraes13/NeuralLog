@@ -47,19 +47,19 @@ CORRECT = {
     },
     "similarity^{-1}": {
         "andrew": {
-            "andrew": 15.998591,
-            "christopher": 15.453886,
-            "james": 13.85539
+            "andrew": 1.0000001,
+            "christopher": 0.96592915,
+            "james": 0.8660382
         },
         "christopher": {
-            "andrew": 15.453888,
-            "christopher": 15.999384,
-            "james": 15.453888
+            "andrew": 0.96592903,
+            "christopher": 1.0,
+            "james": 0.96592903
         },
         "james": {
-            "andrew": 13.85539,
-            "christopher": 15.453886,
-            "james": 15.998591
+            "andrew": 0.8660382,
+            "christopher": 0.96592915,
+            "james": 1.0000001
         }
     },
     "grand_mother": {
@@ -84,52 +84,7 @@ CORRECT = {
     },
     "wrong_x^{-1}": {
         "andrew": {
-            "alfonso": 1.0,
-            "arthur": 1.0,
-            "colin": 1.0,
-            "emilio": 1.0,
-            "james": 1.0,
-            "marco": 1.0
-        },
-        "christopher": {
-            "alfonso": 1.0,
-            "arthur": 1.0,
-            "colin": 1.0,
-            "emilio": 1.0,
-            "james": 1.0,
-            "marco": 1.0
-        },
-        "james": {
-            "alfonso": 1.0,
-            "arthur": 1.0,
-            "colin": 1.0,
-            "emilio": 1.0,
-            "james": 1.0,
-            "marco": 1.0
-        },
-        "maria": {
-            "alfonso": 1.0,
-            "arthur": 1.0,
-            "colin": 1.0,
-            "emilio": 1.0,
-            "james": 1.0,
-            "marco": 1.0
-        },
-        "sophia": {
-            "alfonso": 1.0,
-            "arthur": 1.0,
-            "colin": 1.0,
-            "emilio": 1.0,
-            "james": 1.0,
-            "marco": 1.0
-        },
-        "charlotte": {
-            "alfonso": 1.0,
-            "arthur": 1.0,
-            "colin": 1.0,
-            "emilio": 1.0,
-            "james": 1.0,
-            "marco": 1.0
+            "alfonso": 6.0,
         }
     }
 }

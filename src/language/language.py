@@ -343,7 +343,7 @@ class Term:
         :return: the keys
         :rtype: Any
         """
-        return self.value
+        return self.value,
 
     def __hash__(self):
         return hash(self.key())
@@ -360,7 +360,9 @@ class Term:
         return self.key() >= other.key()
 
     def __lt__(self, other):
-        return self.key() < other.key()
+        self_key = self.key()
+        other_key = other.key()
+        return (len(self_key),) + self_key < (len(other_key),) + other_key
 
     def __le__(self, other):
         return self.key() <= other.key()

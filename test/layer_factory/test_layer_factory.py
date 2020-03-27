@@ -1827,7 +1827,8 @@ class TestLayerFactory(unittest.TestCase):
             layer_factory.arity_2_2_trainable_iterable_constant_constant.
                 __func__,
             layer_factory.function[key])
-        tensor = layer_factory.build_atom(atom)(NEUTRAL_ELEMENT)
+        build_atom = layer_factory.build_atom(atom)
+        tensor = build_atom(NEUTRAL_ELEMENT)
 
         evaluated = tensor.numpy()
         self.assertEqual((1, 1), evaluated.shape)

@@ -476,17 +476,12 @@ class NeuralLogNetwork(keras.Model):
                 substitution = get_substitution(clause.head, renamed_literal)
                 if substitution is None:
                     continue
-                if arity_bigger_than(clause, 2):
-                    rule = self._build_high_arity_rule(
-                        clause, predicates_depths, inverted)
-                else:
-                    rule = self._build_rule(clause, predicates_depths, inverted)
-                    if rule is None:
-                        continue
-                    # TODO: create specific rule for rule with head arity
-                    #  bigger than 2
-                    rule = self._build_specific_rule(
-                        renamed_literal, inverted, rule, substitution)
+                rule = self._build_high_arity_rule(
+                    clause, predicates_depths, inverted)
+                if rule is None:
+                    continue
+                rule = self._build_specific_rule(
+                    renamed_literal, inverted, rule, substitution)
                 if rule in input_clauses:
                     log_equivalent_clause(clause, input_clauses[rule])
                     continue
@@ -534,34 +529,41 @@ class NeuralLogNetwork(keras.Model):
                 substitution_terms[specific] = generic
 
         if len(substitution_terms) > 0:
-            source = literal.terms[-1 if inverted else 0]
-            destination = literal.terms[0 if inverted else -1]
+            output_index = 0 if inverted else -1
+            sources = list(literal.terms)
+            source_indices = list(range(len(literal.terms)))
+            if len(sources) > 1:
+                destination = sources.pop(output_index)
+                destination_index = source_indices.pop(output_index)
+            else:
+                destination = sources[0]
+                destination_index = 0
             literal_string = literal.__str__()
             if inverted:
                 literal_string = "inv_" + literal_string
             layer_name = get_standardised_name(
                 "{}_specific_{}".format(rule.name, literal_string))
-            input_constant = None
-            input_combining_function = None
+            input_constants = []
+            input_combining_functions = []
             output_constant = None
             output_extract_func = None
 
-            if source.is_constant() and source in substitution_terms:
-                term_index = 1 if inverted else 0
-                input_constant = self.layer_factory.get_one_hot_tensor(
-                    literal, term_index)
-                input_combining_function = \
-                    self.layer_factory.get_and_combining_function(predicate)
+            for source, index in zip(sources, source_indices):
+                if source.is_constant() and source in substitution_terms:
+                    input_constants.append(
+                        self.layer_factory.get_one_hot_tensor(literal, index))
+                    input_combining_functions.append(
+                        self.layer_factory.get_and_combining_function(predicate)
+                    )
             if destination.is_constant() and destination in substitution_terms:
-                term_index = 0 if inverted else 1
-                output_constant = \
-                    self.layer_factory.get_constant_lookup(literal, term_index)
+                output_constant = self.layer_factory.get_constant_lookup(
+                    literal, destination_index)
                 output_extract_func = \
                     self.layer_factory.get_output_extract_function(predicate)
             rule = SpecificFactLayer(
                 layer_name, rule,
-                input_constant=input_constant,
-                input_combining_function=input_combining_function,
+                input_constants=input_constants,
+                input_combining_functions=input_combining_functions,
                 output_constant=output_constant,
                 output_extract_function=output_extract_func
             )
@@ -706,9 +708,8 @@ class NeuralLogNetwork(keras.Model):
                 if edge.literal.predicate.name == ANY_PREDICATE_NAME:
                     literal_layer = self._get_any_literal()
                 else:
-                    inverted = edge.get_input_term() > edge.get_output_term()
                     literal_layer = self._build_literal(
-                        edge.literal, predicates_depths, inverted)
+                        edge.literal, predicates_depths, edge.is_inverted())
                 literal_layers[edge] = literal_layer
 
             grounded_layers = []
@@ -718,12 +719,11 @@ class NeuralLogNetwork(keras.Model):
 
             layer_name = "rule_layer_{}".format(
                 get_standardised_name(clause.__str__()))
-            rule_layer = \
-                GraphRuleLayer(
-                    layer_name, rule_graph, literal_layers, grounded_layers,
-                    self._get_path_combining_function(clause.head.predicate),
-                    self.layer_factory.get_and_combining_function(),
-                    self.neutral_element)
+            rule_layer = GraphRuleLayer(
+                clause, layer_name, rule_graph, literal_layers, grounded_layers,
+                self._get_path_combining_function(clause.head.predicate),
+                self.layer_factory.get_and_combining_function(),
+                self.neutral_element)
             self._rule_layers[key] = rule_layer
 
         return rule_layer

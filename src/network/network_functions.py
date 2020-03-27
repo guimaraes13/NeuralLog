@@ -1,15 +1,19 @@
 """
 File to define custom functions to use in the network.
 """
+from collections import deque
 from functools import reduce
+from typing import Dict
 
 import tensorflow as tf
 import tensorflow.keras
+from tensorflow.python.training.tracking import data_structures
 from tensorflow_core.python import keras
 
 import src.network.layer_factory
-from src.knowledge.graph import RuleGraph
-from src.language.language import Predicate
+from src.knowledge.graph import RuleGraph, Edge
+from src.knowledge.program import ANY_PREDICATE_NAME
+from src.language.language import Predicate, Term, Literal, Atom
 from src.network import registry
 
 EMPTY_DICT = dict()
@@ -429,21 +433,22 @@ class Partial:
     __call__ = call
 
 
-def build_input_for_edge(edge, cache):
+def build_input_for_terms(terms, cache):
     """
     Creates the input for the edge.
 
-    :param edge: the edge
-    :type edge: Edge
+    :param terms: the terms or and edge
+    :type terms: collections.Iterable[Term] or Edge
     :param cache: the cache of tensors
     :type cache: Dict[Term, Tensor]
     :return: the inputs for the edge
     :rtype: Tensor or List[Tensor]
     """
     inputs = []
-    for term in edge.literal.terms:
-        if term != edge.get_output_term():
-            inputs.append(cache[term])
+    if isinstance(terms, Edge):
+        terms = terms.get_input_terms()
+    for term in terms:
+        inputs.append(cache[term])
 
     if len(inputs) == 1:
         return inputs[0]
@@ -590,18 +595,6 @@ class FactLayer(AbstractFactLayer):
         return hash(self.fact_combining_function)
 
     def __eq__(self, other):
-        # if isinstance(other, LiteralLayer):
-        #     if other.negation_function is not None:
-        #         return False
-        #     if len(other.input_layers) != 1:
-        #         return False
-        #     return self == other.input_layers[0]
-        #
-        # if isinstance(other, RuleLayer):
-        #     if len(other.paths) != 1:
-        #         return False
-        #     if len(other.grounded_layers) != 0:
-        #         return False
         if not isinstance(other, FactLayer):
             return False
 
@@ -748,8 +741,8 @@ class SpecificFactLayer(AbstractFactLayer):
     """
 
     def __init__(self, name, fact_layer,
-                 input_constant=None,
-                 input_combining_function=None, output_constant=None,
+                 input_constants=None,
+                 input_combining_functions=None, output_constant=None,
                  output_extract_function=None, **kwargs):
         """
         Creates a PredicateLayer.
@@ -758,11 +751,11 @@ class SpecificFactLayer(AbstractFactLayer):
         :type fact_layer: AbstractFactLayer
         :param fact_combining_function: the fact combining function
         :type fact_combining_function: function
-        :param input_constant: the input constant
-        :type input_constant: tf.Tensor
-        :param input_combining_function: the function to combine the fixed
+        :param input_constants: the input constants
+        :type input_constants: tf.Tensor or list[tf.Tensor]
+        :param input_combining_functions: the function to combine the fixed
         input with the input of the layer
-        :type input_combining_function: function
+        :type input_combining_functions: function or list[function]
         :param output_constant: the output constant, if any
         :type output_constant: tf.Tensor
         :param output_extract_function: the function to extract the fact value
@@ -772,20 +765,68 @@ class SpecificFactLayer(AbstractFactLayer):
         :type kwargs: dict[str, Any]
         """
         self.fact_layer = fact_layer
-        self.input_constant = input_constant
-        self.inputs_combining_function = input_combining_function
+
         self.output_constant = output_constant
         self.output_extract_function = output_extract_function
+        self.input_constants = None
+        self.input_combining_functions = None
+        self.call = self.call_single_input
+        self._build_inputs(input_constants, input_combining_functions)
+
         super(SpecificFactLayer, self).__init__(name, **kwargs)
 
-    # noinspection PyMissingOrEmptyDocstring
-    def call(self, inputs, **kwargs):
-        if self.input_constant is None:
+    def _build_inputs(self, input_constants, input_combining_functions):
+        if input_constants is None:
+            return
+        if isinstance(input_constants, list):
+            if len(input_constants) == 0:
+                return
+            elif len(input_constants) == 1:
+                self.input_constants = input_constants[0]
+                if isinstance(input_combining_functions, list):
+                    self.input_combining_functions = \
+                        input_combining_functions[0]
+                else:
+                    self.input_combining_functions = input_combining_functions
+            else:
+                self.input_constants = tuple(input_constants)
+                self.call = self.call_multiple_inputs
+                if isinstance(input_combining_functions, list):
+                    self.input_combining_functions = \
+                        tuple(input_combining_functions)
+                else:
+                    self.input_combining_functions = \
+                        (self.input_combining_functions,) * len(input_constants)
+        else:
+            self.input_constants = input_constants
+            if isinstance(input_combining_functions, list):
+                self.input_combining_functions = input_combining_functions[0]
+            else:
+                self.input_combining_functions = input_combining_functions
+
+    # noinspection PyMissingOrEmptyDocstring,PyUnusedLocal
+    def call_multiple_inputs(self, inputs, **kwargs):
+        input_constants = []
+        for i in range(len(self.input_constants)):
+            input_constants.append(
+                self.input_combining_functions[i](
+                    self.input_constants[i], inputs[i])
+            )
+        result = self.fact_layer.call(tuple(input_constants))
+        return self._extract_output(result)
+
+    # noinspection PyMissingOrEmptyDocstring,PyUnusedLocal
+    def call_single_input(self, inputs, **kwargs):
+        if self.input_constants is None:
             input_constant = inputs
         else:
-            input_constant = self.inputs_combining_function(self.input_constant,
-                                                            inputs)
+            # noinspection PyCallingNonCallable
+            input_constant = self.input_combining_functions(
+                self.input_constants, inputs)
         result = self.fact_layer.call(input_constant)
+        return self._extract_output(result)
+
+    def _extract_output(self, result):
         if self.output_constant is not None:
             if len(result.shape.as_list()) == 2:
                 result = tf.transpose(result)
@@ -795,7 +836,7 @@ class SpecificFactLayer(AbstractFactLayer):
 
     def __hash__(self):
         return hash((self.fact_layer,
-                     self.inputs_combining_function,
+                     self.input_combining_functions,
                      self.output_extract_function))
 
     # noinspection DuplicatedCode
@@ -806,13 +847,13 @@ class SpecificFactLayer(AbstractFactLayer):
         if self.fact_layer != other.fact_layer:
             return False
 
-        if self.input_constant is not other.input_constant:
+        if self.input_constants is not other.input_constants:
             return False
 
         if self.output_constant is not other.output_constant:
             return False
 
-        if self.inputs_combining_function != other.inputs_combining_function:
+        if self.input_combining_functions != other.input_combining_functions:
             return False
 
         if self.output_extract_function != other.output_extract_function:
@@ -1220,17 +1261,56 @@ class RuleLayer(NeuralLogLayer):
         return True
 
 
+class CyclicRuleException(Exception):
+    """
+    Represents a cyclic rule exception.
+    """
+
+    def __init__(self, clause):
+        """
+        Creates a cyclic rule exception.
+
+        :param clause: the clause that originated the layer
+        :type clause: HornClause
+        """
+        if clause.provenance is None:
+            message = "Clause `{}` is cyclic. Clauses must not contain " \
+                      "cycles.".format(clause)
+        else:
+            message = "Clause `{}`, defined in file: `{}` " \
+                      "at {} is cyclic. Clauses must not contain " \
+                      "cycles.".format(clause, clause.provenance.filename,
+                                       clause.provenance.start_line)
+        super(CyclicRuleException, self).__init__(message)
+
+
+def is_any_edge(edge):
+    """
+    Returns `True` if the edge represents an any literal.
+
+    :param edge: the edge
+    :type edge: Edge
+    :return: `True`, if the edge represents an any literal; otherwise,
+    `False`
+    :rtype: bool
+    """
+    return edge.literal.predicate.name == ANY_PREDICATE_NAME
+
+
 class GraphRuleLayer(NeuralLogLayer):
     """
     A Layer to represent a logic graph rule.
     """
 
-    def __init__(self, name, rule_graph, literal_layers, grounded_layers,
+    def __init__(self, clause, name, rule_graph, literal_layers,
+                 grounded_layers,
                  path_combining_function, and_combining_function,
                  neutral_element, **kwargs):
         """
         Creates a GraphRuleLayer.
 
+        :param clause: the horn clause
+        :param clause: HornClause
         :param name: the name of the layer
         :type name: str
         :param rule_graph: the rule graph
@@ -1251,19 +1331,21 @@ class GraphRuleLayer(NeuralLogLayer):
         :param kwargs: additional arguments
         :type kwargs: dict[str, Any]
         """
-        self.rule_graph = rule_graph
-        self.destination = rule_graph.destination
-        self.literal_layers = literal_layers
+        self.clause = clause
+        self.rule_graph = data_structures.NoDependency(rule_graph)
+        self.destinations = rule_graph.destinations
+        self.literal_layers = dict()
+        for key, value in literal_layers.items():
+            self.literal_layers[str(key)] = value
         self.grounded_layers = grounded_layers
         self.path_combining_function = path_combining_function
         self.and_combining_function = and_combining_function
         self.neutral_element = neutral_element
         self._is_empty = self._compute_empty()
-        self.cache = None
+        self.cache = dict()
         super(GraphRuleLayer, self).__init__(name, **kwargs)
 
     def _compute_empty(self):
-        # TODO: To implement
         for layer in self.literal_layers.values():
             if layer.is_empty():
                 return True
@@ -1272,7 +1354,10 @@ class GraphRuleLayer(NeuralLogLayer):
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
         self.cache = dict()
-        path_result = self._compute_term(inputs, self.destination)
+        results = []
+        for destination in self.destinations:
+            results.append(self._compute_term(inputs, destination))
+        path_result = reduce(self.path_combining_function, results)
         if path_result is None:
             path_result = self.neutral_element
 
@@ -1282,44 +1367,167 @@ class GraphRuleLayer(NeuralLogLayer):
                                                        grounded_result)
         return path_result
 
-    # TODO: treaty for free variables
+    # TODO: refactor this method
+    # TODO: compute de returning paths
     def _compute_term(self, inputs, term):
-        if term in self.rule_graph.sources:
-            if len(self.rule_graph.sources) == 1:
-                tensor = inputs
-            else:
-                tensor = inputs[self.rule_graph.sources.index(term)]
-            for loop in self.rule_graph.loops_by_nodes.get(term, []):
-                tensor = self.literal_layers[loop](tensor)
-        else:
-            tensor = self.cache.get(term, None)
-            if tensor is None:
-                tensors = list()
-                for edge in self.rule_graph.input_edges_by_nodes[term]:
-                    # TODO: call the function to compute the input term for
-                    #  all inputs of the literal in the edge
-                    # TODO: Change the edge class to support multiple inputs
-                    # TODO: Merge all inputs from the same edge in the same
-                    #  edge class
-                    input_term = edge.get_input_term()
-                    self._compute_term(inputs, input_term)
-                    new_inputs = build_input_for_edge(edge, self.cache)
-                    # TODO: treaty for any predicate
-                    tensor = self.literal_layers[edge](new_inputs)
-                    for loop in self.rule_graph.loops_by_nodes.get(term, []):
-                        tensor = self.literal_layers[loop](tensor)
-                    tensors.append(tensor)
+        terms_to_compute = deque([term])  # type: deque[Term]
+        self._compute_terms(inputs, term, terms_to_compute)
 
-                if len(tensors) == 1:
-                    self.cache[term] = tensors[0]
-                elif len(tensors) > 1:
-                    if term == self.destination:
-                        combining_function = self.path_combining_function
+        return self.cache[term]
+
+    def _compute_terms(self, inputs, destination, terms_to_compute):
+        while len(terms_to_compute) > 0:
+            size = len(terms_to_compute)
+            for i in range(size):
+                current = terms_to_compute.pop()
+
+                # The term is cached
+                tensor = self.cache.get(current, None)
+                if tensor is not None:
+                    continue
+                not_any_tensor = True
+                # noinspection PyUnresolvedReferences
+                if current in self.rule_graph.sources:
+                    # The term is an input term
+                    # noinspection PyUnresolvedReferences
+                    if len(self.rule_graph.sources) == 1:
+                        tensor = inputs
                     else:
-                        combining_function = self.and_combining_function
-                    tensor = reduce(combining_function, tensors)
-        self.cache[term] = tensor
+                        # noinspection PyUnresolvedReferences
+                        tensor = inputs[self.rule_graph.sources.index(current)]
+                else:
+                    # The term has to be compute
+                    if self._append_terms_to_compute(current, terms_to_compute):
+                        continue
+                    tensors = []
+                    # noinspection PyUnresolvedReferences
+                    edges = self.rule_graph.input_edges_by_nodes.get(
+                        current, None)
+                    if edges is None:
+                        tensors.append(self.neutral_element)
+                    else:
+                        for edge in edges:
+                            if is_any_edge(edge):
+                                if current == destination:
+                                    tensor = self._compute_any_predicate(
+                                        current, edge)
+                                    tensors.append(tensor)
+                                    not_any_tensor = False
+                                else:
+                                    tensors.append(self.neutral_element)
+                            else:
+                                literal_layer = self.literal_layers[str(edge)]
+                                edge_inputs = build_input_for_terms(
+                                    edge, self.cache)
+                                temp_tensor = literal_layer(edge_inputs)
+                                tensors.append(temp_tensor)
+
+                    # Combining the different paths
+                    tensor = self._combine_paths(current, destination, tensors)
+
+                # Compute loops
+                if not_any_tensor:
+                    tensor = self.compute_loop_for_term(current, tensor)
+
+                # Add tensor to cache
+                self.cache[current] = tensor
+
+    def _combine_paths(self, current, destination, tensors):
+        """
+        Combines the tensors of the path
+
+        :param current: the current term
+        :type current: Term
+        :param destination: the destination term
+        :type destination: Term
+        :param tensors: the list of tensors to combine
+        :type tensors: list[tf.Tensor]
+        :return: the combined tensor
+        :rtype: tf.Tensor
+        """
+        if current == destination:
+            combining_function = self.path_combining_function
+        else:
+            combining_function = self.and_combining_function
+        return reduce(combining_function, tensors)
+
+    def _compute_any_predicate(self, current, edge):
+        """
+        Computes the any predicate.
+
+        :param current: the current term
+        :type current: Term
+        :param edge: the current edge
+        :type edge: Edge
+        :return: the result of the predicate
+        :rtype: tf.Tensor
+        """
+        temp_tensors = []
+        for d_term in edge.get_input_terms():
+            temp_tensor = self._get_any_layer(
+                d_term, current)(self.cache[d_term])
+            temp_tensors.append(temp_tensor)
+        dest_tensor = tf.reshape(self.neutral_element, [1, -1])
+        dest_tensor = self.compute_loop_for_term(current, dest_tensor)
+        temp_tensors.append(dest_tensor)
+        return reduce(tf.math.multiply, temp_tensors)
+
+    def _append_terms_to_compute(self, current, terms_to_compute):
+        """
+        Appends the terms to compute.
+
+        :param current: the current term
+        :type current: Term
+        :param terms_to_compute: the previous terms to compute
+        :type terms_to_compute: deque[Term]
+        :return: `True`, if it appended any term; otherwise, `False`.
+        :rtype: bool
+        """
+        has_term_to_compute = False
+        # noinspection PyUnresolvedReferences
+        for edge in self.rule_graph.input_edges_by_nodes.get(current, []):
+            for input_term in edge.get_input_terms():
+                if input_term not in self.cache:
+                    if not has_term_to_compute:
+                        if current in terms_to_compute:
+                            raise CyclicRuleException(self.clause)
+                        terms_to_compute.append(current)
+                        has_term_to_compute = True
+                    if input_term not in terms_to_compute:
+                        terms_to_compute.append(input_term)
+        return has_term_to_compute
+
+    def compute_loop_for_term(self, term, inputs):
+        """
+        Computes the loops for the term.
+
+        :param term: the term
+        :type term: `Term`
+        :param inputs: the inputs of the term
+        :type inputs: tf.Tensor
+        :return: the tensor result after compute the loops
+        :rtype: tf.Tensor
+        """
+        tensor = inputs
+        # noinspection PyUnresolvedReferences
+        for loop in self.rule_graph.loops_by_nodes.get(term, []):
+            tensor = self.literal_layers[str(loop)](tensor)
         return tensor
+
+    def _get_any_layer(self, in_term, out_term):
+        """
+        Gets the any literal layer for the terms.
+
+        :param in_term: the input term
+        :type in_term: Term
+        :param out_term: the output term
+        :type out_term: Term
+        :return: the any literal layer
+        :rtype: LiteralLayer
+        """
+        any_literal = Literal(Atom(ANY_PREDICATE_NAME, in_term, out_term))
+        edge = Edge(any_literal, (0,), 1)
+        return self.literal_layers[str(edge)]
 
     def is_empty(self):
         """

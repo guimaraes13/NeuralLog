@@ -97,17 +97,17 @@ def print_neural_log_predictions(model, neural_program, dataset,
                 offset = sum(model.input_sizes[:i])
                 for k in range(model.input_sizes[i]):
                     x_k = features[offset + k][j].numpy()
-                    if x_k.shape[-1] == 1:
-                        arg_max = x_k[0]
-                        if arg_max < 0 or arg_max == empty_entry:
-                            stop = True
-                            break
-                    else:
+                    if x_k.dtype == np.float32:
                         if np.max(x_k) == 0:
                             stop = True
                             break
                         arg_max = np.argmax(x_k)
                         if arg_max == empty_entry:
+                            stop = True
+                            break
+                    else:
+                        arg_max = x_k[0]
+                        if arg_max < 0 or arg_max == empty_entry:
                             stop = True
                             break
                     subjects.append(neural_program.get_constant_by_index(
@@ -248,7 +248,6 @@ class NeuralLogDataset:
         pass
 
 
-# TODO: adjust dataset to predicates with higher arity
 @neural_log_dataset("default_dataset")
 class DefaultDataset(NeuralLogDataset):
     """

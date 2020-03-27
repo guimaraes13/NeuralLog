@@ -162,19 +162,19 @@ class LayerFactory:
 
     SPARSE_THRESHOLD = 0.3
 
-    variable_cache: Dict[Atom, tf.Tensor] = dict()
+    variable_cache: Dict[Atom, tf.Tensor]
     "Caches the variable tensors of the atoms"
 
-    _tensor_by_name: Dict[str or tuple, tf.Tensor] = dict()
+    _tensor_by_name: Dict[str or tuple, tf.Tensor]
     "The tensors by name"
 
-    _matrix_representation: Dict[Predicate, Any] = dict()
+    _matrix_representation: Dict[Predicate, Any]
     "Caches the matrices representations."
 
-    _vector_representation: Dict[Atom, Any] = dict()
+    _vector_representation: Dict[Atom, Any]
     "Caches the vector representations of binary predicates with constant."
 
-    _diagonal_matrix_representation: Dict[Predicate, csr_matrix] = dict()
+    _diagonal_matrix_representation: Dict[Predicate, csr_matrix]
     "Caches the diagonal matrices representations."
 
     tensor_function = decorate_factory_function()
@@ -195,6 +195,12 @@ class LayerFactory:
         :param program: the NeuralLog program
         :type program: NeuralLogProgram
         """
+        self.variable_cache = dict()
+        self._tensor_by_name = dict()
+        self._matrix_representation = dict()
+        self._vector_representation = dict()
+        self._diagonal_matrix_representation = dict()
+
         self.program = program
         # noinspection PyUnresolvedReferences
         self.function = self.tensor_function.functions
@@ -962,8 +968,8 @@ class LayerFactory:
         fact_layer = self.build_atom(variable_atom)
         return SpecificFactLayer(
             name, fact_layer,
-            input_constant=input_constant,
-            input_combining_function=input_combining_function,
+            input_constants=input_constant,
+            input_combining_functions=input_combining_function,
             output_constant=output_constant,
             output_extract_function=output_extract_function
         )
@@ -1251,8 +1257,8 @@ class LayerFactory:
         input_constant = self.get_one_hot_tensor(atom, 0)
         input_combining_func = self.get_and_combining_function(atom.predicate)
         return SpecificFactLayer(name, fact_layer,
-                                 input_constant=input_constant,
-                                 input_combining_function=input_combining_func)
+                                 input_constants=input_constant,
+                                 input_combining_functions=input_combining_func)
 
     # noinspection PyMissingOrEmptyDocstring
     @tensor_function(TensorFunctionKey(2, 2, True,

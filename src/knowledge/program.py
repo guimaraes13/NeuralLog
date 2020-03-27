@@ -363,6 +363,7 @@ class SimpleRulePathFinder:
             ground_literals.append(literal)
         return ground_literals
 
+    # noinspection DuplicatedCode
     def find_forward_paths(self, source, destination, visited_literals):
         """
         Finds all forward paths from `source` to `destination` by using the
@@ -435,6 +436,7 @@ class SimpleRulePathFinder:
         visited_literals.update(path.literals)
         return path
 
+    # noinspection DuplicatedCode
     def find_paths(self, partial_paths, destination, visited_literals):
         """
         Finds the paths from `partial_paths` to `destination` by appending the
@@ -505,10 +507,10 @@ class SimpleRulePath:
     source: Term
     "The source term"
 
-    path: List[Literal] = list()
+    path: List[Literal]
     "The path of literals"
 
-    literals: Set[Literal] = set()
+    literals: Set[Literal]
     "The set of literals in the path"
 
     terms: Set[Term]
@@ -688,62 +690,73 @@ class NeuralLogProgram:
 
     builtin = build_builtin_predicate()
 
-    facts_by_predicate: Dict[Predicate, Dict[Any, Atom]] = dict()
+    facts_by_predicate: Dict[Predicate, Dict[Any, Atom]]
     """The facts. The values of this variable are dictionaries where the key 
     are the predicate and a tuple of the terms and the values are the atoms 
     itself. It was done this way in order to collapse different definitions 
     of the same atom with different weights, in this way, only the last 
     definition will be considered"""
 
-    examples: Dict[str, Dict[Predicate, Dict[Any, Atom]]] = OrderedDict()
+    examples: Dict[str, Dict[Predicate, Dict[Any, Atom]]]
     """The examples. The values of this variable are dictionaries where the key 
     are the predicate and a tuple of the terms and the values are the atoms 
     itself. It was done this way in order to collapse different definitions 
     of the same atom with different weights, in this way, only the last 
     definition will be considered"""
 
-    mega_examples: Dict[str, Dict[Any, Dict[Predicate, List[Atom]]]] = \
-        OrderedDict()
+    mega_examples: Dict[str, Dict[Any, Dict[Predicate, List[Atom]]]]
     """The mega examples. The values of this variable are dictionaries where 
     the key are the predicate and a tuple of the terms and the values are the 
     atoms itself. It was done this way in order to collapse different 
     definitions of the same atom with different weights, in this way, only the 
     last definition will be considered"""
 
-    clauses_by_predicate: Dict[Predicate, List[HornClause]] = dict()
+    clauses_by_predicate: Dict[Predicate, List[HornClause]]
     "The clauses by predicate"
 
-    constants: Set[Term] = set()
+    constants: Set[Term]
     "All the constants"
 
     iterable_constants_per_term: Dict[Tuple[Predicate, int], BiDict[int, Term]]
     "The iterable constants per (predicate / term position)"
 
-    predicates: Dict[Predicate, Tuple[TermType]] = dict()
+    predicates: Dict[Predicate, Tuple[TermType]]
     "All the predicates and their types"
 
-    logic_predicates: Set[Predicate] = set()
+    logic_predicates: Set[Predicate]
     "The logic predicates"
 
-    functional_predicates: Set[Predicate] = set()
+    functional_predicates: Set[Predicate]
     "The functional predicates"
 
-    trainable_predicates: Set[Predicate] = set()
+    trainable_predicates: Set[Predicate]
     "The trainable predicates"
 
-    parameters: Dict[Any, Any] = dict()
+    parameters: Dict[Any, Any]
     "A dictionary with the parameters defined in the program"
 
     # predicate_functions: Dict[Any, Any] = dict()
     # "A dictionary with the functions defined for predicates in the program"
 
-    _predicate_parameters_to_add: List[Atom] = list()
-    _parameters_to_add: List[Atom] = list()
+    _predicate_parameters_to_add: List[Atom]
+    _parameters_to_add: List[Atom]
 
     def __init__(self):
         """
         Creates a NeuralLog Program.
         """
+        self.facts_by_predicate = dict()
+        self.examples = OrderedDict()
+        self.mega_examples = OrderedDict()
+        self.clauses_by_predicate = dict()
+        self.constants = set()
+        self.predicates = dict()
+        self.logic_predicates = set()
+        self.functional_predicates = set()
+        self.trainable_predicates = set()
+        self.parameters = dict()
+        self._predicate_parameters_to_add = list()
+        self._parameters_to_add = list()
         self._last_atom_for_predicate: Dict[Predicate, Atom] = dict()
         # self.add_clauses(clauses)
         # del self._last_atom_for_predicate

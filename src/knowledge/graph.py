@@ -57,7 +57,12 @@ class RulePathFinder:
         """
         # Defining variables
         sources = list(self.clause.head.terms)
-        destination = sources.pop(output_index)
+        compute_reverse = True
+        if len(sources) > 1:
+            destination = sources.pop(output_index)
+        else:
+            compute_reverse = False
+            destination = sources[0]
 
         paths = []
         sources_set = set(sources)
@@ -68,7 +73,7 @@ class RulePathFinder:
                 source, destination, visited, sources_set)
             all_visited.update(visited)
 
-        if not all_visited.issuperset(self.clause.body):
+        if compute_reverse and not all_visited.issuperset(self.clause.body):
             # Finding backward paths
             source = destination
             for destination in sources:
@@ -87,7 +92,7 @@ class RulePathFinder:
         ground_literals = self.get_disconnected_literals(all_visited)
 
         # return paths, ground_literals
-        return RuleGraph(sources, destination, paths, ground_literals)
+        return RuleGraph(self.clause, sources, paths, ground_literals)
 
     def get_disconnected_literals(self, connected_literals):
         """
@@ -261,10 +266,10 @@ class RulePath:
     source: Term
     "The source term"
 
-    path: List[Literal] = list()
+    path: List[Literal]
     "The path of literals"
 
-    literals: Set[Literal] = set()
+    literals: Set[Literal]
     "The set of literals in the path"
 
     terms: Set[Term]
@@ -489,29 +494,29 @@ class Edge:
     Represents an edge in the graph.
     """
 
-    def __init__(self, literal, input_index, output_index):
+    def __init__(self, literal, input_indices, output_index):
         """
         Creates the edge.
 
         :param literal: the literal of the edge
         :type literal: Literal
-        :param input_index: the index of the input term
-        :type input_index: int
+        :param input_indices: the indices of the input terms
+        :type input_indices: tuple[int]
         :param output_index: the index of the output term
         :type output_index: int
         """
         self.literal = literal
-        self.input_index = input_index
+        self.input_indices = input_indices
         self.output_index = output_index
 
-    def get_input_term(self):
+    def get_input_terms(self):
         """
         Gets the input term.
 
         :return: the input term
-        :rtype: Term
+        :rtype: tuple[Term]
         """
-        return self.literal.terms[self.input_index]
+        return tuple(self.literal.terms[i] for i in self.input_indices)
 
     def get_output_term(self):
         """
@@ -522,13 +527,29 @@ class Edge:
         """
         return self.literal.terms[self.output_index]
 
+    def is_inverted(self):
+        """
+        Returns `True` if the edge represents an inverted literal.
+
+        :return:  `True`, if the edge represents an inverted literal;
+        otherwise, False
+        :rtype: bool
+        """
+        if len(self.input_indices) > 1:
+            return False
+
+        if self.literal.terms[0] == self.literal.terms[-1]:
+            return False
+
+        return self.input_indices[0] > self.output_index
+
     def __lt__(self, other):
-        return (self.literal.simple_key(), self.input_index,
+        return (self.literal.simple_key(), self.input_indices,
                 self.output_index) < (other.literal.simple_key(),
-                                      other.input_index, other.output_index)
+                                      other.input_indices, other.output_index)
 
     def __hash__(self):
-        return hash((self.literal, self.input_index, self.output_index))
+        return hash((self.literal, self.input_indices, self.output_index))
 
     def __eq__(self, other):
         if not isinstance(other, Edge):
@@ -537,7 +558,7 @@ class Edge:
         if self.literal != other.literal:
             return False
 
-        if self.input_index != other.input_index:
+        if self.input_indices != other.input_indices:
             return False
 
         if self.output_index != other.output_index:
@@ -546,8 +567,13 @@ class Edge:
         return True
 
     def __str__(self):
+        terms = self.get_input_terms()
+        if len(terms) > 1:
+            terms = "{" + ", ".join(map(lambda x: str(x), terms)) + "}"
+        else:
+            terms = terms[0]
         return "{} -> {} -> {}".format(
-            self.literal.terms[self.input_index],
+            terms,
             self.literal,
             self.literal.terms[self.output_index]
         )
@@ -561,41 +587,46 @@ class RuleGraph:
     Represents a rule as a graph.
     """
 
-    sources: List[Term] = list()
+    sources: List[Term]
     "The list of source terms"
 
-    destination: Term = None
+    destinations: List[Term]
     "The destination term"
 
-    edges: Set[Edge] = set()
+    edges: Set[Edge]
     "The set of edges"
 
-    input_edges_by_nodes: Dict[Term, List[Edge]] = dict()
+    input_edges_by_nodes: Dict[Term, List[Edge]]
     "The input literals by term"
 
-    loops_by_nodes: Dict[Term, List[Edge]] = dict()
+    loops_by_nodes: Dict[Term, List[Edge]]
     "The loop literals by term"
 
-    grounds: List[Literal] = dict()
+    grounds: List[Literal]
     "The grounded terms"
 
-    def __init__(self, sources, destination, paths, grounds):
+    def __init__(self, clause, sources, paths, grounds):
         """
         Creates a rule graph.
 
+        :param clause: the clause
+        :type clause: HornClause
         :param sources: the list of source terms
         :type sources: List[Term]
-        :param destination: the destination of the paths
-        :type destination: Term
         :param paths: the completed paths between the terms of the clause
         :type paths: List[RulePath]
         :param grounds: the remaining grounded literals in the clause
         :type grounds: List[Literal]
         """
+        self.clause = clause
         self.sources = sources
-        self.destination = destination
+        self.destinations = list()
+        self.edges = set()
+        self.input_edges_by_nodes = dict()
+        self.loops_by_nodes = dict()
         self.paths = paths
         self._build_graph(paths)
+        self._merge_any_edges()
         self.grounds = grounds
 
     def _build_graph(self, paths):
@@ -605,15 +636,59 @@ class RuleGraph:
         :param paths: the completed paths between the terms of the clause
         :type paths: List[RulePath]
         """
+        destinations = set()
+        loops_already_created = set()
         for path in paths:
-            for i in range(len(path.literals)):
+            path_end = path.path_end()
+            if path_end not in destinations:
+                destinations.add(path_end)
+                self.destinations.append(path_end)
+            for i in range(len(path)):
                 output_term = path.get_output_term(i)
+                literal = path.path[i]
+                if literal.arity() > 2:
+                    input_indices = tuple(range(literal.arity() - 1))
+                else:
+                    input_indices = path.input_indices[i],
+                edge = Edge(literal, input_indices, path.output_indices[i])
+                self.edges.add(edge)
                 if path.is_loop(i):
-                    literals = self.loops_by_nodes.setdefault(output_term, [])
+                    if output_term not in loops_already_created:
+                        self.loops_by_nodes.setdefault(
+                            output_term, []).append(edge)
                 else:
                     literals = self.input_edges_by_nodes.setdefault(
                         output_term, [])
-                edge = Edge(path.path[i],
-                            path.input_indices[i], path.output_indices[i])
-                self.edges.add(edge)
-                literals.append(edge)
+                    if edge not in literals:
+                        literals.append(edge)
+            loops_already_created.update(self.loops_by_nodes.keys())
+
+    def _merge_any_edges(self):
+        """
+        Merge the any predicates to the destination term.
+        """
+
+        for term, edges in self.input_edges_by_nodes.items():
+            destination_edges = []
+            any_inputs = []
+            for edge in edges:
+                if edge.literal.predicate.name == ANY_PREDICATE_NAME:
+                    for input_term in edge.get_input_terms():
+                        if input_term not in any_inputs:
+                            any_inputs.append(input_term)
+                else:
+                    destination_edges.append(edge)
+            if len(any_inputs) == 0:
+                continue
+            any_inputs.append(term)
+            any_literal = Literal(Atom(ANY_PREDICATE_NAME, *any_inputs))
+            last_index = len(any_inputs) - 1
+            any_edge = Edge(any_literal, tuple(range(last_index)), last_index)
+            destination_edges.append(any_edge)
+            self.input_edges_by_nodes[term] = destination_edges
+
+    def __str__(self):
+        return "[{}] {}".format(self.__class__.__name__, self.clause.__str__())
+
+    def __repr__(self):
+        return "[{}] {}".format(self.__class__.__name__, self.clause.__repr__())
