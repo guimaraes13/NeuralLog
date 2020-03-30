@@ -72,16 +72,18 @@ class RulePathFinder:
             paths += self.find_forward_paths(
                 source, destination, visited, sources_set)
             all_visited.update(visited)
+        path_set = set(paths)
 
         if compute_reverse and not all_visited.issuperset(self.clause.body):
             # Finding backward paths
             source = destination
             for destination in sources:
+                all_sources = set(self.clause.head.terms)
+                all_sources.remove(destination)
                 visited = set(all_visited)
                 # visited = set()
                 backward_paths = self.find_forward_paths(
-                    source, destination, visited)
-                path_set = set(paths)
+                    source, destination, visited, all_sources)
                 for backward_path in backward_paths:
                     reversed_path = backward_path.reverse()
                     if reversed_path not in path_set:
@@ -141,9 +143,12 @@ class RulePathFinder:
                 continue
             new_path = initial_path.new_path_with_item(literal)
             if new_path is not None:
+                path_end = new_path.path_end()
+                if path_end != source and path_end in all_sources:
+                    continue
                 visited_literals.add(literal)
-                if new_path.path_end() != destination:
-                    for loop in self.loop_literals.get(new_path.path_end(), []):
+                if path_end != destination:
+                    for loop in self.loop_literals.get(path_end, []):
                         new_path.append(loop)
                         visited_literals.add(loop)
                 partial_paths.append(new_path)
@@ -451,7 +456,7 @@ class RulePath:
     def __eq__(self, other):
         if not isinstance(other, RulePath):
             return False
-        return self.source == other.source, self.path == other.path
+        return self.source == other.source and self.path == other.path
 
     def get_input_term(self, index):
         """

@@ -226,23 +226,7 @@ class NeuralLogNetwork(keras.Model):
     Network.
     """
 
-    _literal_layers: Dict[Tuple[Literal, bool], LiteralLayer] = dict()
-    "The literal layer by literal"
-
-    _fact_layers: Dict[Tuple[Atom, bool], FactLayer] = dict()
-    "The fact layer by literal"
-
-    _rule_layers: Dict[Tuple[HornClause, bool], RuleLayer] = dict()
-    "The rule layer by clause"
-
-    _function_by_predicate: Dict[Predicate, Any] = dict()
-    "The function by predicate"
-
-    program: NeuralLogProgram
-    "The NeuralLog program"
-
-    predicates: List[Tuple[Predicate, bool]]
-
+    # noinspection PyTypeChecker
     def __init__(self, dataset, train=True, inverse_relations=True):
         """
         Creates a NeuralLogNetwork.
@@ -259,6 +243,29 @@ class NeuralLogNetwork(keras.Model):
         :type train: bool
         """
         super(NeuralLogNetwork, self).__init__(name="NeuralLogNetwork")
+
+        self._literal_layers: Dict[Tuple[Literal, bool], LiteralLayer] = \
+            data_structures.NoDependency(dict())
+        "The literal layer by literal"
+
+        self._fact_layers: Dict[Tuple[Atom, bool], FactLayer] = \
+            data_structures.NoDependency(dict())
+        "The fact layer by literal"
+
+        self._rule_layers: Dict[Tuple[HornClause, bool], RuleLayer] = \
+            data_structures.NoDependency(dict())
+        "The rule layer by clause"
+
+        self._function_by_predicate: Dict[Predicate, Any] = \
+            data_structures.NoDependency(dict())
+        "The function by predicate"
+
+        self.program: NeuralLogProgram
+        "The NeuralLog program"
+
+        self.predicates: List[Tuple[Predicate, bool]]
+
+
         self.dataset = dataset
         self.program = dataset.program
         self.layer_factory = LayerFactory(self.program, train=train)
@@ -364,6 +371,7 @@ class NeuralLogNetwork(keras.Model):
                     predicate)
                 predicate_layer = ExtractUnaryLiteralLayer(
                     predicate_layer, combining_func)
+            # noinspection PyUnresolvedReferences
             self.predicates.append((predicate, inverted))
             self.predicate_layers.append(predicate_layer)
 

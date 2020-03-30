@@ -285,7 +285,7 @@ class DefaultDataset(NeuralLogDataset):
                     continue
                 predicates.add(predicate)
                 target_predicates.append((predicate, False))
-                if self.inverse_relations and predicate.arity > 1:
+                if self.inverse_relations and predicate.arity == 2:
                     target_predicates.append((predicate, True))
         return target_predicates
 

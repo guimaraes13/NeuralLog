@@ -105,5 +105,21 @@ inv_den(X, Y) :- den(X, Y), inverse(Y).
 
 similarity(X, Y) :- num(X, Y), inv_den(X, Y).
 
+
+h_1(X, Y, Z) :- l_1(X), l_1(Y), l_1(Z).
+h_2(X, Y, Z) :- l_2(X), l_2(Y), l_2(Z).
+
+num(X, Y, Z) :- h_1(X, Y, Z).
+num(X, Y, Z) :- h_2(X, Y, Z).
+
+den(X, Y, Z) :- norm(X), norm(Y), norm(Z).
+inv_den(X, Y, Z) :- den(X, Y, Z), inverse(Z).
+
+similarity(X, Y, Z) :- num(X, Y, Z), inv_den(X, Y, Z).
+
+parents(X, Y, Z) :- mother(X, Z), father(Y, Z).
+
+parents(X, Y) :- parents(X, C, Y).
+
 wrong_x(X, Y) :- father(X, X).
 wrong_y(X, Y) :- mother(Y, Y).

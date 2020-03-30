@@ -29,7 +29,7 @@ class TestLayerFactory(unittest.TestCase):
     def setUpClass(cls) -> None:
         lexer = NeuralLogLexer()
         parser = NeuralLogParser(lexer)
-        parser.parse("layer_factory.pl")
+        parser.parse("layer_factory/layer_factory.pl")
         clauses = parser.get_clauses()
         # Create the NeuralLog Program
         cls.program = NeuralLogProgram()
