@@ -1480,16 +1480,6 @@ class NeuralLogProgram:
         example_dict = self.mega_examples.setdefault(example_set, OrderedDict())
         example_dict = example_dict.setdefault(example_id, OrderedDict())
         example_dict = example_dict.setdefault(atom.predicate, [])
-        # key = atom.simple_key()
-        # old_atom = example_dict.get(key, None)
-        # if old_atom is not None:
-        #     logger.warning("Warning: mega example %s defined in file %s at "
-        #                    "line %d replaced by Example %s defined in file "
-        #                    "%s at line %d.",
-        #                    old_atom, old_atom.provenance.filename,
-        #                    old_atom.provenance.start_line,
-        #                    atom, atom.provenance.filename,
-        #                    atom.provenance.start_line)
         example_dict.append(atom)
 
     # noinspection PyUnusedLocal

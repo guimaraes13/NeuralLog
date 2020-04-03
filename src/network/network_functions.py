@@ -363,11 +363,11 @@ def inverse(a):
     return tf.math.divide_no_nan(1.0, a)
 
 
-@neural_log_literal_function("pad_1d")
-def pad_1d(a, before=0, after=0, value=0):
+@neural_log_literal_function("pad_d1")
+def pad_d1(a, before=0, after=0, value=0):
     """
-    Pads the tensor a if `before` time the `value` before the tensor and
-    `after` times after the tensor.
+    Pads the tensor `a` at the first dimension with `before` times `value`
+    before the tensor and `after` times `value` after the tensor.
 
     :param a: the tensor
     :type a: tf.Tensor
@@ -382,6 +382,46 @@ def pad_1d(a, before=0, after=0, value=0):
     """
     padding = tf.constant([[before, after], [0, 0]])
     return tf.pad(a, padding, constant_values=value)
+
+
+@neural_log_literal_function("pad_d2")
+def pad_d2(a, before=0, after=0, value=0):
+    """
+    Pads the tensor `a` at the second dimension with `before` times `value`
+    before the tensor and `after` times `value` after the tensor.
+
+    :param a: the tensor
+    :type a: tf.Tensor
+    :param before: the length of the padding before the tensor
+    :type before: int
+    :param after: the length of the padding after the tensor
+    :type after: int
+    :param value: the constant value
+    :type value: int or float
+    :return: the padded tensor
+    :rtype: tf.Tensor
+    """
+    padding = tf.constant([[0, 0], [before, after]])
+    return tf.pad(a, padding, constant_values=value)
+
+
+@neural_log_combining_function("embedding_lookup")
+def embedding_lookup(ids, params):
+    """
+    Returns the embeddings lookups.
+
+    The difference of this function to TensorFlow's function is that this
+    function expects the ids as the first argument and the parameters as the
+    second; while, in TensorFlow, is the other way around.
+
+    :param ids: the ids
+    :type ids: tf.Tensor
+    :param params: the parameters
+    :type params: tf.Tensor
+    :return: the lookup
+    :rtype: tf.Tensor
+    """
+    return tf.nn.embedding_lookup(params, ids)
 
 
 @neural_log_literal_function("partial")
@@ -496,8 +536,8 @@ class EmptyLayer(NeuralLogLayer):
         return tf.multiply(inputs, self.zero)
 
     # noinspection PyMissingOrEmptyDocstring
-    def compute_output_shape(self, input_shape):
-        return tf.TensorShape(input_shape)
+    # def compute_output_shape(self, input_shape):
+    #     return tf.TensorShape(input_shape)
 
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):
@@ -542,8 +582,8 @@ class AbstractFactLayer(NeuralLogLayer):
         super(AbstractFactLayer, self).__init__(name, **kwargs)
 
     # noinspection PyMissingOrEmptyDocstring
-    def compute_output_shape(self, input_shape):
-        return tf.TensorShape(input_shape)
+    # def compute_output_shape(self, input_shape):
+    #     return tf.TensorShape(input_shape)
 
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):
@@ -1001,8 +1041,8 @@ class LiteralLayer(NeuralLogLayer):
         return self._is_empty
 
     # noinspection PyMissingOrEmptyDocstring
-    def compute_output_shape(self, input_shape):
-        return tf.TensorShape(input_shape)
+    # def compute_output_shape(self, input_shape):
+    #     return tf.TensorShape(input_shape)
 
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):
@@ -1077,10 +1117,10 @@ class FunctionLayer(NeuralLogLayer):
         return True
 
     # noinspection PyMissingOrEmptyDocstring
-    def compute_output_shape(self, input_shape):
-        if hasattr(self.function, "compute_output_shape"):
-            return self.function.compute_output_shape(input_shape)
-        return tf.TensorShape(input_shape)
+    # def compute_output_shape(self, input_shape):
+    #     if hasattr(self.function, "compute_output_shape"):
+    #         return self.function.compute_output_shape(input_shape)
+    #     return tf.TensorShape(input_shape)
 
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):
@@ -1125,8 +1165,8 @@ class AnyLiteralLayer(NeuralLogLayer):
         return self.aggregation_function == other.aggregation_function
 
     # noinspection PyMissingOrEmptyDocstring
-    def compute_output_shape(self, input_shape):
-        return tf.TensorShape(input_shape)
+    # def compute_output_shape(self, input_shape):
+    #     return tf.TensorShape(input_shape)
 
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):
@@ -1229,8 +1269,8 @@ class RuleLayer(NeuralLogLayer):
         return self._is_empty
 
     # noinspection PyMissingOrEmptyDocstring
-    def compute_output_shape(self, input_shape):
-        return tf.TensorShape(input_shape)
+    # def compute_output_shape(self, input_shape):
+    #     return tf.TensorShape(input_shape)
 
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):
@@ -1371,11 +1411,6 @@ class GraphRuleLayer(NeuralLogLayer):
     # TODO: compute de returning paths
     def _compute_term(self, inputs, term):
         terms_to_compute = deque([term])  # type: deque[Term]
-        self._compute_terms(inputs, term, terms_to_compute)
-
-        return self.cache[term]
-
-    def _compute_terms(self, inputs, destination, terms_to_compute):
         while len(terms_to_compute) > 0:
             size = len(terms_to_compute)
             for i in range(size):
@@ -1408,7 +1443,7 @@ class GraphRuleLayer(NeuralLogLayer):
                     else:
                         for edge in edges:
                             if is_any_edge(edge):
-                                if current == destination:
+                                if current == term:
                                     tensor = self._compute_any_predicate(
                                         current, edge)
                                     tensors.append(tensor)
@@ -1423,7 +1458,7 @@ class GraphRuleLayer(NeuralLogLayer):
                                 tensors.append(temp_tensor)
 
                     # Combining the different paths
-                    tensor = self._combine_paths(current, destination, tensors)
+                    tensor = self._combine_paths(current, term, tensors)
 
                 # Compute loops
                 if not_any_tensor:
@@ -1431,6 +1466,8 @@ class GraphRuleLayer(NeuralLogLayer):
 
                 # Add tensor to cache
                 self.cache[current] = tensor
+
+        return self.cache[term]
 
     def _combine_paths(self, current, destination, tensors):
         """
@@ -1544,8 +1581,8 @@ class GraphRuleLayer(NeuralLogLayer):
         return self._is_empty
 
     # noinspection PyMissingOrEmptyDocstring
-    def compute_output_shape(self, input_shape):
-        return tf.TensorShape(input_shape)
+    # def compute_output_shape(self, input_shape):
+    #     return tf.TensorShape(input_shape)
 
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):
@@ -1586,8 +1623,8 @@ class DiagonalRuleLayer(NeuralLogLayer):
         return self.combining_function(inputs, result)
 
     # noinspection PyMissingOrEmptyDocstring
-    def compute_output_shape(self, input_shape):
-        return self.rule_layer.compute_output_shape(input_shape)
+    # def compute_output_shape(self, input_shape):
+    #     return self.rule_layer.compute_output_shape(input_shape)
 
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):
@@ -1643,10 +1680,10 @@ class ExtractUnaryLiteralLayer(NeuralLogLayer):
         return self.input_combining_function(inputs, result)
 
     # noinspection PyMissingOrEmptyDocstring
-    def compute_output_shape(self, input_shape):
-        output_shape = list(input_shape)
-        output_shape[-1] = 1
-        return tuple(output_shape)
+    # def compute_output_shape(self, input_shape):
+    #     output_shape = list(input_shape)
+    #     output_shape[-1] = 1
+    #     return tuple(output_shape)
 
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):

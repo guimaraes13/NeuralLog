@@ -416,9 +416,9 @@ class NeuralLogNetwork(keras.Model):
         return tuple(results)
 
     # noinspection PyMissingOrEmptyDocstring
-    def compute_output_shape(self, input_shape):
-        shape = tf.TensorShape(input_shape).as_list()
-        return tf.TensorShape(shape)
+    # def compute_output_shape(self, input_shape):
+    #     shape = tf.TensorShape(input_shape).as_list()
+    #     return tf.TensorShape(shape)
 
     # noinspection PyMissingOrEmptyDocstring
     def _build_literal(self, atom, predicates_depths, inverted=False):
