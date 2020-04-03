@@ -13,7 +13,7 @@ import tensorflow as tf
 from src.knowledge.program import NeuralLogProgram, NO_EXAMPLE_SET, \
     get_predicate_from_string
 from src.language.language import AtomClause, Atom, Predicate, \
-    get_constant_from_string
+    get_constant_from_string, get_term_from_string
 from src.network import registry
 
 logger = logging.getLogger()
@@ -70,10 +70,13 @@ def print_neural_log_predictions(model, neural_program, dataset,
     count = 0
     batches = None
     empty_entry = None
+    fix = 0
     if isinstance(neural_dataset, SequenceDataset):
         if print_batch_header and dataset_name is not None:
             batches = list(neural_program.mega_examples[dataset_name].keys())
         empty_entry = neural_dataset.empty_word_index
+    if isinstance(neural_dataset, WordCharDataset):
+        fix = -1
     for features, _ in dataset:
         if print_batch_header:
             batch = batches[count] if batches is not None else count
@@ -86,6 +89,8 @@ def print_neural_log_predictions(model, neural_program, dataset,
                 features = [features]
         for i in range(len(model.predicates)):
             predicate, inverted = model.predicates[i]
+            if isinstance(neural_dataset, WordCharDataset):
+                predicate = Predicate(predicate.name, predicate.arity - 1)
             if inverted:
                 continue
             row_scores = y_scores[i]
@@ -97,7 +102,7 @@ def print_neural_log_predictions(model, neural_program, dataset,
                 subjects = []
                 stop = False
                 offset = sum(model.input_sizes[:i])
-                for k in range(model.input_sizes[i]):
+                for k in range(model.input_sizes[i] + fix):
                     x_k = features[offset + k][j].numpy()
                     if x_k.dtype == np.float32:
                         if np.max(x_k) == 0:
@@ -642,7 +647,7 @@ class SequenceDataset(DefaultDataset):
             yield features, labels
 
     # noinspection DuplicatedCode
-    def _build(self, examples, not_found_value=0):
+    def _build(self, examples):
         """
         Builds the features and label to train the neural network based on
         the `example_set`.
@@ -811,6 +816,20 @@ class WordCharDataset(SequenceDataset):
         )
         self.char_pad = max(char_pad, 0)
 
+    def _compute_target_predicates(self):
+        target_predicates = []
+        predicates = set()
+        for mega_examples in self.program.mega_examples.values():
+            for example_set in mega_examples.values():
+                for predicate in example_set:
+                    if predicate in predicates:
+                        continue
+                    predicates.add(predicate)
+                    predicate = Predicate(predicate.name, predicate.arity + 1)
+                    self.program.logic_predicates.add(predicate)
+                    target_predicates.append((predicate, False))
+        return target_predicates
+
     def _compute_output_format(self):
         length = 0
         label_types = []
@@ -893,7 +912,7 @@ class WordCharDataset(SequenceDataset):
     __call__ = call
 
     # noinspection DuplicatedCode
-    def _build(self, examples, not_found_value=0):
+    def _build(self, examples):
         """
         Builds the features and label to train the neural network based on
         the `example_set`.
@@ -916,14 +935,16 @@ class WordCharDataset(SequenceDataset):
         for predicate, inverted in self._target_predicates:
             input_indices, output_index = get_predicate_indices(
                 predicate, inverted)
+            output_index -= 1
             last_index = None
             if predicate.arity > 2:
                 last_index = input_indices[-1]
                 input_indices = input_indices[:-1]
+            real_predicate = Predicate(predicate.name, predicate.arity - 1)
             feature = [[] for _ in range(max(1, predicate.arity - 1))]
             label_indices = []
             label_values = []
-            facts = examples.get(predicate, [])
+            facts = examples.get(real_predicate, [])
             max_length = -1
             for fact in facts:
                 last_term = None
@@ -935,11 +956,12 @@ class WordCharDataset(SequenceDataset):
 
                 count = 0
                 for input_index, input_term in zip(input_indices, input_terms):
+                    input_term = get_term_from_string(str(input_term).lower())
                     input_value = self.program.get_index_of_constant(
-                        predicate, input_index, input_term)
+                        real_predicate, input_index, input_term)
                     if input_value is None:
                         input_value = self._get_out_of_vocabulary_index(
-                            predicate, input_index)
+                            real_predicate, input_index)
                     feature[count].append([input_value])
                     count += 1
 
@@ -957,13 +979,11 @@ class WordCharDataset(SequenceDataset):
                         char_features.append(input_value)
                     feature[-1].append(char_features)
 
-                if predicate.arity == 1:
-                    label_indices.append([row_index, 0])
-                else:
-                    output_term = fact.terms[output_index]
-                    output_value = self.program.get_index_of_constant(
-                        predicate, output_index, output_term)
-                    label_indices.append([row_index, output_value])
+                output_term = fact.terms[output_index]
+                output_value = self.program.get_index_of_constant(
+                    real_predicate, output_index, output_term)
+                label_indices.append([row_index, output_value])
+
                 label_values.append(fact.weight)
                 row_index += 1
             max_lengths.append(max_length + self.char_pad)
@@ -1009,14 +1029,17 @@ class WordCharDataset(SequenceDataset):
 
             # Labels
             predicate, index = self._target_predicates[i]
+            real_predicate = Predicate(predicate.name, predicate.arity - 1)
             _, output_index = get_predicate_indices(predicate, index)
+            output_index -= 1
             if predicate.arity == 1:
                 dense_shape = [row_index, 1]
                 empty_index = [[0, 0]]
             else:
                 dense_shape = [
                     row_index,
-                    self.program.get_constant_size(predicate, output_index)]
+                    self.program.get_constant_size(
+                        real_predicate, output_index)]
                 empty_index = [[0, 0]]
             if len(all_label_values[i]) == 0:
                 sparse_tensor = tf.SparseTensor(

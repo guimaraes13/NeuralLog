@@ -265,7 +265,6 @@ class NeuralLogNetwork(keras.Model):
 
         self.predicates: List[Tuple[Predicate, bool]]
 
-
         self.dataset = dataset
         self.program = dataset.program
         self.layer_factory = LayerFactory(self.program, train=train)
