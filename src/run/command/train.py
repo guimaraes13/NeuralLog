@@ -574,10 +574,8 @@ class Train(Command):
         start_func = time.perf_counter()
         logger.info("Building model...")
         self._create_dataset()
-        self.model = NeuralLogNetwork(self.neural_dataset, train=self.train)
+        self.model = NeuralLogNetwork(self.neural_dataset, train=True)
         self.model.build_layers()
-        if self.load_model is not None:
-            self.model.load_weights(self.load_model)
         self.output_map = self._get_output_map()
         self._read_parameters(self.output_map)
         self._log_parameters(
@@ -591,6 +589,9 @@ class Train(Command):
             regularizer=self.parameters["regularizer"],
             metrics=self.parameters["metrics"]
         )
+
+        if self.load_model is not None:
+            self.model.load_weights(self.load_model)
 
         end_func = time.perf_counter()
 

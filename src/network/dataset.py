@@ -67,6 +67,11 @@ def print_neural_log_predictions(model, neural_program, dataset,
     :type print_batch_header: bool
     """
     neural_dataset = model.dataset  # type: NeuralLogDataset
+    if isinstance(neural_dataset, WordCharDataset):
+        return _print_word_char_predictions(
+            model, neural_program, dataset, writer=writer,
+            dataset_name=dataset_name, print_batch_header=print_batch_header
+        )
     count = 0
     batches = None
     empty_entry = None
@@ -84,6 +89,7 @@ def print_neural_log_predictions(model, neural_program, dataset,
             count += 1
         y_scores = model.predict(features)
         if len(model.predicates) == 1:
+            # if not isinstance(neural_dataset, WordCharDataset):
             y_scores = [y_scores]
             if model.predicates[0][0].arity < 3:
                 features = [features]
@@ -123,6 +129,121 @@ def print_neural_log_predictions(model, neural_program, dataset,
                 offset += model.input_sizes[i]
                 if stop:
                     continue
+
+                if predicate.arity == 1:
+                    clause = AtomClause(Atom(predicate, subjects[0],
+                                             weight=float(y_score)))
+                    print(clause, file=writer)
+                else:
+                    clauses = []
+                    for index in range(len(y_score)):
+                        object_term = neural_program.get_constant_by_index(
+                            predicate, -1, index)
+                        prediction = Atom(predicate, *subjects, object_term,
+                                          weight=float(y_score[index]))
+                        if dataset_name is not None and \
+                                not neural_dataset.has_example_key(
+                                    prediction.simple_key()):
+                            continue
+                        clauses.append(AtomClause(prediction))
+
+                    if len(clauses) > 0:
+                        clause = AtomClause(Atom(predicate, *subjects, "X"))
+                        print("%%", clause, file=writer, sep=" ")
+                        for clause in sorted(
+                                clauses,
+                                key=lambda c: c.atom.weight,
+                                reverse=True):
+                            print(clause, file=writer)
+                        print(file=writer)
+            # print(file=writer)
+
+
+def _print_word_char_predictions(model, neural_program, dataset,
+                                 writer=sys.stdout, dataset_name=None,
+                                 print_batch_header=False):
+    """
+    Prints the predictions of `model` to `writer`.
+
+    :param model: the model
+    :type model: NeuralLogNetwork
+    :param neural_program: the neural program
+    :type neural_program: NeuralLogProgram
+    :param dataset: the dataset
+    :type dataset: tf.data.Dataset
+    :param writer: the writer. Default is to print to the standard output
+    :type writer: Any
+    :param dataset_name: the name of the dataset
+    :type dataset_name: str
+    :param print_batch_header: if `True`, prints a commented line before each
+    batch
+    :type print_batch_header: bool
+    """
+    neural_dataset = model.dataset  # type: WordCharDataset
+    count = 0
+    batches = None
+    empty_entry = None
+    fix = -1
+    if print_batch_header and dataset_name is not None:
+        batches = list(neural_program.mega_examples[dataset_name].keys())
+    empty_entry = neural_dataset.empty_word_index
+    for features, _ in dataset:
+        if print_batch_header:
+            batch = batches[count] if batches is not None else count
+            print("%% Batch:", batch, file=writer, sep="\t")
+            count += 1
+        y_scores = model.predict(features)
+        if len(model.predicates) == 1:
+            # if not isinstance(neural_dataset, WordCharDataset):
+            y_scores = [y_scores]
+            if model.predicates[0][0].arity < 3:
+                features = [features]
+        for i in range(len(model.predicates)):
+            predicate, inverted = model.predicates[i]
+            predicate = Predicate(predicate.name, predicate.arity - 1)
+            row_scores = y_scores[i]
+            if len(row_scores.shape) == 3:
+                row_scores = np.squeeze(row_scores, axis=1)
+            for j in range(len(row_scores)):
+                y_score = row_scores[j]
+                x = []
+                subjects = []
+                stop = False
+                offset = sum(model.input_sizes[:i])
+                for k in range(model.input_sizes[i] + fix):
+                    x_k = features[offset + k][j].numpy()
+                    if x_k.dtype == np.float32:
+                        if np.max(x_k) == 0:
+                            stop = True
+                            break
+                        arg_max = np.argmax(x_k)
+                        if arg_max == empty_entry:
+                            stop = True
+                            break
+                    else:
+                        arg_max = x_k[0]
+                        if arg_max < 0 or arg_max == empty_entry:
+                            stop = True
+                            break
+                    subjects.append(neural_program.get_constant_by_index(
+                        predicate, k, arg_max))
+                    x.append(x_k)
+                offset += model.input_sizes[i]
+                if stop:
+                    continue
+
+                last_feature = features[offset - 1][j].numpy()
+                subject_string = "\""
+                for k in last_feature:
+                    if k == neural_dataset.empty_char_index:
+                        break
+                    subject_string += neural_program.get_constant_by_index(
+                        neural_dataset.character_predicate,
+                        neural_dataset.character_predicate_index,
+                        k
+                    ).value
+                subject_string += "\""
+                subjects[-1] = get_term_from_string(subject_string)
 
                 if predicate.arity == 1:
                     clause = AtomClause(Atom(predicate, subjects[0],
@@ -816,6 +937,10 @@ class WordCharDataset(SequenceDataset):
         )
         self.char_pad = max(char_pad, 0)
 
+    # noinspection PyMissingOrEmptyDocstring
+    def has_example_key(self, key):
+        return True
+
     def _compute_target_predicates(self):
         target_predicates = []
         predicates = set()
@@ -936,10 +1061,6 @@ class WordCharDataset(SequenceDataset):
             input_indices, output_index = get_predicate_indices(
                 predicate, inverted)
             output_index -= 1
-            last_index = None
-            if predicate.arity > 2:
-                last_index = input_indices[-1]
-                input_indices = input_indices[:-1]
             real_predicate = Predicate(predicate.name, predicate.arity - 1)
             feature = [[] for _ in range(max(1, predicate.arity - 1))]
             label_indices = []
@@ -947,12 +1068,7 @@ class WordCharDataset(SequenceDataset):
             facts = examples.get(real_predicate, [])
             max_length = -1
             for fact in facts:
-                last_term = None
-                if predicate.arity < 3:
-                    input_terms = (fact.terms[-1 if inverted else 0],)
-                else:
-                    input_terms = tuple(fact.terms[0:predicate.arity - 1])
-                    last_term = fact.terms[last_index]
+                input_terms = tuple(fact.terms[0:predicate.arity - 2])
 
                 count = 0
                 for input_index, input_term in zip(input_indices, input_terms):
@@ -967,8 +1083,9 @@ class WordCharDataset(SequenceDataset):
 
                 if predicate.arity > 2:
                     char_features = []
-                    max_length = max(len(last_term.value), max_length)
-                    for char in last_term.value:
+                    last_term = input_terms[-1].value
+                    max_length = max(len(last_term), max_length)
+                    for char in last_term:
                         input_value = self.program.get_index_of_constant(
                             self.character_predicate,
                             self.character_predicate_index,
