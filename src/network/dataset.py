@@ -45,7 +45,7 @@ def get_dataset_class(identifier):
     return dataset_classes.get(identifier, DefaultDataset)
 
 
-# noinspection PyTypeChecker
+# noinspection PyTypeChecker,DuplicatedCode
 def print_neural_log_predictions(model, neural_program, dataset,
                                  writer=sys.stdout, dataset_name=None,
                                  print_batch_header=False):
@@ -159,6 +159,7 @@ def print_neural_log_predictions(model, neural_program, dataset,
             # print(file=writer)
 
 
+# noinspection DuplicatedCode
 def _print_word_char_predictions(model, neural_program, dataset,
                                  writer=sys.stdout, dataset_name=None,
                                  print_batch_header=False):
@@ -182,7 +183,6 @@ def _print_word_char_predictions(model, neural_program, dataset,
     neural_dataset = model.dataset  # type: WordCharDataset
     count = 0
     batches = None
-    empty_entry = None
     fix = -1
     if print_batch_header and dataset_name is not None:
         batches = list(neural_program.mega_examples[dataset_name].keys())

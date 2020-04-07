@@ -13,6 +13,7 @@ import time
 
 import src.run.command
 import src.run.command.train
+import src.run.command.output_nlp
 
 logger = logging.getLogger()
 
