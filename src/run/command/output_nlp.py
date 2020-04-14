@@ -14,10 +14,12 @@ import numpy as np
 from src.knowledge.program import NeuralLogProgram
 from src.language.language import AtomClause, Atom, \
     Predicate
-from src.network.dataset import get_dataset_class, WordCharDataset
+from src.network.dataset import get_dataset_class, WordCharDataset, log_viterbi
 from src.network.network import NeuralLogNetwork
 from src.run.command import Command, command, print_args, TEST_SET_NAME
 from src.run.command.train import get_clauses, DEFAULT_BATCH_SIZE
+
+SPLIT_VALUE = " "
 
 DEFAULT_TAG = "O"
 
@@ -39,10 +41,12 @@ def scape_word(word):
 
 
 # noinspection DuplicatedCode
-def get_examples(file_paths, target_predicate):
+def get_examples(file_paths, target_predicate, split_value=SPLIT_VALUE):
     """
     Gets the examples from the input file and converts it to logic.
 
+    :param split_value: the value to split the input
+    :type split_value: str
     :param file_paths: the file paths
     :type file_paths: list[str]
     :param target_predicate: the name of the logic predicate
@@ -57,7 +61,7 @@ def get_examples(file_paths, target_predicate):
         if line == "":
             sentence_number += 1
             continue
-        fields = line.split(" ")
+        fields = line.split(split_value)
         word = fields[0]
         word = scape_word(word)
         if NUMBER.search(word) is not None:
@@ -112,11 +116,27 @@ class OutputNLP(Command):
                             type=str, required=True,
                             help="If set, loads the model from the path and "
                                  "continues from the loaded model")
-        parser.add_argument('--viterbiPredicate', '-v', metavar='viterb',
-                            type=str, required=False, default=None,
+
+        parser.add_argument('--tabSeparator', '-tab', dest='tabSeparator',
+                            action="store_true",
+                            help="If set, use tab to separate the values of "
+                                 "the input files")
+        parser.set_defaults(tabSeparator=False)
+
+        # Viterbi
+        parser.add_argument('--transitionPredicate', '-transition',
+                            metavar='transition', type=str,
+                            required=False, default=None,
                             help="The name of the predicate that hold the "
-                                 "transition matrix of the tag in order to "
+                                 "transition matrix of the tags, in order to "
                                  "compute the Viterbi algorithm.")
+
+        parser.add_argument('--initialPredicate', '-initial',
+                            metavar='initial', type=str,
+                            required=False, default=None,
+                            help="The name of the predicate that hold the "
+                                 "initial probabilities of the tags, in order "
+                                 "to compute the Viterbi algorithm.")
 
         # Output
         parser.add_argument("--outputFile", "-o", metavar='outputFile',
@@ -138,8 +158,13 @@ class OutputNLP(Command):
         self.load_model = args.loadModel
         self.test = len(self.test_files) > 0
         self.target_predicate = args.targetPredicate
-        if args.viterbiPredicate is not None:
-            self.viterbi_predicate = Predicate(args.viterbiPredicate, 2)
+        self.transition_predicate = None
+        self.initial_predicate = None
+        self.split_value = "\t" if args.tabSeparator else SPLIT_VALUE
+        if args.transitionPredicate is not None:
+            self.transition_predicate = Predicate(args.transitionPredicate, 2)
+            if args.initialPredicate is not None:
+                self.initial_predicate = Predicate(args.initialPredicate, 1)
 
         self.output_file = args.outputFile
 
@@ -162,7 +187,8 @@ class OutputNLP(Command):
         end_reading = end_program
         if self.test > 0:
             logger.info("Reading %s...", TEST_SET_NAME)
-            file_clauses = get_examples(self.test_files, self.target_predicate)
+            file_clauses = get_examples(self.test_files, self.target_predicate,
+                                        self.split_value)
             # file_clauses = get_clauses(file)
             self.neural_program.add_clauses(
                 file_clauses, example_set=TEST_SET_NAME)
@@ -253,20 +279,25 @@ class OutputNLP(Command):
         logger.info("Total data saving time:\t%0.3fs", end_save - start_save)
 
     def _save_inference_for_dataset(self):
-        import tensorflow_addons as tfa
         logger.info("\t\t{}:\t\t{}".format(TEST_SET_NAME, self.output_file))
         input_file_it = iter(fileinput.input(files=self.test_files))
         writer = open(self.output_file, "w")
         neural_dataset = self.model.dataset  # type: WordCharDataset
         transition_matrix = None
-        if self.viterbi_predicate is not None:
+        initial_probabilities = None
+        if self.transition_predicate is not None:
             transition_matrix = self.neural_program.get_matrix_representation(
-                self.viterbi_predicate).todense()
+                self.transition_predicate).toarray()
+            transition_matrix = np.log(transition_matrix)
+            if self.initial_predicate is not None:
+                initial_probabilities = \
+                    self.neural_program.get_matrix_representation(
+                        self.initial_predicate).toarray().squeeze()
+                initial_probabilities = np.log(initial_probabilities)
         for features, _ in self.test_set:
             # For each sentence
             y_scores = self.model.predict(features)
             if len(self.model.predicates) == 1:
-                # if not isinstance(neural_dataset, WordCharDataset):
                 y_scores = [y_scores]
                 if self.model.predicates[0][0].arity < 3:
                     features = [features]
@@ -278,8 +309,9 @@ class OutputNLP(Command):
                 if len(row_scores.shape) == 3:
                     row_scores = np.squeeze(row_scores, axis=1)
                 if transition_matrix is not None:
-                    row_scores = tfa.text.viterbi_decode(
-                        row_scores, transition_matrix)[0]
+                    row_scores = log_viterbi(
+                        transition_matrix,
+                        np.log(row_scores), initial_probabilities)
                 for j in range(len(row_scores)):
                     # For each word
                     y_score = row_scores[j]
@@ -298,20 +330,14 @@ class OutputNLP(Command):
                             ).value
 
                     if transition_matrix is None:
-                        pred_tag = DEFAULT_TAG
-                        tag_value = 0.0
-                        for index in range(len(y_score)):
-                            value = float(y_score[index])
-                            if value > tag_value:
-                                tag_value = value
-                                pred_tag = \
-                                    self.neural_program.get_constant_by_index(
-                                        predicate, -1, index).value
+                        pred_tag = self.neural_program.get_constant_by_index(
+                            predicate, -1, y_score.argmax()).value
                     else:
                         pred_tag = self.neural_program.get_constant_by_index(
                             predicate, -1, y_score).value
 
-                    word, tag = next(input_file_it).strip().split(" ")
+                    word, tag = next(input_file_it).strip().split(
+                        self.split_value)
                     print(word, tag, pred_tag, sep=DELIMITER, file=writer)
             print("", file=writer)
             try:

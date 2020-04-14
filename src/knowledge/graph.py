@@ -332,11 +332,12 @@ class RulePath:
             return False
 
         arity = item.arity()
+        path_end = self.path_end()
         if arity == 1:
             input_index = 0
             out_index = 0
         elif arity == 2:
-            if item.terms[-1] == self.path_end():
+            if item.terms[-1] == path_end:
                 # inverted literal case
                 input_index = 1
                 out_index = 0
@@ -353,19 +354,21 @@ class RulePath:
             # high arity item
             # for now, assumes that the output of a literal with arity bigger
             # than 2 is always the last term
-            input_index = item.terms.index(self.path_end())
+            input_index = item.terms.index(path_end)
             out_index = force_output if force_output is not None else arity - 1
 
         output_variable = item.terms[out_index]
+
         # Detects if there is a loop in the path
         # If it is a loop, the path is invalid
         #   assumes that all terms of a literal with arity bigger than two are
         #   all different among each other
         # It also avoids paths return through a literal with arity bigger than 2
-
         if arity != 1 and \
                 item.terms[0] != item.terms[-1] and \
                 output_variable in self.terms:
+            return False
+        if arity > 2 and output_variable == path_end:
             return False
 
         self.path.append(item)

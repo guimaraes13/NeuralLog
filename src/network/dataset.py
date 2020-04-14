@@ -302,6 +302,93 @@ def get_predicate_indices(predicate, inverted):
     return input_index, output_index
 
 
+# noinspection DuplicatedCode
+def viterbi(transition_matrix, emission, initial_distribution=None):
+    """
+    Computes the best path given based on the Viterbi algorithm.
+
+    :param transition_matrix: the transition matrix
+    :type transition_matrix: np.ndarray
+    :param emission: the emission of the neural network
+    :type emission: np.ndarray
+    :param initial_distribution: the probabilities of the first state,
+    it assumes an uniform probability, if `None`.
+    :type initial_distribution: np.ndarray
+    :return: the best path
+    :rtype: np.ndarray
+    """
+    sequence_length, number_of_tags = emission.shape
+    state_probabilities = np.zeros((sequence_length, number_of_tags),
+                                   dtype=np.float64)
+    best_paths = np.zeros((sequence_length, number_of_tags), dtype=np.int32)
+    best_path = np.zeros(sequence_length, dtype=np.int32)
+
+    if initial_distribution is None:
+        # initial_distribution = np.full(number_of_tags, 1.0 / number_of_tags)
+        initial_distribution = np.full(number_of_tags, 1.0)
+
+    state_probabilities[0, :] = emission[0, :] * initial_distribution
+
+    transpose = transition_matrix.transpose()
+    for i in range(1, sequence_length):
+        prev_p = state_probabilities[i - 1, :] * transpose
+        best_previous_nodes = np.argmax(prev_p, axis=1)
+        state_probabilities[i] = np.max(prev_p, axis=1)
+        state_probabilities[i] *= emission[i, :]
+        best_paths[i, :] = best_previous_nodes
+
+    best_path[-1] = np.argmax(state_probabilities[-1, :])
+    for i in reversed(range(1, sequence_length)):
+        best_path[i - 1] = best_paths[i, best_path[i]]
+
+    return best_path
+
+
+# noinspection DuplicatedCode
+def log_viterbi(transition_matrix, emission, initial_distribution=None):
+    """
+    Computes the best path given based on the Viterbi algorithm.
+
+    This version uses sum instead of multiplication and assumes that both
+    `transition_matrix` and `emission` are the log of the probabilities.
+
+    :param transition_matrix: the transition matrix
+    :type transition_matrix: np.ndarray
+    :param emission: the emission of the neural network
+    :type emission: np.ndarray
+    :param initial_distribution: the probabilities of the first state,
+    it assumes an uniform probability, if `None`.
+    :type initial_distribution: np.ndarray
+    :return: the best path
+    :rtype: np.ndarray
+    """
+    sequence_length, number_of_tags = emission.shape
+    state_probabilities = np.zeros((sequence_length, number_of_tags),
+                                   dtype=np.float64)
+    best_paths = np.zeros((sequence_length, number_of_tags), dtype=np.int32)
+    best_path = np.zeros(sequence_length, dtype=np.int32)
+
+    if initial_distribution is None:
+        # initial_distribution = np.full(number_of_tags, 1.0 / number_of_tags)
+        initial_distribution = np.full(number_of_tags, 1.0)
+
+    state_probabilities[0, :] = emission[0, :] + initial_distribution
+
+    transpose = transition_matrix.transpose()
+    for i in range(1, sequence_length):
+        prev_p = state_probabilities[i - 1, :] + transpose
+        best_previous_nodes = np.argmax(prev_p, axis=1)
+        state_probabilities[i] = np.max(prev_p, axis=1)
+        state_probabilities[i] += emission[i, :]
+        best_paths[i, :] = best_previous_nodes
+
+    best_path[-1] = np.argmax(state_probabilities[-1, :])
+    for i in reversed(range(1, sequence_length)):
+        best_path[i - 1] = best_paths[i, best_path[i]]
+
+    return best_path
+
+
 class NeuralLogDataset:
     """
     Represents a NeuralLog dataset to train a NeuralLog network.

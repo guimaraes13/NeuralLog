@@ -8,3 +8,4 @@ src/language/parser/ply/parsetab.py
 src/language/parser/ply/parser.out
 /src/test
 .DS_Store
+venv

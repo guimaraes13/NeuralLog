@@ -1372,7 +1372,9 @@ class GraphRuleLayer(NeuralLogLayer):
         :type kwargs: dict[str, Any]
         """
         self.clause = clause
-        self.rule_graph = data_structures.NoDependency(rule_graph)
+        # noinspection PyTypeChecker
+        self.rule_graph = data_structures.NoDependency(
+            rule_graph)  # type: RuleGraph
         self.destinations = rule_graph.destinations
         self.literal_layers = dict()
         for key, value in literal_layers.items():
@@ -1546,7 +1548,6 @@ class GraphRuleLayer(NeuralLogLayer):
         :rtype: tf.Tensor
         """
         tensor = inputs
-        # noinspection PyUnresolvedReferences
         for loop in self.rule_graph.loops_by_nodes.get(term, []):
             tensor = self.literal_layers[str(loop)](tensor)
         return tensor
