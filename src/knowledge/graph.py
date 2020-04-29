@@ -1,11 +1,14 @@
 """
 Represents a graph from a clause.
 """
+import logging
 from collections import deque
 from typing import Dict, List, Set
 
 from src.knowledge.program import ANY_PREDICATE_NAME
 from src.language.language import Term, Literal, Atom
+
+logger = logging.getLogger()
 
 
 class RulePathFinder:
@@ -590,6 +593,26 @@ class Edge:
         return self.__str__()
 
 
+def build_edge_for_path(path, index):
+    """
+    Builds an edge object for the literal of `index` in `path`.
+
+    :param path: the path
+    :type path: RulePath
+    :param index: the index of the literal
+    :type index: int
+    :return: the edge
+    :rtype: Edge
+    """
+    literal = path.path[index]
+    if literal.arity() > 2:
+        input_indices = tuple(range(literal.arity() - 1))
+    else:
+        input_indices = path.input_indices[index],
+    edge = Edge(literal, input_indices, path.output_indices[index])
+    return edge, literal
+
+
 class RuleGraph:
     """
     Represents a rule as a graph.
@@ -632,8 +655,7 @@ class RuleGraph:
         self.edges = set()
         self.input_edges_by_nodes = dict()
         self.loops_by_nodes = dict()
-        self.paths = paths
-        self._build_graph(paths)
+        self.paths = self._build_graph(paths)
         self._merge_any_edges()
         self.grounds = grounds
 
@@ -643,22 +665,32 @@ class RuleGraph:
 
         :param paths: the completed paths between the terms of the clause
         :type paths: List[RulePath]
+        :return: the valid paths
+        :rtype: List[RulePath]
         """
         destinations = set()
         loops_already_created = set()
+        valid_paths = []
         for path in paths:
             path_end = path.path_end()
             if path_end not in destinations:
                 destinations.add(path_end)
                 self.destinations.append(path_end)
+            conflict_literal = self.is_path_valid(path)
+            if conflict_literal is not None:
+                logger.warning(
+                    "Warning: path %s, found in clause %s defined in file %s "
+                    "at line %d was discarded since it passes through a "
+                    "literal in the opposite direction of a previously "
+                    "added path. The literal that caused the conflict was %s.",
+                    path, self.clause, self.clause.provenance.filename,
+                    self.clause.provenance.start_line, conflict_literal
+                )
+                continue
+
             for i in range(len(path)):
                 output_term = path.get_output_term(i)
-                literal = path.path[i]
-                if literal.arity() > 2:
-                    input_indices = tuple(range(literal.arity() - 1))
-                else:
-                    input_indices = path.input_indices[i],
-                edge = Edge(literal, input_indices, path.output_indices[i])
+                edge, literal = build_edge_for_path(path, i)
                 self.edges.add(edge)
                 if path.is_loop(i):
                     if output_term not in loops_already_created:
@@ -670,6 +702,33 @@ class RuleGraph:
                     if edge not in literals:
                         literals.append(edge)
             loops_already_created.update(self.loops_by_nodes.keys())
+            valid_paths.append(path)
+
+        return valid_paths
+
+    def is_path_valid(self, path):
+        """
+        Check if a path is valid.
+
+        A path is `NOT` valid if it tries to pass through a literal in a
+        different direction that a previous path has already passed.
+
+        :param path: the path
+        :type path: RulePath
+        :return: `None`, if the path is valid; otherwise, the first literal
+        that caused the conflict.
+        :rtype: Literal
+        """
+        for i in range(len(path)):
+            edge, literal = build_edge_for_path(path, i)
+            if path.is_loop(i):
+                continue
+            for output_term in edge.get_input_terms():
+                literals = self.input_edges_by_nodes.get(output_term, [])
+                for lit in literals:
+                    if lit.literal == literal:
+                        return literal
+        return None
 
     def _merge_any_edges(self):
         """

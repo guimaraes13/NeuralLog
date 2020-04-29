@@ -83,7 +83,7 @@ def get_examples(file_paths, target_predicate, split_value=SPLIT_VALUE):
 @command(COMMAND_NAME)
 class OutputNLP(Command):
     """
-    Trains the neural network.
+    Saves the neural network outputs in the NLP format.
     """
 
     def __init__(self, program, args, direct=False):

@@ -1409,9 +1409,8 @@ class GraphRuleLayer(NeuralLogLayer):
                                                        grounded_result)
         return path_result
 
-    # TODO: refactor this method
-    # TODO: compute de returning paths
     def _compute_term(self, inputs, term):
+        dependence_already_added = set()
         terms_to_compute = deque([term])  # type: deque[Term]
         while len(terms_to_compute) > 0:
             size = len(terms_to_compute)
@@ -1434,7 +1433,10 @@ class GraphRuleLayer(NeuralLogLayer):
                         tensor = inputs[self.rule_graph.sources.index(current)]
                 else:
                     # The term has to be compute
-                    if self._append_terms_to_compute(current, terms_to_compute):
+                    if current not in dependence_already_added and \
+                            self._append_terms_to_compute(
+                                current, terms_to_compute):
+                        dependence_already_added.add(current)
                         continue
                     tensors = []
                     # noinspection PyUnresolvedReferences
@@ -1532,8 +1534,11 @@ class GraphRuleLayer(NeuralLogLayer):
                             raise CyclicRuleException(self.clause)
                         terms_to_compute.append(current)
                         has_term_to_compute = True
-                    if input_term not in terms_to_compute:
-                        terms_to_compute.append(input_term)
+                    # if input_term not in terms_to_compute:
+                    #     terms_to_compute.append(input_term)
+                    while input_term in terms_to_compute:
+                        terms_to_compute.remove(input_term)
+                    terms_to_compute.append(input_term)
         return has_term_to_compute
 
     def compute_loop_for_term(self, term, inputs):
