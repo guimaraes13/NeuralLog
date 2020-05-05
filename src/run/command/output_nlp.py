@@ -97,6 +97,7 @@ class OutputNLP(Command):
         program = self.program
         if not self.direct:
             program += " {}".format(COMMAND_NAME)
+        # noinspection PyTypeChecker
         parser = argparse.ArgumentParser(
             prog=program,
             description=self.get_command_description(),
@@ -282,6 +283,7 @@ class OutputNLP(Command):
         logger.info("\t\t{}:\t\t{}".format(TEST_SET_NAME, self.output_file))
         input_file_it = iter(fileinput.input(files=self.test_files))
         writer = open(self.output_file, "w")
+        # noinspection PyTypeChecker
         neural_dataset = self.model.dataset  # type: WordCharDataset
         transition_matrix = None
         initial_probabilities = None

@@ -521,6 +521,15 @@ class NeuralLogLayer(keras.layers.Layer):
         """
         return False
 
+    def __hash__(self):
+        return hash(self.name)
+
+    def __eq__(self, other):
+        if not isinstance(other, NeuralLogLayer):
+            return False
+
+        return self.name == other.name
+
 
 class EmptyLayer(NeuralLogLayer):
     """
@@ -534,10 +543,6 @@ class EmptyLayer(NeuralLogLayer):
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
         return tf.multiply(inputs, self.zero)
-
-    # noinspection PyMissingOrEmptyDocstring
-    # def compute_output_shape(self, input_shape):
-    #     return tf.TensorShape(input_shape)
 
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):
@@ -581,10 +586,6 @@ class AbstractFactLayer(NeuralLogLayer):
         """
         super(AbstractFactLayer, self).__init__(name, **kwargs)
 
-    # noinspection PyMissingOrEmptyDocstring
-    # def compute_output_shape(self, input_shape):
-    #     return tf.TensorShape(input_shape)
-
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):
         return super(AbstractFactLayer, self).get_config()
@@ -626,10 +627,6 @@ class FactLayer(AbstractFactLayer):
         :rtype: tf.Tensor
         """
         return self.kernel
-
-    # # noinspection PyMissingOrEmptyDocstring
-    # def key(self):
-    #     return self.kernel, self.fact_combining_function
 
     def __hash__(self):
         return hash(self.fact_combining_function)
@@ -935,13 +932,6 @@ class InvertedSpecificFactLayer(AbstractFactLayer):
     def get_kernel(self):
         return self.kernel
 
-    # # noinspection PyMissingOrEmptyDocstring
-    # def key(self):
-    #     # noinspection PyTypeChecker
-    #     return self.fact_layer.key() + (self.kernel, self.output_constant,
-    #                                     self.fact_combining_function,
-    #                                     self.output_extract_function)
-
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
         # return self.fact_combining_function(self.get_kernel(), inputs)
@@ -1040,10 +1030,6 @@ class LiteralLayer(NeuralLogLayer):
         """
         return self._is_empty
 
-    # noinspection PyMissingOrEmptyDocstring
-    # def compute_output_shape(self, input_shape):
-    #     return tf.TensorShape(input_shape)
-
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):
         return super(LiteralLayer, self).get_config()
@@ -1116,12 +1102,6 @@ class FunctionLayer(NeuralLogLayer):
 
         return True
 
-    # noinspection PyMissingOrEmptyDocstring
-    # def compute_output_shape(self, input_shape):
-    #     if hasattr(self.function, "compute_output_shape"):
-    #         return self.function.compute_output_shape(input_shape)
-    #     return tf.TensorShape(input_shape)
-
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):
         return super(FunctionLayer, self).get_config()
@@ -1163,10 +1143,6 @@ class AnyLiteralLayer(NeuralLogLayer):
             return False
 
         return self.aggregation_function == other.aggregation_function
-
-    # noinspection PyMissingOrEmptyDocstring
-    # def compute_output_shape(self, input_shape):
-    #     return tf.TensorShape(input_shape)
 
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):
@@ -1267,10 +1243,6 @@ class RuleLayer(NeuralLogLayer):
         :rtype: bool
         """
         return self._is_empty
-
-    # noinspection PyMissingOrEmptyDocstring
-    # def compute_output_shape(self, input_shape):
-    #     return tf.TensorShape(input_shape)
 
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):
@@ -1534,8 +1506,6 @@ class GraphRuleLayer(NeuralLogLayer):
                             raise CyclicRuleException(self.clause)
                         terms_to_compute.append(current)
                         has_term_to_compute = True
-                    # if input_term not in terms_to_compute:
-                    #     terms_to_compute.append(input_term)
                     while input_term in terms_to_compute:
                         terms_to_compute.remove(input_term)
                     terms_to_compute.append(input_term)
@@ -1586,10 +1556,6 @@ class GraphRuleLayer(NeuralLogLayer):
         """
         return self._is_empty
 
-    # noinspection PyMissingOrEmptyDocstring
-    # def compute_output_shape(self, input_shape):
-    #     return tf.TensorShape(input_shape)
-
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):
         return super(GraphRuleLayer, self).get_config()
@@ -1627,10 +1593,6 @@ class DiagonalRuleLayer(NeuralLogLayer):
     def call(self, inputs, **kwargs):
         result = self.rule_layer(inputs)
         return self.combining_function(inputs, result)
-
-    # noinspection PyMissingOrEmptyDocstring
-    # def compute_output_shape(self, input_shape):
-    #     return self.rule_layer.compute_output_shape(input_shape)
 
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):
@@ -1684,12 +1646,6 @@ class ExtractUnaryLiteralLayer(NeuralLogLayer):
     def call(self, inputs, **kwargs):
         result = self.literal_layer(inputs)
         return self.input_combining_function(inputs, result)
-
-    # noinspection PyMissingOrEmptyDocstring
-    # def compute_output_shape(self, input_shape):
-    #     output_shape = list(input_shape)
-    #     output_shape[-1] = 1
-    #     return tuple(output_shape)
 
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):

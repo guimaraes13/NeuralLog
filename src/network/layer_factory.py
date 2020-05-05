@@ -451,6 +451,7 @@ class LayerFactory:
     def _get_variable(self, name, value, shape, dtype=tf.float32):
         tensor = self._tensor_by_name.get(name, None)
         if tensor is None:
+            # noinspection PyArgumentList
             tensor = tf.Variable(initial_value=value, dtype=dtype,
                                  shape=shape, name=get_standardised_name(name),
                                  trainable=True)

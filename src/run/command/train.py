@@ -166,6 +166,25 @@ def find_best_model(checkpoint, history):
     return checkpoint.filepath.format(epoch=(best_epoch + 1) * period)
 
 
+def unique(elements):
+    """
+    Returns a list of unique elements from the `elements`.
+
+    :param elements: the input elements.
+    :type elements: list
+    :return: the list of unique elements
+    :rtype: list
+    """
+    element_set = set()
+    unique_list = []
+    for element in elements:
+        if element in element_set:
+            continue
+        unique_list.append(element)
+        element_set.add(element)
+    return unique_list
+
+
 @command(COMMAND_NAME)
 class Train(Command):
     """
@@ -185,11 +204,12 @@ class Train(Command):
         self.callbacks = []
         self.best_models = dict()  # type: Dict[str, ModelCheckpoint]
 
-    # noinspection PyMissingOrEmptyDocstring
+    # noinspection PyMissingOrEmptyDocstring,DuplicatedCode
     def build_parser(self) -> argparse.ArgumentParser:
         program = self.program
         if not self.direct:
             program += " {}".format(COMMAND_NAME)
+        # noinspection PyTypeChecker
         parser = argparse.ArgumentParser(
             prog=program,
             description=self.get_command_description(),
@@ -425,11 +445,12 @@ class Train(Command):
                     all_metrics.append((key, values))
             all_metrics = sorted(all_metrics, key=lambda x: x[0])
             all_metrics = list(map(lambda x: x[1], all_metrics))
-            all_metrics = reduce(list.__add__, all_metrics)
+            if len(all_metrics) > 0:
+                all_metrics = reduce(list.__add__, all_metrics)
             for key in output_map.values():
                 values = results.get(key, [])
                 default_loss = loss.get(key) if isinstance(loss, dict) else loss
-                results[key] = [default_loss] + all_metrics + values
+                results[key] = unique([default_loss] + all_metrics + values)
             return results
         elif metrics is None:
             if isinstance(loss, dict):

@@ -3,7 +3,7 @@
 NeuralLog is a system to compile logic programs into Artificial Neural Networks.
 
 ## Dependencies
-- python3;
+- python 3.7;
 - tensorflow 2.0;
 - ply;
 - scikit-learn;
