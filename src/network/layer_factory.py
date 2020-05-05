@@ -181,10 +181,13 @@ class LayerFactory:
 
     program: NeuralLogProgram
 
-    def __init__(self, program, layer_name_format="fact_layer_{}", train=True):
+    def __init__(self, program, layer_name_format="fact_layer_{}", train=True,
+                 regularizer=None):
         """
         Creates a TensorFactory.
 
+        :param program: the NeuralLog program
+        :type program: NeuralLogProgram
         :param layer_name_format: the format of the layer name
         :type layer_name_format: str
         :param train: if `False`, all the literals will be considered as not
@@ -192,8 +195,8 @@ class LayerFactory:
         inference only. In this way, the unknown facts will be treated as
         zeros, instead of being randomly initialized
         :type train: bool
-        :param program: the NeuralLog program
-        :type program: NeuralLogProgram
+        :param regularizer: the regularizer
+        :type regularizer: callable
         """
         self.variable_cache = dict()
         self._tensor_by_name = dict()
@@ -207,6 +210,7 @@ class LayerFactory:
         self.train = train
         # Layer Properties
         self.layer_name_format = layer_name_format
+        self.regularizer = regularizer
 
     def build_atom(self, atom):
         """
@@ -752,7 +756,8 @@ class LayerFactory:
             if sparse:
                 kernel = tf.sparse.to_dense(kernel)
             combining_func = self.get_edge_combining_function(atom.predicate)
-        return FactLayer(name, kernel, combining_func)
+        return FactLayer(name, kernel, combining_func,
+                         regularizer=self.regularizer)
 
     # noinspection PyMissingOrEmptyDocstring
     def _get_not_trainable_constants(self, atom):
@@ -809,7 +814,8 @@ class LayerFactory:
         weight_combination_func = \
             self.get_weighted_attribute_combining_function(atom.predicate)
         return AttributeFactLayer(name, w_tensor, v_tensor,
-                                  fact_combining_func, weight_combination_func)
+                                  fact_combining_func, weight_combination_func,
+                                  regularizer=self.regularizer)
 
     def _get_arity_2_1_constant_attribute(self, atom, attribute_index,
                                           trainable=False):
@@ -854,7 +860,8 @@ class LayerFactory:
         weight_combination_func = \
             self.get_weighted_attribute_combining_function(atom.predicate)
         return AttributeFactLayer(name, w_tensor, v_tensor,
-                                  fact_combining_func, weight_combination_func)
+                                  fact_combining_func, weight_combination_func,
+                                  regularizer=self.regularizer)
 
     # noinspection PyMissingOrEmptyDocstring
     def _get_weights_and_values_for_attribute_predicate(
@@ -929,7 +936,8 @@ class LayerFactory:
         return SpecificFactLayer(
             name, fact_layer,
             output_constant=output_constant,
-            output_extract_function=output_extract_func
+            output_extract_function=output_extract_func,
+            regularizer=self.regularizer
         )
 
     def _get_arity_2_1_variable_number(self, atom, attribute_index,
@@ -946,7 +954,8 @@ class LayerFactory:
         weight_combination_func = \
             self.get_weighted_attribute_combining_function(atom.predicate)
         return AttributeFactLayer(name, w_tensor, v_tensor,
-                                  fact_combining_func, weight_combination_func)
+                                  fact_combining_func, weight_combination_func,
+                                  regularizer=self.regularizer)
 
     def _get_arity_2_2_trainable_variable_and_constant(self, atom):
         initializer_name = self._get_initializer_name(atom.predicate)
@@ -972,7 +981,8 @@ class LayerFactory:
             input_constants=input_constant,
             input_combining_functions=input_combining_function,
             output_constant=output_constant,
-            output_extract_function=output_extract_function
+            output_extract_function=output_extract_function,
+            regularizer=self.regularizer
         )
 
     def _get_arity_2_2_not_trainable_constant_variable(self, atom):
@@ -1060,7 +1070,8 @@ class LayerFactory:
         initial_value = get_initial_value_by_name(initializer_name, shape)
         kernel = self._matrix_to_variable_with_value(atom, initial_value, shape)
         fact_combining_function = self.get_edge_combining_function(predicate)
-        return FactLayer(name, kernel, fact_combining_function)
+        return FactLayer(
+            name, kernel, fact_combining_function, regularizer=self.regularizer)
 
     # noinspection PyMissingOrEmptyDocstring
     @tensor_function(TensorFunctionKey(2, 0, False, FactoryTermType.NUMBER,
@@ -1238,7 +1249,8 @@ class LayerFactory:
         output_extract_func = self.get_output_extract_function(atom.predicate)
         return SpecificFactLayer(name, fact_layer,
                                  output_constant=output_constant,
-                                 output_extract_function=output_extract_func)
+                                 output_extract_function=output_extract_func,
+                                 regularizer=self.regularizer)
 
     # noinspection PyMissingOrEmptyDocstring
     @tensor_function(TensorFunctionKey(2, 2, True, FactoryTermType.CONSTANT,
@@ -1259,7 +1271,8 @@ class LayerFactory:
         input_combining_func = self.get_and_combining_function(atom.predicate)
         return SpecificFactLayer(name, fact_layer,
                                  input_constants=input_constant,
-                                 input_combining_functions=input_combining_func)
+                                 input_combining_functions=input_combining_func,
+                                 regularizer=self.regularizer)
 
     # noinspection PyMissingOrEmptyDocstring
     @tensor_function(TensorFunctionKey(2, 2, True,
@@ -1305,12 +1318,13 @@ class LayerFactory:
         name = self._get_layer_name(atom)
         fact_layer = self.build_atom(variable_atom)
         predicate = atom.predicate
-        fact_layer = InvertedFactLayer(fact_layer, self, predicate)
+        fact_layer = InvertedFactLayer(
+            fact_layer, self, predicate, regularizer=self.regularizer)
         fact_combining_function = self.get_edge_combining_function_2d(predicate)
         output_constant = self.get_one_hot_tensor(atom, 1)
         return InvertedSpecificFactLayer(
             name, fact_layer, fact_combining_function,
-            output_constant=output_constant)
+            output_constant=output_constant, regularizer=self.regularizer)
 
     # noinspection PyMissingOrEmptyDocstring
     @tensor_function(TensorFunctionKey(2, 2, True, FactoryTermType.VARIABLE,
@@ -1322,7 +1336,8 @@ class LayerFactory:
             name = self._get_layer_name(atom)
             kernel = self.build_atom(variable_atom).get_kernel()
             fact_combining_func = self.get_edge_combining_function(predicate)
-            return DiagonalFactLayer(name, kernel, fact_combining_func)
+            return DiagonalFactLayer(
+                name, kernel, fact_combining_func, regularizer=self.regularizer)
         else:
             initializer_name = self._get_initializer_name(predicate)
             size_0 = self.program.get_constant_size(atom.predicate, 0)

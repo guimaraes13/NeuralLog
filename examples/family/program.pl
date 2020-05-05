@@ -43,6 +43,7 @@ set_parameter(metrics, grand_mother, mean_absolute_error).
 set_parameter(optimizer, sgd).
 
 %% Sets the regularizer
+%% Default: `None`
 set_parameter(regularizer, l2).
 
 %% Sets the batch size

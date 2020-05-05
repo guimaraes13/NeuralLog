@@ -227,7 +227,8 @@ class NeuralLogNetwork(keras.Model):
     """
 
     # noinspection PyTypeChecker
-    def __init__(self, dataset, train=True, inverse_relations=True):
+    def __init__(self, dataset, train=True, inverse_relations=True,
+                 regularizer=None):
         """
         Creates a NeuralLogNetwork.
 
@@ -241,6 +242,8 @@ class NeuralLogNetwork(keras.Model):
         inverse relations.
         :type inverse_relations: bool
         :type train: bool
+        :param regularizer: the regularizer
+        :type regularizer: callable
         """
         super(NeuralLogNetwork, self).__init__(name="NeuralLogNetwork")
 
@@ -267,7 +270,8 @@ class NeuralLogNetwork(keras.Model):
 
         self.dataset = dataset
         self.program = dataset.program
-        self.layer_factory = LayerFactory(self.program, train=train)
+        self.layer_factory = LayerFactory(
+            self.program, train=train, regularizer=regularizer)
         # noinspection PyTypeChecker
         self.predicates = data_structures.NoDependency(list())
         self.predicate_layers = list()
@@ -503,8 +507,9 @@ class NeuralLogNetwork(keras.Model):
             negation_function = self.get_literal_negation_function(
                 predicate)
         return LiteralLayer(
-            "literal_layer_{}".format(
-                get_standardised_name(renamed_literal.__str__())), inputs,
+            "literal_layer_{}_{}".format(
+                get_standardised_name(renamed_literal.__str__()), depth),
+            inputs,
             combining_func, negation_function=negation_function)
 
     def _build_specific_rule(self, literal, inverted, rule, substitution):
@@ -724,10 +729,11 @@ class NeuralLogNetwork(keras.Model):
                 literal_layer = self._build_literal(grounded, predicates_depths)
                 grounded_layers.append(literal_layer)
 
-            layer_name = "rule_layer_{}".format(
-                get_standardised_name(clause.__str__()))
+            layer_name = "rule_layer_{}_{}".format(
+                get_standardised_name(clause.__str__()),
+                predicates_depths[clause.head.predicate])
             rule_layer = GraphRuleLayer(
-                clause, layer_name, rule_graph, literal_layers, grounded_layers,
+                layer_name, clause, rule_graph, literal_layers, grounded_layers,
                 self._get_path_combining_function(clause.head.predicate),
                 self.layer_factory.get_and_combining_function(),
                 self.neutral_element)

@@ -31,7 +31,7 @@ LOGIC_PROGRAM_EXTENSION = ".pl"
 
 DEFAULT_LOSS = "mean_squared_error"
 DEFAULT_OPTIMIZER = "sgd"
-DEFAULT_REGULARIZER = "l2"
+DEFAULT_REGULARIZER = None
 DEFAULT_BATCH_SIZE = 1
 DEFAULT_NUMBER_OF_EPOCHS = 10
 DEFAULT_VALID_PERIOD = 1
@@ -558,19 +558,23 @@ class Train(Command):
         start_func = time.perf_counter()
         logger.info("Building model...")
         self._create_dataset()
-        self.model = NeuralLogNetwork(self.neural_dataset, train=True)
+        regularizer = self.neural_program.parameters.get(
+            "regularizer", DEFAULT_REGULARIZER)
+        self.model = NeuralLogNetwork(
+            self.neural_dataset, train=True,
+            regularizer=regularizer
+        )
         self.model.build_layers()
         self.output_map = self._get_output_map()
         self._read_parameters(self.output_map)
         self._log_parameters(
-            ["clip_labels", "loss_function", "optimizer", "regularizer",
+            ["clip_labels", "loss_function", "optimizer", "regularizer"
              "metrics", "inverse_relations"],
             self.output_map.inverse
         )
         self.model.compile(
             loss=self.parameters["loss_function"],
             optimizer=self.parameters["optimizer"],
-            regularizer=self.parameters["regularizer"],
             metrics=self.parameters["metrics"]
         )
 

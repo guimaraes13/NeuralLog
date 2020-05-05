@@ -505,6 +505,7 @@ class NeuralLogLayer(keras.layers.Layer):
         # noinspection PyTypeChecker
         kwargs["name"] = name
         self.layer_name = name
+        kwargs.pop("regularizer", None)
         super(NeuralLogLayer, self).__init__(**kwargs)
 
     def __str__(self):
@@ -576,15 +577,28 @@ class AbstractFactLayer(NeuralLogLayer):
     Represents an abstract fact layer.
     """
 
-    def __init__(self, name, **kwargs):
+    def __init__(self, name, kernel, **kwargs):
         """
         Creates an AbstractFactLayer.
         :param name: the name of the layer
         :type name: str
+        :param kernel: the kernel
+        :type kernel: tf.Tensor
         :param kwargs: additional arguments
         :type kwargs: dict[str, Any]
         """
+        regularizer = kwargs.get("regularizer")
         super(AbstractFactLayer, self).__init__(name, **kwargs)
+        if isinstance(kernel, tf.Variable) and kernel.trainable:
+            self.kernel = self.add_weight(
+                name=kernel.name,
+                shape=kernel.shape,
+                dtype=kernel.dtype,
+                trainable=kernel.trainable,
+                getter=Getter(kernel),
+                regularizer=regularizer)
+        else:
+            self.kernel = kernel
 
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):
@@ -594,6 +608,15 @@ class AbstractFactLayer(NeuralLogLayer):
     @classmethod
     def from_config(cls, config):
         return cls(**config)
+
+
+class Getter:
+
+    def __init__(self, value):
+        self.value = value
+
+    def __call__(self, *args, **kwargs):
+        return self.value
 
 
 class FactLayer(AbstractFactLayer):
@@ -614,10 +637,9 @@ class FactLayer(AbstractFactLayer):
         :param kwargs: additional arguments
         :type kwargs: dict[str, Any]
         """
-        self.kernel = kernel
+        super(FactLayer, self).__init__(name, kernel, **kwargs)
         self.fact_combining_function = fact_combining_function
         self.rank = self.kernel.shape.rank
-        super(FactLayer, self).__init__(name, **kwargs)
 
     def get_kernel(self):
         """
@@ -627,16 +649,6 @@ class FactLayer(AbstractFactLayer):
         :rtype: tf.Tensor
         """
         return self.kernel
-
-    def __hash__(self):
-        return hash(self.fact_combining_function)
-
-    def __eq__(self, other):
-        if not isinstance(other, FactLayer):
-            return False
-
-        return self.kernel is other.kernel and \
-               self.fact_combining_function == other.fact_combining_function
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
@@ -703,41 +715,50 @@ class InvertedFactLayer(FactLayer):
         :type kwargs: dict[str, Any]
         """
         name = fact_layer.name + "_inv"
-        self.kernel = fact_layer.get_kernel()
-        self.kernel_rank = self.kernel.shape.rank
-        self.fact_combining_function = fact_layer.fact_combining_function
-        self._adjust_for_inverted_fact(layer_factory, predicate)
+        kernel, fact_combining_function = \
+            self._adjust_for_inverted_fact(
+                fact_layer.get_kernel(), fact_layer.fact_combining_function,
+                layer_factory, predicate)
         super(InvertedFactLayer, self).__init__(
-            name, self.kernel, self.fact_combining_function, **kwargs)
+            name, kernel, fact_combining_function, **kwargs)
 
-    def _adjust_for_inverted_fact(self, factory, predicate):
+    @staticmethod
+    def _adjust_for_inverted_fact(kernel, fact_combining_function, factory,
+                                  predicate):
         """
         Adjusts the kernel and combining function to address the inverse
         predicate with constants in it.
 
+        :param kernel: the kernel
+        :type kernel: tf.Tensor
+        :param fact_combining_function: the fact combining fucntion
+        :type fact_combining_function: function
         :param factory: the layer factory
         :type factory: src.network.layer_factory.LayerFactory
         :param predicate: the atom's predicate
         :type predicate: Predicate
         """
-        sparse = isinstance(self.kernel, tf.SparseTensor)
-        if self.kernel_rank == 1:
-            self.fact_combining_function = \
+        kernel_rank = kernel.shape.rank
+        sparse = isinstance(kernel, tf.SparseTensor)
+        if kernel_rank == 1:
+            fact_combining_function = \
                 factory.get_edge_combining_function_2d(predicate, sparse)
             if sparse:
-                self.kernel = tf.sparse.reshape(self.kernel, [1, -1])
+                kernel = tf.sparse.reshape(kernel, [1, -1])
             else:
-                self.kernel = tf.reshape(self.kernel, [1, -1])
+                kernel = tf.reshape(kernel, [1, -1])
 
         inverted_func = factory.get_invert_fact_function(predicate, sparse)
-        self.kernel = inverted_func(self.kernel)  # type: tf.Tensor
+        kernel = inverted_func(kernel)  # type: tf.Tensor
 
-        if self.kernel.shape.rank == 2 and self.kernel.shape[0] == 1:
+        if kernel.shape.rank == 2 and kernel.shape[0] == 1:
             if sparse:
-                self.kernel = tf.sparse.to_dense(self.kernel)
-            self.fact_combining_function = \
+                kernel = tf.sparse.to_dense(kernel)
+            fact_combining_function = \
                 factory.get_edge_combining_function(predicate)
-            self.kernel = tf.reshape(self.kernel, [-1])
+            kernel = tf.reshape(kernel, [-1])
+
+        return kernel, fact_combining_function
 
 
 class AttributeFactLayer(FactLayer):
@@ -767,12 +788,18 @@ class AttributeFactLayer(FactLayer):
         :param kwargs: additional arguments
         :type kwargs: dict[str, Any]
         """
-        kernel = weight_combining_function(weights, values)
+        kernel = weights
         super(AttributeFactLayer, self).__init__(
             name, kernel, fact_combining_function, **kwargs)
+        self.combined_kernel = weight_combining_function(
+            super(AttributeFactLayer, self).get_kernel(), values)
+
+    # noinspection PyMissingOrEmptyDocstring
+    def get_kernel(self):
+        return self.combined_kernel
 
 
-class SpecificFactLayer(AbstractFactLayer):
+class SpecificFactLayer(NeuralLogLayer):
     """
     A layer to represent a fact with constants applied to it.
     """
@@ -801,16 +828,14 @@ class SpecificFactLayer(AbstractFactLayer):
         :param kwargs: additional arguments
         :type kwargs: dict[str, Any]
         """
+        super(SpecificFactLayer, self).__init__(name, **kwargs)
         self.fact_layer = fact_layer
-
         self.output_constant = output_constant
         self.output_extract_function = output_extract_function
         self.input_constants = None
         self.input_combining_functions = None
         self.call = self.call_single_input
         self._build_inputs(input_constants, input_combining_functions)
-
-        super(SpecificFactLayer, self).__init__(name, **kwargs)
 
     def _build_inputs(self, input_constants, input_combining_functions):
         if input_constants is None:
@@ -871,35 +896,8 @@ class SpecificFactLayer(AbstractFactLayer):
             result = tf.reshape(result, [-1, 1])
         return result
 
-    def __hash__(self):
-        return hash((self.fact_layer,
-                     self.input_combining_functions,
-                     self.output_extract_function))
 
-    # noinspection DuplicatedCode
-    def __eq__(self, other):
-        if not isinstance(other, SpecificFactLayer):
-            return False
-
-        if self.fact_layer != other.fact_layer:
-            return False
-
-        if self.input_constants is not other.input_constants:
-            return False
-
-        if self.output_constant is not other.output_constant:
-            return False
-
-        if self.input_combining_functions != other.input_combining_functions:
-            return False
-
-        if self.output_extract_function != other.output_extract_function:
-            return False
-
-        return True
-
-
-class InvertedSpecificFactLayer(AbstractFactLayer):
+class InvertedSpecificFactLayer(NeuralLogLayer):
     """
     A layer to represent a inverted fact with constants applied to it.
     """
@@ -921,12 +919,12 @@ class InvertedSpecificFactLayer(AbstractFactLayer):
         :param kwargs: additional arguments
         :type kwargs: dict[str, Any]
         """
+        super(InvertedSpecificFactLayer, self).__init__(name, **kwargs)
         self.fact_layer = fact_layer
         self.fact_combining_function = fact_combining_function
         self.output_constant = output_constant
         self.output_extract_function = output_extract_function
         self.kernel = tf.reshape(self.fact_layer(self.output_constant), [-1, 1])
-        super(InvertedSpecificFactLayer, self).__init__(name, **kwargs)
 
     # noinspection PyMissingOrEmptyDocstring
     def get_kernel(self):
@@ -936,33 +934,6 @@ class InvertedSpecificFactLayer(AbstractFactLayer):
     def call(self, inputs, **kwargs):
         # return self.fact_combining_function(self.get_kernel(), inputs)
         return self.fact_combining_function(inputs, self.get_kernel())
-
-    def __hash__(self):
-        return hash((self.fact_layer,
-                     self.fact_combining_function,
-                     self.output_extract_function))
-
-    # noinspection DuplicatedCode
-    def __eq__(self, other):
-        if not isinstance(other, InvertedSpecificFactLayer):
-            return False
-
-        if self.fact_layer != other.fact_layer:
-            return False
-
-        if self.kernel is not other.kernel:
-            return False
-
-        if self.output_constant is not other.output_constant:
-            return False
-
-        if self.fact_combining_function != other.fact_combining_function:
-            return False
-
-        if self.output_extract_function != other.output_extract_function:
-            return False
-
-        return True
 
 
 class LiteralLayer(NeuralLogLayer):
@@ -988,11 +959,11 @@ class LiteralLayer(NeuralLogLayer):
         :param kwargs: additional arguments
         :type kwargs: dict
         """
+        super(LiteralLayer, self).__init__(name, **kwargs)
         self.input_layers = input_layers
         self.literal_combining_function = literal_combining_function
         self.negation_function = negation_function
         self._is_empty = self._compute_empty()
-        super(LiteralLayer, self).__init__(name, **kwargs)
 
     def _compute_empty(self):
         for layer in self.input_layers:
@@ -1039,28 +1010,6 @@ class LiteralLayer(NeuralLogLayer):
     def from_config(cls, config):
         return cls(**config)
 
-    def __hash__(self):
-        if self.negation_function is None and len(self.input_layers) == 1:
-            return hash(self.input_layers[0])
-
-        return hash(tuple(self.input_layers) +
-                    (self.literal_combining_function, self.negation_function))
-
-    def __eq__(self, other):
-        if not isinstance(other, LiteralLayer):
-            return False
-
-        if self.input_layers != other.input_layers:
-            return False
-
-        if self.literal_combining_function != other.literal_combining_function:
-            return False
-
-        if self.negation_function != other.negation_function:
-            return False
-
-        return True
-
 
 class FunctionLayer(NeuralLogLayer):
     """
@@ -1076,9 +1025,9 @@ class FunctionLayer(NeuralLogLayer):
         :param function: the function
         :type function: callable
         """
+        super(FunctionLayer, self).__init__(name, **kwargs)
         self.function = function
         self.inputs = inputs
-        super(FunctionLayer, self).__init__(name, **kwargs)
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
@@ -1086,21 +1035,6 @@ class FunctionLayer(NeuralLogLayer):
             return self.function(inputs)
 
         return self.function(self.inputs)
-
-    def __hash__(self):
-        return hash(self.function)
-
-    def __eq__(self, other):
-        if not isinstance(other, FunctionLayer):
-            return False
-
-        if self.inputs is not other.inputs:
-            return False
-
-        if self.function != other.function:
-            return False
-
-        return True
 
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):
@@ -1126,23 +1060,14 @@ class AnyLiteralLayer(NeuralLogLayer):
         :param kwargs: additional arguments
         :type kwargs: dict[str, Any]
         """
-        self.aggregation_function = aggregation_function
         super(AnyLiteralLayer, self).__init__(name, **kwargs)
+        self.aggregation_function = aggregation_function
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
         result = self.aggregation_function(inputs)
         result = tf.reshape(result, [-1, 1])
         return result
-
-    def __hash__(self):
-        return hash(self.aggregation_function)
-
-    def __eq__(self, other):
-        if not isinstance(other, AnyLiteralLayer):
-            return False
-
-        return self.aggregation_function == other.aggregation_function
 
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):
@@ -1178,12 +1103,12 @@ class RuleLayer(NeuralLogLayer):
         :param kwargs: additional arguments
         :type kwargs: dict[str, Any]
         """
+        super(RuleLayer, self).__init__(name, **kwargs)
         self.paths = paths
         self.grounded_layers = grounded_layers
         self.path_combining_function = path_combining_function
         self.neutral_element = neutral_element
         self._is_empty = self._compute_empty()
-        super(RuleLayer, self).__init__(name, **kwargs)
 
     def _compute_empty(self):
         for path in self.paths:
@@ -1253,25 +1178,6 @@ class RuleLayer(NeuralLogLayer):
     def from_config(cls, config):
         return cls(**config)
 
-    def __hash__(self):
-        return hash((len(self.paths), self.path_combining_function) +
-                    tuple(self.grounded_layers))
-
-    def __eq__(self, other):
-        if not isinstance(other, RuleLayer):
-            return False
-
-        if self.path_combining_function != other.path_combining_function:
-            return False
-
-        if self.paths != other.paths:
-            return False
-
-        if self.grounded_layers != other.grounded_layers:
-            return False
-
-        return True
-
 
 class CyclicRuleException(Exception):
     """
@@ -1314,17 +1220,16 @@ class GraphRuleLayer(NeuralLogLayer):
     A Layer to represent a logic graph rule.
     """
 
-    def __init__(self, clause, name, rule_graph, literal_layers,
-                 grounded_layers,
-                 path_combining_function, and_combining_function,
-                 neutral_element, **kwargs):
+    def __init__(self, name, clause, rule_graph, literal_layers,
+                 grounded_layers, path_combining_function,
+                 and_combining_function, neutral_element, **kwargs):
         """
         Creates a GraphRuleLayer.
 
-        :param clause: the horn clause
-        :param clause: HornClause
         :param name: the name of the layer
         :type name: str
+        :param clause: the horn clause
+        :param clause: HornClause
         :param rule_graph: the rule graph
         :type rule_graph: RuleGraph
         :param literal_layers: the literal layers
@@ -1343,6 +1248,7 @@ class GraphRuleLayer(NeuralLogLayer):
         :param kwargs: additional arguments
         :type kwargs: dict[str, Any]
         """
+        super(GraphRuleLayer, self).__init__(name, **kwargs)
         self.clause = clause
         # noinspection PyTypeChecker
         self.rule_graph = data_structures.NoDependency(
@@ -1357,7 +1263,6 @@ class GraphRuleLayer(NeuralLogLayer):
         self.neutral_element = neutral_element
         self._is_empty = self._compute_empty()
         self.cache = dict()
-        super(GraphRuleLayer, self).__init__(name, **kwargs)
 
     def _compute_empty(self):
         for layer in self.literal_layers.values():
@@ -1585,9 +1490,9 @@ class DiagonalRuleLayer(NeuralLogLayer):
         :type kwargs: dict[str, Any]
         """
         name = rule_layer.name + "_diagonal"
+        super(DiagonalRuleLayer, self).__init__(name, **kwargs)
         self.rule_layer = rule_layer
         self.combining_function = combining_function
-        super(DiagonalRuleLayer, self).__init__(name, **kwargs)
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
@@ -1602,22 +1507,6 @@ class DiagonalRuleLayer(NeuralLogLayer):
     @classmethod
     def from_config(cls, config):
         return cls(**config)
-
-    def __hash__(self):
-        return hash(("_diagonal", self.rule_layer))
-
-    # noinspection DuplicatedCode
-    def __eq__(self, other):
-        if not isinstance(other, DiagonalRuleLayer):
-            return False
-
-        if self.rule_layer != other.rule_layer:
-            return False
-
-        if self.combining_function is not other.combining_function:
-            return False
-
-        return True
 
 
 class ExtractUnaryLiteralLayer(NeuralLogLayer):
@@ -1638,9 +1527,9 @@ class ExtractUnaryLiteralLayer(NeuralLogLayer):
         :type kwargs: dict[str, Any]
         """
         name = literal_layer.name + "_extract_unary"
+        super(ExtractUnaryLiteralLayer, self).__init__(name, **kwargs)
         self.literal_layer = literal_layer
         self.input_combining_function = input_combining_function
-        super(ExtractUnaryLiteralLayer, self).__init__(name, **kwargs)
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
@@ -1655,19 +1544,3 @@ class ExtractUnaryLiteralLayer(NeuralLogLayer):
     @classmethod
     def from_config(cls, config):
         return cls(**config)
-
-    def __hash__(self):
-        return hash(("_extract_unary", self.literal_layer))
-
-    # noinspection DuplicatedCode
-    def __eq__(self, other):
-        if not isinstance(other, ExtractUnaryLiteralLayer):
-            return False
-
-        if self.literal_layer != other.literal_layer:
-            return False
-
-        if self.input_combining_function is not other.input_combining_function:
-            return False
-
-        return True
