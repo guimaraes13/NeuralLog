@@ -74,19 +74,23 @@ def build_terms(arguments):
     return terms
 
 
-def get_variable_atom(atom):
+def get_variable_atom(value):
     """
-    Gets an atom by replacing their constant for unique variables.
+    Gets an atom or literal by replacing their constant for unique variables.
 
-    :param atom: the atom
-    :type atom: Atom
-    :return: the renamed atom
-    :rtype: Atom
+    :param value: the literal, atom or predicate
+    :type value: Literal or Atom or Predicate
+    :return: the renamed literal, atom
+    :rtype: Literal or Atom
     """
-    terms = [Variable("X{}".format(i)) for i in range(atom.arity())]
-    variable_atom = Atom(atom.predicate, *terms)
-    if isinstance(atom, Literal):
-        return Literal(variable_atom, negated=atom.negated)
+    if isinstance(value, Atom):
+        predicate = value.predicate
+    else:
+        predicate = value
+    terms = [Variable("X{}".format(i)) for i in range(predicate.arity)]
+    variable_atom = Atom(predicate, *terms)
+    if isinstance(value, Literal):
+        return Literal(variable_atom, negated=value.negated)
     return variable_atom
 
 

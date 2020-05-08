@@ -23,7 +23,7 @@ NO_EXAMPLE_SET = ":none:"
 MAX_NUMBER_OF_ARGUMENTS = -1
 
 PREDICATE_TYPE_MATCH = re.compile("\\$([a-zA-Z_-][a-zA-Z0-9_-]*)"
-                                  "/([1-9][0-9]*)\\[([0-9]+)\\](\\[.+\\])?")
+                                  "/([1-9][0-9]*)(\\[([0-9]+)\\](\\[.+\\])?)?")
 
 KT = TypeVar('KT')  # Key type.
 VT = TypeVar('VT')  # Value type.
@@ -1617,11 +1617,13 @@ class NeuralLogProgram:
             if match is not None:
                 groups = match.groups()
                 predicate_name = groups[0]
-                arity = groups[1]
-                index = int(groups[2])
-                predicate = Predicate(predicate_name, int(arity))
-                if len(groups) > 3 and groups[3] is not None:
-                    term = get_constant_from_string(groups[3][1:-1])
+                arity = int(groups[1])
+                predicate = Predicate(predicate_name, arity)
+                if len(groups) < 3 or groups[2] is None:
+                    return predicate
+                index = int(groups[3])
+                if len(groups) > 4 and groups[4] is not None:
+                    term = get_constant_from_string(groups[4][1:-1])
                     return self.get_index_of_constant(predicate, index, term)
                 else:
                     return self.get_constant_size(predicate, index)

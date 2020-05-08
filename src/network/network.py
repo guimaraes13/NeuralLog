@@ -14,7 +14,7 @@ from src.knowledge.program import NeuralLogProgram, ANY_PREDICATE_NAME, \
     SimpleRulePathFinder
 from src.language.language import Atom, Term, HornClause, Literal, \
     get_renamed_literal, get_substitution, get_variable_indices, Predicate, \
-    get_renamed_atom
+    get_renamed_atom, get_variable_atom
 from src.network.dataset import NeuralLogDataset
 from src.network.layer_factory import LayerFactory, \
     get_standardised_name
@@ -284,10 +284,20 @@ class NeuralLogNetwork(keras.Model):
 
     # noinspection PyMissingOrEmptyDocstring
     def compile(self, *args, **kwargs):
-        my_loss = kwargs.get("loss", None)
-        if isinstance(my_loss, NeuralLogLoss):
-            self.loss_traced_objects = my_loss.get_traceable_objects()
+        self._build_neural_log_loss(kwargs)
         return super().compile(*args, **kwargs)
+
+    def _build_neural_log_loss(self, kwargs):
+        my_loss = kwargs.get("loss", None)
+        if isinstance(my_loss, LossMaskWrapper):
+            my_loss = my_loss.function
+        if isinstance(my_loss, NeuralLogLoss):
+            tensors = my_loss.predicate_parameters()
+            for key, value in tensors.items():
+                atom = get_variable_atom(value)
+                tensors[key] = self.layer_factory.build_atom(atom).get_kernel()
+            self.loss_traced_objects = tensors
+            my_loss.build(**tensors)
 
     def get_recursion_depth(self, predicate=None):
         """

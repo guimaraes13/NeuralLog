@@ -75,7 +75,21 @@ def neural_log_loss_function(identifier):
     :return: the decorated function
     :rtype: function
     """
-    return lambda x: registry(x, identifier, loss_functions)
+
+    def registry_loss(func):
+        """
+        Function to registry the NeuralLog loss function.
+
+        :param func: the function
+        :type func: function
+        :return: the registry function
+        :rtype: function
+        """
+        if not isinstance(func, NeuralLogLoss.__class__):
+            raise Exception("Implementation must inherit from NeuralLogLoss.")
+        return registry(func, identifier, loss_functions)
+
+    return registry_loss
 
 
 def _deserialize(configuration, function_dict, keras_func, name_only=False):
@@ -490,13 +504,41 @@ def build_input_for_terms(terms, cache):
 class NeuralLogLoss:
     """
     Abstract NeuralLog loss function class.
+
+    If your loss function has internal variables that are mapped to logic
+    facts, one must return the logic predicates to be mapped in the
+    `predicate_parameter` method. Then, the tensors mapping to logic facts
+    will be passed as parameters to the build method.
+
+    Only the tensors mapped to logic facts will be learned and saved.
     """
 
     __name__ = "neural_log_loss_function"
 
+    def predicate_parameters(self):
+        """
+        Returns a dictionary with string keys and predicates to be mapped to
+        the logic program.
+
+        :return: a dictionary with the predicates to be mapped to the logic
+        program
+        :rtype: dict[str, Predicate]
+        """
+        pass
+
+    def build(self, **kwargs):
+        """
+        Method to build the loss function. This method will receive as input the
+        tensor for the predicate returned by the `predicate_parameters` method.
+
+        :param kwargs: the parameters asked by the `predicate_parameters` method
+        :type kwargs: dict[str, tf.Tensor]
+        """
+        pass
+
     def call(self, y_true, y_pred, **kwargs):
         """
-        The call function to be overridden.
+        The function to calculate the loss function.
 
         :param y_true: the true values
         :type y_true: Any
@@ -504,20 +546,12 @@ class NeuralLogLoss:
         :type y_pred: Any
         :param kwargs: other parameters
         :type kwargs: Any
+        :return: the loss function
+        :rtype: tf.Tensor
         """
         pass
 
     __call__ = call
-
-    def get_traceable_objects(self):
-        """
-        Returns the object to be traced by the model. In order to update the
-        value of learnable variables, they must be returned by this method.
-
-        :return: the objects to track
-        :rtype: Any
-        """
-        pass
 
 
 @neural_log_loss_function("crf")
@@ -528,14 +562,20 @@ class CRFLogLikelihood(NeuralLogLoss):
 
     __name__ = "crf_log_likelihood"
 
-    def __init__(self, num_tags):
+    def __init__(self, transition_predicate):
         super(CRFLogLikelihood, self).__init__()
         import tensorflow_addons as tfa
         self.function = tfa.text.crf.crf_log_likelihood
-        initializer = tf.keras.initializers.GlorotUniform()
-        self.transition_params = tf.Variable(
-            initializer([num_tags, num_tags]), "transitions")
-        self.num_tags = num_tags
+        self.transition_predicate = transition_predicate
+        self.transition_params = None
+
+    # noinspection PyMissingOrEmptyDocstring
+    def predicate_parameters(self):
+        return {"transitions": self.transition_predicate}
+
+    # noinspection PyMissingOrEmptyDocstring
+    def build(self, **kwargs):
+        self.transition_params = kwargs["transitions"]
 
     # noinspection PyMissingOrEmptyDocstring,PyUnusedLocal
     def call(self, y_true, y_pred, **kwargs):
@@ -553,10 +593,6 @@ class CRFLogLikelihood(NeuralLogLoss):
         return -log_likelihood
 
     __call__ = call
-
-    # noinspection PyMissingOrEmptyDocstring
-    def get_traceable_objects(self):
-        return self.transition_params
 
 
 @neural_log_literal_function("partial")
