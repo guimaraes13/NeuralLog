@@ -22,7 +22,7 @@ from src.network.network_functions import get_literal_function, \
     get_combining_function, FactLayer, \
     InvertedFactLayer, SpecificFactLayer, LiteralLayer, FunctionLayer, \
     AnyLiteralLayer, RuleLayer, ExtractUnaryLiteralLayer, DiagonalRuleLayer, \
-    EmptyLayer, get_literal_layer, GraphRuleLayer
+    EmptyLayer, get_literal_layer, GraphRuleLayer, NeuralLogLoss
 
 # WARNING: Do not support literals with same variable in the head of rules.
 # WARNING: Do not support constants in the head of rules.
@@ -280,6 +280,14 @@ class NeuralLogNetwork(keras.Model):
         self.inverse_relations = inverse_relations
         self.empty_layer = EmptyLayer("empty")
         self.input_sizes = []
+        self.loss_traced_objects = None
+
+    # noinspection PyMissingOrEmptyDocstring
+    def compile(self, *args, **kwargs):
+        my_loss = kwargs.get("loss", None)
+        if isinstance(my_loss, NeuralLogLoss):
+            self.loss_traced_objects = my_loss.get_traceable_objects()
+        return super().compile(*args, **kwargs)
 
     def get_recursion_depth(self, predicate=None):
         """

@@ -27,6 +27,7 @@ SPARSE_FUNCTION_SUFFIX = ":sparse"
 literal_functions = dict()
 combining_functions = dict()
 initializers = dict()
+loss_functions = dict()
 
 
 def neural_log_literal_function(identifier):
@@ -63,6 +64,18 @@ def neural_log_initializer(identifier):
     :rtype: function
     """
     return lambda x: registry(x, identifier, initializers)
+
+
+def neural_log_loss_function(identifier):
+    """
+    A decorator for NeuralLog loss functions.
+
+    :param identifier: the identifier of the function
+    :type identifier: str
+    :return: the decorated function
+    :rtype: function
+    """
+    return lambda x: registry(x, identifier, loss_functions)
 
 
 def _deserialize(configuration, function_dict, keras_func, name_only=False):
@@ -150,6 +163,20 @@ def get_literal_function(identifier):
     """
     return _get(identifier, literal_functions,
                 tensorflow.keras.activations.get, name_only=True)
+
+
+def get_loss_function(identifier):
+    """
+    Gets the loss function from `identifier`.
+
+    :param identifier: the identifier
+    :type identifier: str or dict[str, str or dict]
+    :raise ValueError: if the function is not found
+    :return: the function
+    :rtype: function
+    """
+    return _get(identifier, loss_functions, tensorflow.keras.losses.get,
+                name_only=True)
 
 
 def get_literal_layer(identifier):
@@ -424,6 +451,114 @@ def embedding_lookup(ids, params):
     return tf.nn.embedding_lookup(params, ids)
 
 
+def is_any_edge(edge):
+    """
+    Returns `True` if the edge represents an any literal.
+
+    :param edge: the edge
+    :type edge: Edge
+    :return: `True`, if the edge represents an any literal; otherwise,
+    `False`
+    :rtype: bool
+    """
+    return edge.literal.predicate.name == ANY_PREDICATE_NAME
+
+
+def build_input_for_terms(terms, cache):
+    """
+    Creates the input for the edge.
+
+    :param terms: the terms or and edge
+    :type terms: collections.Iterable[Term] or Edge
+    :param cache: the cache of tensors
+    :type cache: Dict[Term, Tensor]
+    :return: the inputs for the edge
+    :rtype: Tensor or List[Tensor]
+    """
+    inputs = []
+    if isinstance(terms, Edge):
+        terms = terms.get_input_terms()
+    for term in terms:
+        inputs.append(cache[term])
+
+    if len(inputs) == 1:
+        return inputs[0]
+
+    return inputs
+
+
+class NeuralLogLoss:
+    """
+    Abstract NeuralLog loss function class.
+    """
+
+    __name__ = "neural_log_loss_function"
+
+    def call(self, y_true, y_pred, **kwargs):
+        """
+        The call function to be overridden.
+
+        :param y_true: the true values
+        :type y_true: Any
+        :param y_pred: the predicted values
+        :type y_pred: Any
+        :param kwargs: other parameters
+        :type kwargs: Any
+        """
+        pass
+
+    __call__ = call
+
+    def get_traceable_objects(self):
+        """
+        Returns the object to be traced by the model. In order to update the
+        value of learnable variables, they must be returned by this method.
+
+        :return: the objects to track
+        :rtype: Any
+        """
+        pass
+
+
+@neural_log_loss_function("crf")
+class CRFLogLikelihood(NeuralLogLoss):
+    """
+    Defines a CRF Log Likelihood loss function.
+    """
+
+    __name__ = "crf_log_likelihood"
+
+    def __init__(self, num_tags):
+        super(CRFLogLikelihood, self).__init__()
+        import tensorflow_addons as tfa
+        self.function = tfa.text.crf.crf_log_likelihood
+        initializer = tf.keras.initializers.GlorotUniform()
+        self.transition_params = tf.Variable(
+            initializer([num_tags, num_tags]), "transitions")
+        self.num_tags = num_tags
+
+    # noinspection PyMissingOrEmptyDocstring,PyUnusedLocal
+    def call(self, y_true, y_pred, **kwargs):
+        # y_pred = tf.reshape(y_pred, [-1, self.num_tags])
+        inputs = tf.expand_dims(y_pred, axis=0)
+        tag_indices = tf.expand_dims(
+            tf.argmax(y_true, axis=1, output_type=tf.int32), axis=0)
+        length = inputs.shape[1]
+        if length is None:
+            sequence_lengths = tf.constant(1, shape=(1,))
+        else:
+            sequence_lengths = tf.constant(length, shape=(1,))
+        log_likelihood, _ = self.function(
+            inputs, tag_indices, sequence_lengths, self.transition_params)
+        return -log_likelihood
+
+    __call__ = call
+
+    # noinspection PyMissingOrEmptyDocstring
+    def get_traceable_objects(self):
+        return self.transition_params
+
+
 @neural_log_literal_function("partial")
 class Partial:
     """
@@ -471,29 +606,6 @@ class Partial:
             return self._function(inputs, **new_kwargs)
 
     __call__ = call
-
-
-def build_input_for_terms(terms, cache):
-    """
-    Creates the input for the edge.
-
-    :param terms: the terms or and edge
-    :type terms: collections.Iterable[Term] or Edge
-    :param cache: the cache of tensors
-    :type cache: Dict[Term, Tensor]
-    :return: the inputs for the edge
-    :rtype: Tensor or List[Tensor]
-    """
-    inputs = []
-    if isinstance(terms, Edge):
-        terms = terms.get_input_terms()
-    for term in terms:
-        inputs.append(cache[term])
-
-    if len(inputs) == 1:
-        return inputs[0]
-
-    return inputs
 
 
 class NeuralLogLayer(keras.layers.Layer):
@@ -595,7 +707,7 @@ class AbstractFactLayer(NeuralLogLayer):
                 shape=kernel.shape,
                 dtype=kernel.dtype,
                 trainable=kernel.trainable,
-                getter=Getter(kernel),
+                getter=AbstractFactLayer.Getter(kernel),
                 regularizer=regularizer)
         else:
             self.kernel = kernel
@@ -609,14 +721,16 @@ class AbstractFactLayer(NeuralLogLayer):
     def from_config(cls, config):
         return cls(**config)
 
+    class Getter:
+        """
+        Gets the value of the variable.
+        """
 
-class Getter:
+        def __init__(self, value):
+            self.value = value
 
-    def __init__(self, value):
-        self.value = value
-
-    def __call__(self, *args, **kwargs):
-        return self.value
+        def __call__(self, *args, **kwargs):
+            return self.value
 
 
 class FactLayer(AbstractFactLayer):
@@ -1200,19 +1314,6 @@ class CyclicRuleException(Exception):
                       "cycles.".format(clause, clause.provenance.filename,
                                        clause.provenance.start_line)
         super(CyclicRuleException, self).__init__(message)
-
-
-def is_any_edge(edge):
-    """
-    Returns `True` if the edge represents an any literal.
-
-    :param edge: the edge
-    :type edge: Edge
-    :return: `True`, if the edge represents an any literal; otherwise,
-    `False`
-    :rtype: bool
-    """
-    return edge.literal.predicate.name == ANY_PREDICATE_NAME
 
 
 class GraphRuleLayer(NeuralLogLayer):

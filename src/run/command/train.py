@@ -23,6 +23,7 @@ from src.network.callbacks import EpochLogger, get_neural_log_callback, \
     AbstractNeuralLogCallback, get_formatted_name
 from src.network.dataset import print_neural_log_predictions, get_dataset_class
 from src.network.network import NeuralLogNetwork, LossMaskWrapper
+from src.network.network_functions import get_loss_function, CRFLogLikelihood
 from src.run.command import Command, command, print_args, create_log_file, \
     TRAIN_SET_NAME, VALIDATION_SET_NAME, TEST_SET_NAME
 
@@ -178,11 +179,33 @@ def unique(elements):
     element_set = set()
     unique_list = []
     for element in elements:
-        if element in element_set:
+        if isinstance(element, dict):
+            key = frozenset(element)
+        else:
+            key = element
+        if key in element_set:
             continue
         unique_list.append(element)
-        element_set.add(element)
+        element_set.add(key)
     return unique_list
+
+
+def deserialize_loss(loss_function):
+    """
+    Deserializes the loss functions.
+
+    :param loss_function: the loss functions
+    :type loss_function: str or dict
+    :return: the deserialized loss functions
+    :rtype: function or dict[function]
+    """
+    if isinstance(loss_function, dict):
+        result = dict()
+        for key, value in loss_function.items():
+            result[key] = get_loss_function(value)
+    else:
+        result = get_loss_function(loss_function)
+    return result
 
 
 @command(COMMAND_NAME)
@@ -362,9 +385,11 @@ class Train(Command):
         :return: the loss function for each output
         :rtype: str or dict[str, str]
         """
-        loss_function = self.parameters.get("loss_function", None)
-        default_loss = DEFAULT_LOSS
-        if isinstance(loss_function, dict):
+        loss_function = self.parameters.get("loss_function", DEFAULT_LOSS)
+        if isinstance(loss_function, dict) and \
+                "class_name" not in loss_function and \
+                "config" not in loss_function:
+            default_loss = DEFAULT_LOSS
             results = dict()
             for key, value in loss_function.items():
                 key = get_predicate_from_string(key)
@@ -377,11 +402,11 @@ class Train(Command):
                     default_loss = value
             for key in output_map.values():
                 results.setdefault(key, default_loss)
-            return results
-        elif loss_function is None:
-            return default_loss
+            for key, value in results.items():
+                results[key] = get_loss_function(value)
         else:
-            return self.parameters["loss_function"]
+            results = get_loss_function(loss_function)
+        return results
 
     def _wrap_mask_loss_functions(self):
         """
@@ -569,7 +594,8 @@ class Train(Command):
         self._read_parameters(self.output_map)
         self._log_parameters(
             ["clip_labels", "loss_function", "optimizer", "regularizer"
-             "metrics", "inverse_relations"],
+                                                          "metrics",
+             "inverse_relations"],
             self.output_map.inverse
         )
         self.model.compile(
@@ -753,6 +779,7 @@ class Train(Command):
         self.build()
         history = None
         self._build_examples_set()
+        self._save_transitions("transition_before.txt")
         if self.train:
             history = self.fit()
             if logger.isEnabledFor(logging.INFO):
@@ -800,7 +827,23 @@ class Train(Command):
                 logger.info("\tBest model for {} saved at:\t{}".format(
                     key, path))
         end_save = time.perf_counter()
+        self._save_transitions("transition_after.txt")
+
         logger.info("Total data saving time:\t%0.3fs", end_save - start_save)
+
+    def _save_transitions(self, filename):
+        """
+        Saves the transitions to file.
+        """
+        # TODO: Create a way to save this information into a predicate
+        #  defined in the logic program
+        loss_function = self.parameters["loss_function"]
+        if hasattr(loss_function, "function") and \
+                isinstance(loss_function.function, CRFLogLikelihood):
+            loss_function = loss_function.function
+            filepath = self._get_output_path(filename)
+            transition = loss_function.transition_params.numpy()
+            np.savetxt(filepath, transition)
 
     def save_program(self, program_path):
         """
