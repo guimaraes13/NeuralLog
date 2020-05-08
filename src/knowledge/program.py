@@ -1550,29 +1550,48 @@ class NeuralLogProgram:
             self.parameters.setdefault(key, value)
 
     def _set_parameter_to_dict(self, atom):
-        arity = atom.arity()
+        """
+        Sets the parameter found in the logic file to the dictionary of
+        parameters.
+
+        :param atom: the atom of the found parameter
+        :type atom: Atom
+        """
         parameter_dict = self.parameters
-        for i in range(arity - 2):
-            parameter_dict = parameter_dict.setdefault(
-                atom.terms[i].value, dict())
-        value = self._convert_value(atom.terms[-1].value)
-        parameter_dict[atom.terms[-2].value] = value
+        self.__set_parameter_to_dict(atom, parameter_dict)
 
     def _set_predicate_parameter_to_dict(self, atom):
         """
-        Sets the atom parameter to `parameters` dictionary.
+        Sets the parameter, of a specific predicate, found in the logic file to
+        the dictionary of parameters.
 
-        :param atom: the atom
+        :param atom: the atom of the found parameter
         :type atom: Atom
         """
-        arity = atom.arity()
-
         parameter_dict = self.parameters
         predicate = get_predicate_from_string(atom.terms[0].value)
         parameter_dict = parameter_dict.setdefault(predicate, dict())
-        for i in range(1, arity - 2):
-            parameter_dict = parameter_dict.setdefault(atom.terms[i].value,
-                                                       dict())
+        self.__set_parameter_to_dict(atom, parameter_dict, start_index=1)
+
+    def __set_parameter_to_dict(self, atom, parameter_dict, start_index=0):
+        """
+        Sets the parameter defined by the atom to the dictionary of parameters.
+
+        :param atom: the atom
+        :type atom: Atom
+        :param parameter_dict: the high level dictionary of parameters
+        :type parameter_dict: dict
+        :param start_index: the index of the first key in the atom's terms
+        :type start_index: int
+        """
+        arity = atom.arity()
+        for i in range(start_index, arity - 2):
+            key = atom.terms[i].value
+            inner_dict = parameter_dict.get(key)
+            if not isinstance(inner_dict, dict):
+                inner_dict = dict()
+                parameter_dict[key] = inner_dict
+            parameter_dict = inner_dict
         value = self._convert_value(atom.terms[-1].value)
         parameter_dict[atom.terms[-2].value] = value
 

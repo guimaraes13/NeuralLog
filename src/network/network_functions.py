@@ -845,7 +845,7 @@ class InvertedFactLayer(FactLayer):
 
         :param kernel: the kernel
         :type kernel: tf.Tensor
-        :param fact_combining_function: the fact combining fucntion
+        :param fact_combining_function: the fact combining function
         :type fact_combining_function: function
         :param factory: the layer factory
         :type factory: src.network.layer_factory.LayerFactory
