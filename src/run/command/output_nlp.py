@@ -10,11 +10,12 @@ import re
 import time
 
 import numpy as np
+import tensorflow_addons as tfa
 
 from src.knowledge.program import NeuralLogProgram
 from src.language.language import AtomClause, Atom, \
     Predicate
-from src.network.dataset import get_dataset_class, WordCharDataset, log_viterbi
+from src.network.dataset import get_dataset_class, log_viterbi
 from src.network.network import NeuralLogNetwork
 from src.run.command import Command, command, print_args, TEST_SET_NAME
 from src.run.command.train import get_clauses, DEFAULT_BATCH_SIZE
@@ -24,6 +25,11 @@ SPLIT_VALUE = " "
 DEFAULT_TAG = "O"
 
 COMMAND_NAME = "output_nlp"
+
+NONE_MODE = "none"
+VITERBI_MODE = "viterbi"
+CRF_MODE = "crf"
+SCORE_ALGORITHMS = [NONE_MODE, VITERBI_MODE, CRF_MODE]
 
 logger = logging.getLogger()
 
@@ -124,7 +130,14 @@ class OutputNLP(Command):
                                  "the input files")
         parser.set_defaults(tabSeparator=False)
 
-        # Viterbi
+        # Score Algorithm
+        parser.add_argument('--mode', '-m', metavar='mode', type=str,
+                            required=False, default=SCORE_ALGORITHMS[0],
+                            help="The name of the score algorithm to be used: "
+                                 "[" + "|".join(SCORE_ALGORITHMS) +
+                                 "]. Default value is: " + SCORE_ALGORITHMS[0])
+
+        # Viterbi/CRF Parameters
         parser.add_argument('--transitionPredicate', '-transition',
                             metavar='transition', type=str,
                             required=False, default=None,
@@ -159,8 +172,13 @@ class OutputNLP(Command):
         self.load_model = args.loadModel
         self.test = len(self.test_files) > 0
         self.target_predicate = args.targetPredicate
-        self.transition_predicate = None
+        self.mode = args.mode.lower()
+        if self.mode not in SCORE_ALGORITHMS:
+            raise Exception(
+                "Unknown score algorithm: {}. Possible "
+                "modes are: {}".format(self.mode, ", ".join(SCORE_ALGORITHMS)))
         self.initial_predicate = None
+        self.transition_predicate = None
         self.split_value = "\t" if args.tabSeparator else SPLIT_VALUE
         if args.transitionPredicate is not None:
             self.transition_predicate = Predicate(args.transitionPredicate, 2)
@@ -168,6 +186,9 @@ class OutputNLP(Command):
                 self.initial_predicate = Predicate(args.initialPredicate, 1)
 
         self.output_file = args.outputFile
+        self.transition_matrix = None
+        self.initial_probabilities = None
+        self.function = None
 
     def build(self):
         """
@@ -266,6 +287,25 @@ class OutputNLP(Command):
         logger.info("Total dataset creation time:      \t%0.3fs",
                     end_func - start_func)
 
+    def _build_parameters(self):
+        if self.mode == NONE_MODE:
+            self.function = compute_none
+        else:
+            self.transition_matrix = \
+                self.neural_program.get_matrix_representation(
+                    self.transition_predicate).toarray()
+            if self.mode == VITERBI_MODE:
+                self.function = compute_viterbi
+                self.transition_matrix = np.log(self.transition_matrix)
+                if self.initial_predicate is not None:
+                    self.initial_probabilities = \
+                        self.neural_program.get_matrix_representation(
+                            self.initial_predicate).toarray().squeeze()
+                    self.initial_probabilities = \
+                        np.log(self.initial_probabilities)
+            elif self.mode == CRF_MODE:
+                self.function = compute_crf
+
     # noinspection PyMissingOrEmptyDocstring
     def run(self):
         self.build()
@@ -274,6 +314,7 @@ class OutputNLP(Command):
         start_save = time.perf_counter()
 
         logger.info("\tInferences saved at:")
+        self._build_parameters()
         self._save_inference_for_dataset()
 
         end_save = time.perf_counter()
@@ -284,25 +325,15 @@ class OutputNLP(Command):
         input_file_it = iter(fileinput.input(files=self.test_files))
         writer = open(self.output_file, "w")
         # noinspection PyTypeChecker
-        neural_dataset = self.model.dataset  # type: WordCharDataset
-        transition_matrix = None
-        initial_probabilities = None
-        if self.transition_predicate is not None:
-            transition_matrix = self.neural_program.get_matrix_representation(
-                self.transition_predicate).toarray()
-            transition_matrix = np.log(transition_matrix)
-            if self.initial_predicate is not None:
-                initial_probabilities = \
-                    self.neural_program.get_matrix_representation(
-                        self.initial_predicate).toarray().squeeze()
-                initial_probabilities = np.log(initial_probabilities)
+        # neural_dataset = self.model.dataset  # type: WordCharDataset
+
         for features, _ in self.test_set:
             # For each sentence
             y_scores = self.model.predict(features)
             if len(self.model.predicates) == 1:
                 y_scores = [y_scores]
-                if self.model.predicates[0][0].arity < 3:
-                    features = [features]
+                # if self.model.predicates[0][0].arity < 3:
+                #     features = [features]
             for i in range(len(self.model.predicates)):
                 # For each predicate
                 predicate, inverted = self.model.predicates[i]
@@ -310,33 +341,27 @@ class OutputNLP(Command):
                 row_scores = y_scores[i]
                 if len(row_scores.shape) == 3:
                     row_scores = np.squeeze(row_scores, axis=1)
-                if transition_matrix is not None:
-                    row_scores = log_viterbi(
-                        transition_matrix,
-                        np.log(row_scores), initial_probabilities)
+                row_scores = self.function(
+                    row_scores, self.transition_matrix,
+                    self.initial_probabilities)
+                # offset = sum(self.model.input_sizes[:i])
                 for j in range(len(row_scores)):
                     # For each word
                     y_score = row_scores[j]
-                    offset = sum(self.model.input_sizes[:i])
+                    # last_feature = features[offset - 1][j].numpy()
+                    # pred_word = ""
+                    # for k in last_feature:
+                    #     if k == neural_dataset.empty_char_index:
+                    #         break
+                    #     pred_word += \
+                    #         self.neural_program.get_constant_by_index(
+                    #             neural_dataset.character_predicate,
+                    #             neural_dataset.character_predicate_index,
+                    #             k
+                    #         ).value
 
-                    last_feature = features[offset - 1][j].numpy()
-                    pred_word = ""
-                    for k in last_feature:
-                        if k == neural_dataset.empty_char_index:
-                            break
-                        pred_word += \
-                            self.neural_program.get_constant_by_index(
-                                neural_dataset.character_predicate,
-                                neural_dataset.character_predicate_index,
-                                k
-                            ).value
-
-                    if transition_matrix is None:
-                        pred_tag = self.neural_program.get_constant_by_index(
-                            predicate, -1, y_score.argmax()).value
-                    else:
-                        pred_tag = self.neural_program.get_constant_by_index(
-                            predicate, -1, y_score).value
+                    pred_tag = self.neural_program.get_constant_by_index(
+                        predicate, -1, y_score).value
 
                     word, tag = next(input_file_it).strip().split(
                         self.split_value)
@@ -348,3 +373,54 @@ class OutputNLP(Command):
                 break
 
         writer.close()
+
+
+# noinspection PyUnusedLocal
+def compute_none(potentials, *args, **kwargs):
+    """
+    Computes the Viterbi score.
+
+    :param potentials: A [seq_length, num_tags] matrix of potentials
+    :type potentials: np.ndarray
+    :return: A [seq_length] array contains the highest scoring tag indices
+    :rtype: np.ndarray
+    """
+    return potentials.argmax(axis=1)
+
+
+def compute_viterbi(potentials, transition_params, initial_probabilities):
+    """
+    Computes the Viterbi score.
+
+    :param potentials: A [seq_length, num_tags] matrix of potentials
+    :type potentials: np.ndarray
+    :param transition_params: A [num_tags, num_tags] matrix of transition
+    potentials
+    :type transition_params: np.ndarray
+    :param initial_probabilities: A [num_tags] array of initial potentials
+    :type initial_probabilities: np.ndarray
+    :return: A [seq_length] array contains the highest scoring tag indices
+    :rtype: np.ndarray
+    """
+    return log_viterbi(
+        np.log(potentials), transition_params, initial_probabilities)
+
+
+# noinspection PyUnusedLocal
+def compute_crf(potentials, transition_params, *args, **kwargs):
+    """
+    Computes the Viterbi score.
+
+    :param potentials: A [seq_length, num_tags] matrix of potentials
+    :type potentials: np.ndarray
+    :param transition_params: A [num_tags, num_tags] matrix of transition
+    potentials
+    :type transition_params: np.ndarray
+    :return: A [seq_length] array contains the highest scoring tag indices
+    :rtype: np.ndarray
+    """
+    sequence_length = np.array([potentials.shape[0]])
+    potentials = np.expand_dims(potentials, axis=0)
+    scores, _ = \
+        tfa.text.crf.crf_decode(potentials, transition_params, sequence_length)
+    return np.squeeze(scores.numpy(), axis=0)

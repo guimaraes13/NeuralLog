@@ -580,6 +580,8 @@ class CRFLogLikelihood(NeuralLogLoss):
     # noinspection PyMissingOrEmptyDocstring,PyUnusedLocal
     def call(self, y_true, y_pred, **kwargs):
         inputs = tf.expand_dims(y_pred, axis=0)
+        if isinstance(y_true, tuple):
+            y_true = y_true[0]
         tag_indices = tf.expand_dims(
             tf.argmax(y_true, axis=1, output_type=tf.int32), axis=0)
         length = inputs.shape[1]
