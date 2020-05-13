@@ -284,10 +284,10 @@ class NeuralLogNetwork(keras.Model):
 
     # noinspection PyMissingOrEmptyDocstring
     def compile(self, *args, **kwargs):
-        self._build_neural_log_loss(kwargs)
+        self._build_neural_log_loss(**kwargs)
         return super().compile(*args, **kwargs)
 
-    def _build_neural_log_loss(self, kwargs):
+    def _build_neural_log_loss(self, **kwargs):
         my_loss = kwargs.get("loss", None)
         if isinstance(my_loss, LossMaskWrapper):
             my_loss = my_loss.function

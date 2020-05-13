@@ -838,12 +838,13 @@ class Train(Command):
         # TODO: Create a way to save this information into a predicate
         #  defined in the logic program
         loss_function = self.parameters["loss_function"]
-        if hasattr(loss_function, "function") and \
-                isinstance(loss_function.function, CRFLogLikelihood):
+        if isinstance(loss_function, LossMaskWrapper):
             loss_function = loss_function.function
+        if isinstance(loss_function, CRFLogLikelihood):
             filepath = self._get_output_path(filename)
             transition = loss_function.transition_params.numpy()
             np.savetxt(filepath, transition)
+            logger.info("transitions:\n%s", transition)
 
     def save_program(self, program_path):
         """
