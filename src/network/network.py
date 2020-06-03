@@ -222,8 +222,7 @@ def arity_bigger_than(clause, value):
 
 class NeuralLogNetwork(keras.Model):
     """
-    The NeuralLog
-    Network.
+    The NeuralLog Network.
     """
 
     # noinspection PyTypeChecker
