@@ -14,5 +14,6 @@ class TheoryEvaluator(Initializable):
         self.learning_system = learning_system
         self.theory_metrics = theory_metrics
 
+    # noinspection PyMissingOrEmptyDocstring
     def initialize(self) -> None:
         pass

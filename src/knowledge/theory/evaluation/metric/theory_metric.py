@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from src.util import Initializable
 
 
-class TheoryMetric(ABC, Initializable):
+class TheoryMetric(Initializable):
     """
     Class to define the theory metric.
     """
@@ -19,4 +19,9 @@ class TheoryMetric(ABC, Initializable):
         :return: the evaluation of the theory
         :rtype: float
         """
+        pass
+
+    # noinspection PyMissingOrEmptyDocstring
+    @abstractmethod
+    def initialize(self) -> None:
         pass

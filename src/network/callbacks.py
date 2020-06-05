@@ -27,7 +27,7 @@ TOP_K_RANK_METRIC_FORMAT = "top_k_rank_{}"
 
 LOG_FORMAT = "output_{}_{}"
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 callbacks = dict()
 

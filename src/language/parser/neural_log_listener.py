@@ -6,7 +6,7 @@ from collections import deque
 
 from src.language.language import *
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 class BadTermException(Exception):

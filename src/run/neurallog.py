@@ -12,7 +12,7 @@ import time
 
 from src.run.command.train import Train
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 def main():
@@ -30,6 +30,7 @@ def main():
     logger.info("\n")
     logger.info("The total time of the program was (sys+user / real):\t"
                 "%0.3fs,\t%0.3fs", end - start, end_real - start_real)
+    logging.shutdown()
 
 
 if __name__ == "__main__":

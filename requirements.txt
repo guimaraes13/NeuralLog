@@ -4,3 +4,6 @@ tensorflow-addons==0.6.0
 scipy~=1.4.1
 scikit-learn~=0.22.2.post1
 ply~=3.11
+
+PyYAML~=5.3.1
+sklearn~=0.0

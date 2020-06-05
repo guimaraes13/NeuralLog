@@ -8,7 +8,7 @@ from typing import Dict, List, Set
 from src.knowledge.program import ANY_PREDICATE_NAME
 from src.language.language import Term, Literal, Atom
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 class RulePathFinder:

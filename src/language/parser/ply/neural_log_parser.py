@@ -15,7 +15,7 @@ from src.language.language import Atom, Predicate, TemplatePredicate, Number, \
 from src.language.parser.neural_log_listener import KeyDict, \
     BadClauseException, PLACE_HOLDER, ground_placeholders, solve_place_holders
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 def config_log(level=logging.DEBUG):

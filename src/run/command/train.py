@@ -44,7 +44,7 @@ TAB_SIZE = 4
 
 COMMAND_NAME = "train"
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 def get_clauses(filepath):
@@ -373,7 +373,7 @@ class Train(Command):
         self.parameters.setdefault("epochs", DEFAULT_NUMBER_OF_EPOCHS)
         self.parameters.setdefault("validation_period", DEFAULT_VALID_PERIOD)
 
-        print_args(self.parameters)
+        print_args(self.parameters, logger)
 
     def _get_loss_function(self, output_map):
         """
@@ -497,7 +497,7 @@ class Train(Command):
         args = self.parser.parse_args(self.args)
         log_file = args.logFile
         create_log_file(log_file)
-        print_args(args)
+        print_args(args, logger)
         self.tensor_board = args.tensorBoard
 
         # Input
@@ -649,7 +649,7 @@ class Train(Command):
                                 k = k[0].__str__() + (" (inv)" if k[1] else "")
                             new_value[k] = v
                         parameters[key] = new_value
-            print_args(parameters)
+            print_args(parameters, logger)
 
     def fit(self):
         """

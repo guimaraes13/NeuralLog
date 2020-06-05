@@ -42,7 +42,7 @@ from src.network.network_functions import get_literal_function, \
 #  handle sparse tensor with more than two dimensions, we would have to
 #  create such facts as dense tensors, which would consume too much memory.
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 class LossMaskWrapper:

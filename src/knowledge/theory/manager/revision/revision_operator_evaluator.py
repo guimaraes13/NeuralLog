@@ -11,3 +11,7 @@ class RevisionOperatorEvaluator(Initializable):
 
     def __init__(self, revision_operator):
         self.revision_operator = revision_operator
+
+    # noinspection PyMissingOrEmptyDocstring
+    def initialize(self) -> None:
+        pass

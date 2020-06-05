@@ -2,12 +2,12 @@
 Handles the communication between the structure learning algorithm and the
 inference engine.
 """
-from abc import ABC
+from abc import ABC, abstractmethod
 
 from src.util import Initializable
 
 
-class EngineSystemTranslator(ABC, Initializable):
+class EngineSystemTranslator(Initializable):
     """
     Translates the results of the engine system to the structure learning
     algorithm and vice versa.
@@ -17,6 +17,7 @@ class EngineSystemTranslator(ABC, Initializable):
         self.program = program
         self.model = None
 
+    # noinspection PyMissingOrEmptyDocstring
+    @abstractmethod
     def initialize(self):
         pass
-        # self.model = NeuralLogNetwork()

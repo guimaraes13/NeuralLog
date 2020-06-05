@@ -1,6 +1,7 @@
 """
 The core of the structure learning system.
 """
+
 from src.knowledge.manager.example_manager import IncomingExampleManager
 from src.knowledge.program import NeuralLogProgram
 from src.knowledge.theory.evaluation.theory_evaluator import TheoryEvaluator

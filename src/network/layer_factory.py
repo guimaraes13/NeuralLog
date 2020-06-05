@@ -19,7 +19,7 @@ from src.network.network_functions import get_initializer, \
     AttributeFactLayer, SpecificFactLayer, DiagonalFactLayer, \
     InvertedFactLayer, InvertedSpecificFactLayer
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 SPACE_REGEX = re.compile(r"\s")
 ALLOW_REGEX = re.compile(r'[^a-zA-Z0-9\-_]')

@@ -10,12 +10,14 @@ import logging
 import os
 import sys
 import time
+import traceback
 
 import src.run.command
-import src.run.command.train
+import src.run.command.learn_structure
 import src.run.command.output_nlp
+import src.run.command.train
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__ if __name__ != "__main__" else "main")
 
 
 def main():
@@ -45,17 +47,28 @@ def main():
     if args_command not in commands:
         logger.error('Unrecognized command %s', args_command)
         if not src.run.command.suggest_similar_commands(args_command,
-                                                        list(commands.keys())):
+                                                        list(commands.keys()),
+                                                        logger=logger):
             parser.print_help()
+        logging.shutdown()
         exit(1)
     args = sys.argv[2:]
     start_func = time.process_time()
     start_func_real = time.perf_counter()
     command = commands[args_command](program, args)
-    command.run()
+    success = 0
+    # noinspection PyBroadException
+    try:
+        command.run()
+    except Exception as e:
+        # logger.error("Main program error, reason: %s", e)
+        logger.exception("Main program error:")
+        traceback.print_exc()
+        success = 1
+
     end = time.process_time()
     end_real = time.perf_counter()
-    logger.info("\n")
+    # logger.info("\n")
     logger.info(
         "The initialisation time of the program was (sys+user / real):    "
         "%0.3fs,\t%0.3fs", start_func - start, start_func_real - start_real)
@@ -65,6 +78,8 @@ def main():
     logger.info(
         "The          total time of the program was (sys+user / real):    "
         "%0.3fs,\t%0.3fs", end - start, end_real - start_real)
+    logging.shutdown()
+    exit(success)
 
 
 if __name__ == "__main__":

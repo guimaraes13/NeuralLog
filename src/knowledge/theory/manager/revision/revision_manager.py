@@ -1,6 +1,8 @@
 """
 Manages the revision of the theory.
 """
+from abc import abstractmethod
+
 from src.util import Initializable
 
 
@@ -12,3 +14,8 @@ class RevisionManager(Initializable):
     def __init__(self, theory_revision_manager, operator_selector):
         self.theory_revision_manager = theory_revision_manager
         self.operator_selector = operator_selector
+
+    # noinspection PyMissingOrEmptyDocstring
+    @abstractmethod
+    def initialize(self) -> None:
+        pass

@@ -16,7 +16,7 @@ from src.language.language import AtomClause, Atom, Predicate, \
     get_constant_from_string, get_term_from_string
 from src.network import registry
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 dataset_classes = dict()
 

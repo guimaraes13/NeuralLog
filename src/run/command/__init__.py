@@ -3,6 +3,7 @@ Package of the possible commands of the system
 """
 import logging
 import os
+from abc import ABC, abstractmethod
 from argparse import ArgumentParser
 from difflib import SequenceMatcher
 from inspect import getdoc
@@ -10,10 +11,10 @@ from inspect import getdoc
 import numpy as np
 import scipy.stats
 
+from src.run import configure_log
+
 SKIP_SIZE = 1
 INDENT_SIZE = 4
-
-logger = logging.getLogger()
 
 TRAIN_SET_NAME = "train_set"
 VALIDATION_SET_NAME = "validation_set"
@@ -66,7 +67,7 @@ def build_parent_dir(path):
             os.makedirs(parent_folder, exist_ok=True)
 
 
-def suggest_similar_commands(selected_command, possible_commands,
+def suggest_similar_commands(selected_command, possible_commands, logger,
                              similarity_threshold=0.75):
     """
     Suggest the command(s) from the `possible_commands` which is the most
@@ -78,6 +79,8 @@ def suggest_similar_commands(selected_command, possible_commands,
         the possible commands
     selected_command : str
         the selected commands
+    logger : logger
+        the logger
     similarity_threshold : float
         the smaller similarity accepted to suggest the command.
     Returns
@@ -180,7 +183,7 @@ def make_command():
 command = make_command()
 
 
-class Command:
+class Command(ABC):
     """
     Template class for the commands to appear at the Command Line Interface.
     """
@@ -198,12 +201,14 @@ class Command:
         direct : bool
             if the command is directly called or if it is under another CLI
         """
+        configure_log()
         self.direct = direct
         self.program = program
         self.args = args
         self.parser = self.build_parser()
         self.parse_args()
 
+    @abstractmethod
     def build_parser(self) -> ArgumentParser:
         """
         Builds the command line parser.
@@ -214,11 +219,14 @@ class Command:
         """
         pass
 
+    @abstractmethod
     def parse_args(self):
         """
         Parses the command line arguments.
         """
+        pass
 
+    @abstractmethod
     def run(self):
         """
         Runs the command.
@@ -235,14 +243,14 @@ class Command:
         return getdoc(self)
 
 
-def print_args(args):
+def print_args(args, logger):
     """
     Prints the parsed arguments in an organized way.
 
-    Parameters
-    ----------
-    args : argparse.Namespace or dict
-        the parsed arguments
+    :param args: the parsed arguments
+    :type args: argparse.Namespace or dict
+    :param logger: the logger
+    :type logger: logger
     """
     if isinstance(args, dict):
         arguments = args
@@ -271,5 +279,7 @@ def create_log_file(log_file):
     """
     if log_file is not None:
         build_parent_dir(log_file)
-        logging.getLogger().addHandler(
-            logging.FileHandler(log_file, mode="w"))
+        handler = logging.FileHandler(log_file, mode="w")
+        logger = logging.getLogger()
+        handler.setFormatter(logger.handlers[0].formatter)
+        logger.addHandler(handler)

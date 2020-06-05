@@ -2,12 +2,12 @@
 Manages the incoming examples.
 """
 
-from abc import ABC
+from abc import ABC, abstractmethod
 
 from src.util import Initializable
 
 
-class IncomingExampleManager(ABC, Initializable):
+class IncomingExampleManager(Initializable):
     """
     Responsible for receiving the examples.
     """
@@ -16,3 +16,7 @@ class IncomingExampleManager(ABC, Initializable):
         self.learning_system = learning_system
         self.sample_selector = sample_selector
 
+    # noinspection PyMissingOrEmptyDocstring
+    @abstractmethod
+    def initialize(self) -> None:
+        pass

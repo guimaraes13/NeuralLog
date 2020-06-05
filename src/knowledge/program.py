@@ -28,7 +28,7 @@ PREDICATE_TYPE_MATCH = re.compile("\\$([a-zA-Z_-][a-zA-Z0-9_-]*)"
 KT = TypeVar('KT')  # Key type.
 VT = TypeVar('VT')  # Value type.
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 def build_builtin_predicate():

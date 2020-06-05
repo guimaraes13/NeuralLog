@@ -1,0 +1,25 @@
+!!python/object:src.structure_learning.structure_learning_method.BatchStructureLearning
+
+knowledge_base_file_paths:
+theory_file_paths:
+example_file_paths:
+output_directory:
+
+load_pre_trained_parameter: false
+examples_batch_size: 10
+
+engine_system_translator:
+
+theory_metrics:
+
+revision_operator_selector:
+
+theory_evaluator:
+
+theory_revision_manager:
+
+incoming_example_manager:
+
+revision_manager:
+
+revision_operator_evaluators:

@@ -31,7 +31,7 @@ VITERBI_MODE = "viterbi"
 CRF_MODE = "crf"
 SCORE_ALGORITHMS = [NONE_MODE, VITERBI_MODE, CRF_MODE]
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 EXAMPLE_PREDICATE = "mega_example"
 NUMBER = re.compile("[0-9]+")
@@ -164,7 +164,7 @@ class OutputNLP(Command):
     def parse_args(self):
         # Log
         args = self.parser.parse_args(self.args)
-        print_args(args)
+        print_args(args, logger)
 
         # Input
         self.program_files = args.program
