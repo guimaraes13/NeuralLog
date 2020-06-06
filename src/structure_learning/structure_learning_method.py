@@ -18,6 +18,8 @@ from src.knowledge.theory.manager.theory_revision_manager import \
 from src.structure_learning.engine_system_translator import \
     EngineSystemTranslator
 from src.util import Initializable
+from src.util.statistics import RunStatistics
+from src.util.time.time_measure import TimeMeasure, RunTimestamps
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +46,8 @@ class StructureLearningMethod(Initializable):
         :param output_directory: the output directory
         :type output_directory: str
         """
+        self.time_measure = TimeMeasure()
+        self.time_measure.add_measure(RunTimestamps.BEGIN)
         self.knowledge_base_file_paths = knowledge_base_file_paths
         self.theory_file_paths = theory_file_paths
         self.example_file_paths = example_file_paths
@@ -132,10 +136,82 @@ class BatchStructureLearning(StructureLearningMethod):
         self.revision_operator_selector = revision_operator_selector
         self.revision_operator_evaluators = revision_operator_evaluators
 
-    # noinspection PyMissingOrEmptyDocstring
+    # noinspection PyMissingOrEmptyDocstring,PyAttributeOutsideInit
     def initialize(self) -> None:
+        self.time_measure.add_measure(RunTimestamps.BEGIN_INITIALIZE)
         logger.info("Initializing %s", self.__class__.__name__)
+        super().initialize()
+        self.build()
+        self.run_statistics = RunStatistics(0, 0, 0)
+        self.time_measure.add_measure(RunTimestamps.END_INITIALIZE)
+
+    def build(self):
+        """
+        Builds the learning method.
+        """
+        self.build_knowledge_base()
+        self.build_theory()
+        self.build_examples()
+        self.build_engine_system_translator()
+        self.build_learning_system()
+
+    def build_knowledge_base(self):
+        """
+        Builds the knowledge base.
+        """
+        pass
+
+    def build_theory(self):
+        """
+        Builds the logic theory.
+        """
+        pass
+
+    def build_examples(self):
+        """
+        Builds the train examples.
+        """
+        pass
+
+    def build_engine_system_translator(self):
+        """
+        Builds the engine system translator.
+        """
+        pass
+
+    def build_learning_system(self):
+        """
+        Builds the learning system.
+        """
+        pass
 
     # noinspection PyMissingOrEmptyDocstring
     def run(self) -> None:
         logger.info("Running %s", self.__class__.__name__)
+        self.train()
+        self.time_measure.add_measure(RunTimestamps.BEGIN_DISK_OUTPUT)
+        self.save_model()
+        self.save_statistics()
+        self.time_measure.add_measure(RunTimestamps.END_DISK_OUTPUT)
+        self.time_measure.add_measure(RunTimestamps.END)
+
+    def train(self):
+        """
+        Trains the model.
+        """
+        logger.info("Begin training")
+        self.time_measure.add_measure(RunTimestamps.BEGIN_TRAIN)
+
+        self.time_measure.add_measure(RunTimestamps.END_TRAIN)
+
+    def save_model(self):
+        """
+        Saves the model to the output directory.
+        """
+        pass
+
+    def save_statistics(self):
+        """
+        Saves the statistics to the output directory.
+        """
+        pass

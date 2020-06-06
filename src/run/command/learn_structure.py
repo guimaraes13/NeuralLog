@@ -209,6 +209,5 @@ class LearnStructure(Command):
     # noinspection PyMissingOrEmptyDocstring
     def run(self):
         logger.info("Learning method:\n%s", yaml.dump(self.learning_method))
-
         self.learning_method.initialize()
         self.learning_method.run()
