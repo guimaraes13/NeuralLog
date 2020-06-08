@@ -17,8 +17,6 @@ from tensorflow.python.keras.callbacks import TensorBoard
 from src.knowledge.program import NeuralLogProgram, BiDict, \
     get_predicate_from_string, print_neural_log_program, DEFAULT_PARAMETERS
 from src.language.language import Predicate
-from src.language.parser.ply.neural_log_parser import NeuralLogParser, \
-    NeuralLogLexer
 from src.network.callbacks import EpochLogger, get_neural_log_callback, \
     AbstractNeuralLogCallback, get_formatted_name
 from src.network.dataset import print_neural_log_predictions, get_dataset_class
@@ -26,6 +24,7 @@ from src.network.network import NeuralLogNetwork, LossMaskWrapper
 from src.network.network_functions import get_loss_function, CRFLogLikelihood
 from src.run.command import Command, command, print_args, create_log_file, \
     TRAIN_SET_NAME, VALIDATION_SET_NAME, TEST_SET_NAME
+from src.util.file import read_logic_program_from_file
 
 METRIC_FILE_PREFIX = "metric_"
 LOGIC_PROGRAM_EXTENSION = ".pl"
@@ -56,12 +55,8 @@ def get_clauses(filepath):
     :return: the clauses
     :rtype: List[Clause]
     """
-    # PLY
     start_func = time.perf_counter()
-    lexer = NeuralLogLexer()
-    parser = NeuralLogParser(lexer)
-    parser.parse(filepath)
-    clauses = parser.get_clauses()
+    clauses = read_logic_program_from_file(filepath)
     end_func = time.perf_counter()
 
     logger.info("File:\t%s", filepath)

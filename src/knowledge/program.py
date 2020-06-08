@@ -690,51 +690,6 @@ class NeuralLogProgram:
 
     builtin = build_builtin_predicate()
 
-    facts_by_predicate: Dict[Predicate, Dict[Any, Atom]]
-    """The facts. The values of this variable are dictionaries where the key 
-    are the predicate and a tuple of the terms and the values are the atoms 
-    itself. It was done this way in order to collapse different definitions 
-    of the same atom with different weights, in this way, only the last 
-    definition will be considered"""
-
-    examples: Dict[str, Dict[Predicate, Dict[Any, Atom]]]
-    """The examples. The values of this variable are dictionaries where the key 
-    are the predicate and a tuple of the terms and the values are the atoms 
-    itself. It was done this way in order to collapse different definitions 
-    of the same atom with different weights, in this way, only the last 
-    definition will be considered"""
-
-    mega_examples: Dict[str, Dict[Any, Dict[Predicate, List[Atom]]]]
-    """The mega examples. The values of this variable are dictionaries where 
-    the key are the predicate and a tuple of the terms and the values are the 
-    atoms itself. It was done this way in order to collapse different 
-    definitions of the same atom with different weights, in this way, only the 
-    last definition will be considered"""
-
-    clauses_by_predicate: Dict[Predicate, List[HornClause]]
-    "The clauses by predicate"
-
-    constants: Set[Term]
-    "All the constants"
-
-    iterable_constants_per_term: Dict[Tuple[Predicate, int], BiDict[int, Term]]
-    "The iterable constants per (predicate / term position)"
-
-    predicates: Dict[Predicate, Tuple[TermType]]
-    "All the predicates and their types"
-
-    logic_predicates: Set[Predicate]
-    "The logic predicates"
-
-    functional_predicates: Set[Predicate]
-    "The functional predicates"
-
-    trainable_predicates: Set[Predicate]
-    "The trainable predicates"
-
-    parameters: Dict[Any, Any]
-    "A dictionary with the parameters defined in the program"
-
     # predicate_functions: Dict[Any, Any] = dict()
     # "A dictionary with the functions defined for predicates in the program"
 
@@ -745,16 +700,61 @@ class NeuralLogProgram:
         """
         Creates a NeuralLog Program.
         """
-        self.facts_by_predicate = dict()
-        self.examples = OrderedDict()
-        self.mega_examples = OrderedDict()
-        self.clauses_by_predicate = dict()
-        self.constants = set()
-        self.predicates = dict()
-        self.logic_predicates = set()
-        self.functional_predicates = set()
-        self.trainable_predicates = set()
-        self.parameters = dict()
+
+        self.facts_by_predicate: Dict[Predicate, Dict[Any, Atom]] = dict()
+        """
+        The facts. The values of this variable are dictionaries where the key 
+        are the predicate and a tuple of the terms and the values are the atoms 
+        itself. It was done this way in order to collapse different definitions 
+        of the same atom with different weights, in this way, only the last 
+        definition will be considered
+        """
+
+        self.examples: Dict[
+            str, Dict[Predicate, Dict[Any, Atom]]] = OrderedDict()
+        """
+        The examples. The values of this variable are dictionaries where the 
+        key are the predicate and a tuple of the terms and the values are the 
+        atoms itself. It was done this way in order to collapse different 
+        definitions of the same atom with different weights, in this way, only 
+        the last definition will be considered
+        """
+
+        self.mega_examples: Dict[
+            str, Dict[Any, Dict[Predicate, List[Atom]]]] = OrderedDict()
+        """
+        The mega examples. The values of this variable are dictionaries where 
+        the key are the predicate and a tuple of the terms and the values are 
+        the atoms itself. It was done this way in order to collapse different 
+        definitions of the same atom with different weights, in this way, only 
+        the last definition will be considered
+        """
+
+        self.clauses_by_predicate: Dict[Predicate, List[HornClause]] = dict()
+        "The clauses by predicate"
+
+        self.constants: Set[Term] = set()
+        "All the constants"
+
+        self.iterable_constants_per_term: Dict[
+            Tuple[Predicate, int], BiDict[int, Term]] = dict()
+        "The iterable constants per (predicate / term position)"
+
+        self.predicates: Dict[Predicate, Tuple[TermType]] = dict()
+        "All the predicates and their types"
+
+        self.logic_predicates: Set[Predicate] = set()
+        "The logic predicates"
+
+        self.functional_predicates: Set[Predicate] = set()
+        "The functional predicates"
+
+        self.trainable_predicates: Set[Predicate] = set()
+        "The trainable predicates"
+
+        self.parameters: Dict[Any, Any] = dict()
+        "A dictionary with the parameters defined in the program"
+
         self._predicate_parameters_to_add = list()
         self._parameters_to_add = list()
         self._last_atom_for_predicate: Dict[Predicate, Atom] = dict()
@@ -1635,6 +1635,35 @@ class NeuralLogProgram:
                 value = False
 
         return value
+
+    def copy(self):
+        """
+        Returns a copy of the NeuralLog program.
+
+        :return: A copy of this NeuralLog program
+        :rtype: NeuralLogProgram
+        """
+        program = NeuralLogProgram()
+
+        program.facts_by_predicate = dict(self.facts_by_predicate)
+        program.examples = OrderedDict(self.examples)
+        program.mega_examples = OrderedDict(self.mega_examples)
+        program.clauses_by_predicate = dict(self.clauses_by_predicate)
+        program.constants = set(self.constants)
+        program.iterable_constants_per_term = \
+            dict(self.iterable_constants_per_term)
+        program.predicates = dict(self.predicates)
+        program.logic_predicates = set(self.logic_predicates)
+        program.functional_predicates = set(self.functional_predicates)
+        program.trainable_predicates = set(self.trainable_predicates)
+        program.parameters = dict(self.parameters)
+
+        program._predicate_parameters_to_add = \
+            list(self._predicate_parameters_to_add)
+        program._parameters_to_add = list(self._parameters_to_add)
+        program._last_atom_for_predicate = dict(self._last_atom_for_predicate)
+
+        return program
 
 
 DEFAULT_PARAMETERS = [

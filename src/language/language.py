@@ -560,7 +560,7 @@ class Predicate:
 
     def equivalent(self, other):
         """
-        Two predicates are equivalent if they have the same name one of: (1)
+        Two predicates are equivalent if they have the same name and one of: (1)
         they have the same arity; or (2) at least one of then has a negative
         arity.
 

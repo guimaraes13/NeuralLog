@@ -20,7 +20,7 @@ YAML_SHORT_OPTION = "-y"
 YAML_LONG_OPTION = "--yaml"
 
 # noinspection SpellCheckingInspection
-TIMESTAMP_FORMAT = "RUN_%Y_%m_%d_%Hh%Mmin%Ss%fms"
+RUN_FOLDER_TIMESTAMP_FORMAT = "RUN_%Y_%m_%d_%Hh%Mmin%Ss%fms"
 
 OUTPUT_RUN_FILE_NAME = "run.sh"
 OUTPUT_CONFIGURATION_YAML = "configuration.yaml"
@@ -170,7 +170,7 @@ class LearnStructure(Command):
                 strict_output = True
 
         if not strict_output:
-            folder = datetime.now().strftime(TIMESTAMP_FORMAT)
+            folder = datetime.now().strftime(RUN_FOLDER_TIMESTAMP_FORMAT)
             self.output_directory = os.path.join(self.output_directory, folder)
 
         if not os.path.isdir(self.output_directory):

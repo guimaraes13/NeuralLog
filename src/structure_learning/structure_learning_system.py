@@ -55,3 +55,7 @@ class StructureLearningSystem:
 
         self.incoming_example_manager = incoming_example_manager
         "The incoming example manager"
+
+    def revise_theory(self, examples):
+        # TODO: to implement
+        pass

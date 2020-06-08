@@ -3,7 +3,6 @@ Measure elapse time.
 """
 
 import time
-from enum import Enum
 
 from src.knowledge.program import BiDict
 
@@ -75,19 +74,19 @@ class TimeMeasure:
         self.timestamps.append(self.time_function())
         self.stamps_by_name[name] = len(self.timestamps)
 
+    def time_between_timestamps(self, begin, end):
+        """
+        Returns the time between `begin` and `end`.
 
-class RunTimestamps(Enum):
-    """
-    A enumerator the names for run timestamps.
-    """
+        :param begin: the name of the begin timestamp
+        :type begin: Any
+        :param end: the name of the end timestamp
+        :type end: Any
+        :return: the time between the timestamps, in seconds
+        :rtype: float
+        """
+        begin_index = self.stamps_by_name[begin]
+        end_index = self.stamps_by_name[end]
+        return self.timestamps[end_index] - self.timestamps[begin_index]
 
-    BEGIN = "Begin."
-    BEGIN_INITIALIZE = "Begin initialize."
-    END_INITIALIZE = "End initialize."
-    BEGIN_TRAIN = "Begin training."
-    END_TRAIN = "End training."
-    BEGIN_EVALUATION = "Begin evaluation."
-    END_EVALUATION = "End evaluation"
-    BEGIN_DISK_OUTPUT = "Begin disk output."
-    END_DISK_OUTPUT = "End disk output."
-    END = "End."
+

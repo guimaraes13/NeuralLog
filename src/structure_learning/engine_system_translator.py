@@ -13,9 +13,10 @@ class EngineSystemTranslator(Initializable):
     algorithm and vice versa.
     """
 
-    def __init__(self, program):
-        self.program = program
+    def __init__(self):
+        self.program = None
         self.model = None
+
 
     # noinspection PyMissingOrEmptyDocstring
     @abstractmethod
