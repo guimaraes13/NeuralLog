@@ -3,6 +3,7 @@ Handles the examples.
 """
 import logging
 import sys
+from abc import abstractmethod
 from collections import OrderedDict
 from functools import partial
 from typing import List
@@ -389,7 +390,7 @@ def log_viterbi(potentials, transition_matrix, initial_distribution=None):
     return best_path
 
 
-class NeuralLogDataset:
+class NeuralLogDataset(ABC):
     """
     Represents a NeuralLog dataset to train a NeuralLog network.
     """
@@ -410,6 +411,7 @@ class NeuralLogDataset:
         self.program = program
         self.inverse_relations = inverse_relations
 
+    @abstractmethod
     def has_example_key(self, key):
         """
         Checks if the dataset contains the example key.
@@ -421,6 +423,7 @@ class NeuralLogDataset:
         """
         pass
 
+    @abstractmethod
     def get_dataset(self, example_set=NO_EXAMPLE_SET,
                     batch_size=1, shuffle=False):
         """
@@ -437,6 +440,7 @@ class NeuralLogDataset:
         """
         pass
 
+    @abstractmethod
     def build(self, example_set=NO_EXAMPLE_SET):
         """
         Builds the features and label to train the neural network based on
@@ -452,6 +456,7 @@ class NeuralLogDataset:
         """
         pass
 
+    @abstractmethod
     def get_target_predicates(self):
         """
         Gets a list of tuples containing the target predicates and whether it

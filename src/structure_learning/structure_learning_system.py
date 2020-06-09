@@ -1,12 +1,16 @@
 """
 The core of the structure learning system.
 """
+from typing import Dict, Any
 
 from src.knowledge.manager.example_manager import IncomingExampleManager
 from src.knowledge.program import NeuralLogProgram
 from src.knowledge.theory.evaluation.theory_evaluator import TheoryEvaluator
+from src.knowledge.theory.manager.revision.revision_examples import \
+    RevisionExamples
 from src.knowledge.theory.manager.theory_revision_manager import \
     TheoryRevisionManager
+from src.language.language import Predicate, Atom
 from src.structure_learning.engine_system_translator import \
     EngineSystemTranslator
 
@@ -56,6 +60,23 @@ class StructureLearningSystem:
         self.incoming_example_manager = incoming_example_manager
         "The incoming example manager"
 
-    def revise_theory(self, examples):
+    def revise_theory(self, revision_examples):
+        """
+        Revises the theory based on the revision examples.
+
+        :param revision_examples: the revision examples
+        :type revision_examples: list[RevisionExamples]
+        """
         # TODO: to implement
         pass
+
+    def infer_examples(self, examples):
+        """
+        Perform the inference for the given examples.
+
+        :param examples: the examples
+        :type examples: Dict[Predicate, Dict[Any, Atom]]
+        :return: the inference value of the examples
+        :rtype: Dict[Predicate, Dict[Any, float]]
+        """
+        self.engine_system_translator.infer_examples(examples)
