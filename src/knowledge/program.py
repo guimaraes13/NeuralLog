@@ -209,7 +209,7 @@ def _build_constant_dict(_iterable_constants):
     Builds the dictionary of iterable constants.
 
     :param _iterable_constants: the iterable constants
-    :type _iterable_constants: collection.Iterable[Term]
+    :type _iterable_constants: collections.Iterable[Term]
     :return: the dictionary of iterable constants
     :rtype: BiDict[int, Term]
     """

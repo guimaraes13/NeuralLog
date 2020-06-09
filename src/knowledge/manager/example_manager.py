@@ -1,13 +1,17 @@
 """
 Manages the incoming examples.
 """
+import collections
 import logging
 from abc import abstractmethod
 
+from src.knowledge.theory.manager.revision.revision_examples import \
+    RevisionExamples
 from src.knowledge.theory.manager.revision.sample_selector import SampleSelector
+from src.language.language import Atom
 from src.structure_learning.structure_learning_system import \
     StructureLearningSystem
-from src.util import Initializable, unset_fields_error, reset_field_error
+from src.util import Initializable
 
 logger = logging.getLogger(__name__)
 
@@ -27,24 +31,12 @@ class IncomingExampleManager(Initializable):
         :param sample_selector: a sample selector
         :type sample_selector: SampleSelector
         """
-        self._learning_system = learning_system
-        self._sample_selector = sample_selector
+        self.learning_system = learning_system
+        self.sample_selector = sample_selector
 
     # noinspection PyMissingOrEmptyDocstring
-    @abstractmethod
     def initialize(self) -> None:
-        logger.debug("Initializing IncomingExampleManager:\t%s",
-                     self.__class__.__name__)
-        fields = []
-        if self.learning_system is None:
-            fields.append("learning_system")
-
-        if self.sample_selector is None:
-            fields.append("sample_selector")
-
-        if len(fields) > 0:
-            raise unset_fields_error(fields, self)
-
+        super().initialize()
         self.sample_selector.learning_system = self.learning_system
         self.sample_selector.initialize()
 
@@ -54,31 +46,13 @@ class IncomingExampleManager(Initializable):
         Decide what to do with the incoming `examples`.
 
         :param examples: the incoming examples
-        :type examples: Atom or collection.Iterable[Atom]
+        :type examples: Atom or collections.Iterable[Atom]
         """
         pass
 
     # noinspection PyMissingOrEmptyDocstring
-    @property
-    def learning_system(self):
-        return self._learning_system
-
-    @learning_system.setter
-    def learning_system(self, value):
-        if self._learning_system is not None:
-            raise reset_field_error("learning_system", self)
-        self._learning_system = value
-
-    # noinspection PyMissingOrEmptyDocstring
-    @property
-    def sample_selector(self):
-        return self._sample_selector
-
-    @sample_selector.setter
-    def sample_selector(self, value):
-        if self._sample_selector is not None:
-            raise reset_field_error("sample_selector", self)
-        self._sample_selector = value
+    def required_fields(self):
+        return ["learning_system", "sample_selector"]
 
 
 class ReviseAllIncomingExample(IncomingExampleManager):
@@ -87,10 +61,14 @@ class ReviseAllIncomingExample(IncomingExampleManager):
     """
 
     # noinspection PyMissingOrEmptyDocstring
-    def initialize(self) -> None:
-        pass
-
-    # noinspection PyMissingOrEmptyDocstring
     def incoming_examples(self, examples):
-        # TODO: create the RevisionExamples class
-        self.learning_system.revise_theory(examples)
+        revision_examples = RevisionExamples(self.learning_system,
+                                             self.sample_selector.copy())
+        if not isinstance(examples, collections.Iterable):
+            examples = [examples]
+        size = 0
+        for example in examples:
+            revision_examples.add_example(example)
+            size += 1
+        logger.info("Calling revision with %d examples", size)
+        self.learning_system.revise_theory(revision_examples)

@@ -3,7 +3,7 @@ Handles the examples.
 """
 import logging
 import sys
-from abc import abstractmethod
+from abc import abstractmethod, ABC
 from collections import OrderedDict
 from functools import partial
 from typing import List

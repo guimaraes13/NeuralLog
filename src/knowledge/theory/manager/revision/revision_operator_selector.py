@@ -1,7 +1,7 @@
 """
 Handles the selection of the revision operators.
 """
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 
 from src.util import Initializable
 
@@ -16,5 +16,5 @@ class RevisionOperatorSelector(Initializable):
 
     # noinspection PyMissingOrEmptyDocstring
     @abstractmethod
-    def initialize(self) -> None:
+    def required_fields(self):
         pass

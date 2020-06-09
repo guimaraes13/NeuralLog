@@ -1,7 +1,8 @@
 """
 The core of the structure learning system.
 """
-from typing import Dict, Any
+import collections
+from typing import Dict
 
 from src.knowledge.manager.example_manager import IncomingExampleManager
 from src.knowledge.program import NeuralLogProgram
@@ -65,10 +66,10 @@ class StructureLearningSystem:
         Revises the theory based on the revision examples.
 
         :param revision_examples: the revision examples
-        :type revision_examples: list[RevisionExamples]
+        :type revision_examples:
+            RevisionExamples or collections.Iterable[RevisionExamples]
         """
-        # TODO: to implement
-        pass
+        self.theory_revision_manager.revise(revision_examples)
 
     def infer_examples(self, examples):
         """

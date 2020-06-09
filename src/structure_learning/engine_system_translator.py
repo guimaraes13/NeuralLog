@@ -17,11 +17,6 @@ class EngineSystemTranslator(Initializable):
         self.program = None
         self.model = None
 
-    # noinspection PyMissingOrEmptyDocstring
-    @abstractmethod
-    def initialize(self):
-        pass
-
     @abstractmethod
     def infer_examples(self, examples):
         """

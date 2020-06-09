@@ -1,7 +1,7 @@
 """
 Handles the theory metrics.
 """
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 
 from src.util import Initializable
 
@@ -19,9 +19,4 @@ class TheoryMetric(Initializable):
         :return: the evaluation of the theory
         :rtype: float
         """
-        pass
-
-    # noinspection PyMissingOrEmptyDocstring
-    @abstractmethod
-    def initialize(self) -> None:
         pass

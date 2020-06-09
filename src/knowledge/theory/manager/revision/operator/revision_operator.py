@@ -17,5 +17,5 @@ class RevisionOperator(Initializable):
 
     # noinspection PyMissingOrEmptyDocstring
     @abstractmethod
-    def initialize(self) -> None:
+    def required_fields(self):
         pass

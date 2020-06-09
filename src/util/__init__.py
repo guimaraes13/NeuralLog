@@ -1,7 +1,11 @@
 """
 Package with generic useful tools.
 """
+import logging
 from abc import ABC, abstractmethod
+from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class InitializationException(Exception):
@@ -24,7 +28,6 @@ class Initializable(ABC):
     Interface to allow object to be initialized.
     """
 
-    @abstractmethod
     def initialize(self) -> None:
         """
         Initializes the object.
@@ -32,7 +35,35 @@ class Initializable(ABC):
         :raise InitializationException: if an error occurs during the
         initialization of the object
         """
+        logger.debug("Initializing\t%s", self.__class__.__name__)
+        fields = []
+        required_fields = self.required_fields()
+        if required_fields is None:
+            return
+
+        for field in required_fields:
+            if not hasattr(self, field) or getattr(self, field) is None:
+                fields.append("learning_system")
+
+        if len(fields) > 0:
+            raise unset_fields_error(fields, self)
+
+    @abstractmethod
+    def required_fields(self):
+        """
+        Returns a list of the required fields of the class.
+
+        :return: the list of required fields
+        :rtype: list[str]
+        """
         pass
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        required_fields = self.required_fields()
+        if required_fields is not None and name in required_fields:
+            if hasattr(self, name) and getattr(self, name) is not None:
+                raise reset_field_error(self, "learning_system")
+        super().__setattr__(name, value)
 
 
 def unset_fields_error(field_name, clazz):
@@ -62,14 +93,14 @@ def unset_fields_error(field_name, clazz):
     return InitializationException(message)
 
 
-def reset_field_error(field_name, clazz):
+def reset_field_error(clazz, field_name):
     """
     Error for resetting a field.
 
-    :param field_name: the field name
-    :type field_name: str
     :param clazz: the class
     :type clazz: class
+    :param field_name: the field name
+    :type field_name: str
     :return: the error
     :rtype: InitializationException
     """

@@ -50,6 +50,16 @@ class SampleSelector(Initializable):
         """
         pass
 
+    @abstractmethod
+    def copy(self):
+        """
+        Returns a copy of the object.
+
+        :return: the copy of the object
+        :rtype: SampleSelector
+        """
+        pass
+
     # noinspection PyMissingOrEmptyDocstring
     @property
     def learning_system(self):
@@ -58,7 +68,7 @@ class SampleSelector(Initializable):
     @learning_system.setter
     def learning_system(self, value):
         if self._learning_system is not None:
-            raise reset_field_error("learning_system", self)
+            raise reset_field_error(self, "learning_system")
         self._learning_system = value
 
 
@@ -83,3 +93,11 @@ class AllRelevantSampleSelect(SampleSelector):
     # noinspection PyMissingOrEmptyDocstring
     def is_relevant(self, example) -> bool:
         return True
+
+    # noinspection PyMissingOrEmptyDocstring
+    def copy(self):
+        return self
+
+    # noinspection PyMissingOrEmptyDocstring
+    def required_fields(self):
+        return None

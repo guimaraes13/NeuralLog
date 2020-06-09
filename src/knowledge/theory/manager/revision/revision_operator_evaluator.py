@@ -13,5 +13,5 @@ class RevisionOperatorEvaluator(Initializable):
         self.revision_operator = revision_operator
 
     # noinspection PyMissingOrEmptyDocstring
-    def initialize(self) -> None:
-        pass
+    def required_fields(self):
+        return ["revision_operator"]

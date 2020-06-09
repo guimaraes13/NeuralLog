@@ -159,7 +159,7 @@ class BatchStructureLearning(StructureLearningMethod):
 
     # noinspection PyMissingOrEmptyDocstring,PyAttributeOutsideInit
     def initialize(self) -> None:
-        logger.info("Initializing [%s]", self.__class__.__name__)
+        super().initialize()
         self.time_measure.add_measure(RunTimestamps.BEGIN_INITIALIZE)
         super().initialize()
         self.build()
@@ -169,6 +169,15 @@ class BatchStructureLearning(StructureLearningMethod):
                     self.time_measure.timestamps(
                         RunTimestamps.BEGIN_READ_THEORY,
                         RunTimestamps.END_READ_THEORY))
+
+    # noinspection PyMissingOrEmptyDocstring
+    def required_fields(self):
+        fields = []
+        for field in self.__dict__.keys():
+            if field.endswith("paths"):
+                continue
+            fields.append(field)
+        return fields
 
     def build(self):
         """

@@ -16,4 +16,8 @@ class TheoryEvaluator(Initializable):
 
     # noinspection PyMissingOrEmptyDocstring
     def initialize(self) -> None:
-        pass
+        super().initialize()
+
+    # noinspection PyMissingOrEmptyDocstring
+    def required_fields(self):
+        return ["learning_system", "theory_metrics"]
