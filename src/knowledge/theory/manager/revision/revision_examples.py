@@ -27,7 +27,7 @@ class RevisionExamples:
 
         self.incoming_examples = Examples()
         self.relevant_examples = Examples()
-        self.inferred_examples = ExamplesInferences()
+        self.inferred_values = ExamplesInferences()
         self.not_evaluated_examples = Examples()
         self.last_inference = 0.0
 
@@ -83,7 +83,7 @@ class RevisionExamples:
             if inferred_value is None:
                 self.not_evaluated_examples.add_example(example)
             else:
-                self.inferred_examples.add_inference(example, inferred_value)
+                self.inferred_values.add_inference(example, inferred_value)
 
     def add_examples(self, examples):
         """
@@ -95,7 +95,7 @@ class RevisionExamples:
         for example in examples:
             self.add_example(example)
 
-    def get_inferred_examples(self, last_theory_change):
+    def get_inferred_values(self, last_theory_change):
         """
         Gets the inferred examples. If `last_theory_change` is greater than
         the last inference of the examples, it is re-inferred.
@@ -106,17 +106,17 @@ class RevisionExamples:
         :rtype: ExamplesInferences
         """
         if self.last_inference < last_theory_change:
-            self.clear_inferred_examples()
+            self.clear_inferred_values()
         if self.not_evaluated_examples:
-            self.inferred_examples.update(
+            self.inferred_values.update(
                 self.learning_system.infer_examples(
                     self.not_evaluated_examples))
             self.not_evaluated_examples.clear()
             self.last_inference = time_measure.performance_time()
 
-        return self.inferred_examples
+        return self.inferred_values
 
-    def clear_inferred_examples(self):
+    def clear_inferred_values(self):
         """
         Clears the values of the inferred examples.
         """

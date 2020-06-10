@@ -114,9 +114,9 @@ class TheoryRevisionManager(Initializable):
         :return: the evaluation of the theory
         :rtype: float
         """
-        return self.theory_metric.evaluate(examples.relevant_examples,
-                                           examples.get_inferred_examples(
-                                               self.last_theory_change))
+        return self.theory_metric.compute_metric(
+            examples.relevant_examples,
+            examples.get_inferred_values(self.last_theory_change))
 
     def apply_operator(self, operator_evaluator, examples,
                        improvement_threshold):

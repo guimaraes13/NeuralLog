@@ -1,6 +1,7 @@
 """
 The core of the structure learning system.
 """
+import collections
 
 from src.knowledge.examples import Examples, ExamplesInferences
 from src.knowledge.manager.example_manager import IncomingExampleManager
@@ -77,16 +78,49 @@ class StructureLearningSystem:
         """
         self.theory_revision_manager.revise(revision_examples)
 
-    def infer_examples(self, examples):
+    def infer_examples(self, examples, theory=None, retrain=False):
         """
-        Perform the inference for the given examples.
+        Perform the inference for the given examples. If `theory` is not
+        `None`, it is used theory as the theory to be evaluated, instead of the
+        current theory of the engine system. If `retrain` is `True`,
+        it retrains the parameters before inference.
 
         :param examples: the examples
         :type examples: Examples
+        :param retrain: if `True`, it retrains the parameters before inference
+        :type retrain: bool
+        :param theory: If not `None`, use this theory instead of the current
+        theory of the engine system.
+        :type theory: NeuralLogProgram
         :return: the inference value of the examples
         :rtype: ExamplesInferences
         """
-        self.engine_system_translator.infer_examples(examples)
+        return self.engine_system_translator.infer_examples(
+            examples, retrain, theory)
+
+    def infer_examples_appending_clauses(
+            self, examples, clauses, retrain=False):
+        """
+        Perform the inference for the given examples. The `clauses` are
+        appended to the current theory, before evaluation. If `retrain` is
+        `True`, it retrains the parameters before inference.
+
+        After evaluation, the appended clauses are discarded and the
+        parameters are restored to its values previously to the evaluation.
+
+        :param examples: the examples
+        :type examples: Examples
+        :param retrain: if `True`, it retrains the parameters before
+        inference
+        :type retrain: bool
+        :param clauses: clauses to be appended to the current theory,
+        for evaluation proposes only
+        :type clauses: collections.Iterable[HornClauses]
+        :return: the inference value of the examples
+        :rtype: ExamplesInferences
+        """
+        return self.engine_system_translator.infer_examples_appending_clauses(
+            examples, clauses, retrain=retrain)
 
     def train_parameters(self, training_examples: Examples):
         """

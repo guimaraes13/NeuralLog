@@ -12,15 +12,26 @@ class TheoryMetric(Initializable):
     Class to define the theory metric.
     """
 
+    def __init__(self, parameters_retrain_before_evaluate=False):
+        """
+        Creates a theory metric.
+
+        :param parameters_retrain_before_evaluate: if `True`, the parameters
+        will be trained before each candidate evaluation on this metric.
+        :type parameters_retrain_before_evaluate: bool
+        """
+        self.parameters_retrain_before_evaluate = \
+            parameters_retrain_before_evaluate
+
     @abstractmethod
-    def evaluate(self, examples, inferred_examples):
+    def compute_metric(self, examples, inferred_values):
         """
         Evaluates the theory according to the metric.
 
         :param examples: the examples
         :type examples: Examples
-        :param inferred_examples: the inferred examples
-        :type inferred_examples: ExamplesInferences
+        :param inferred_values: the inferred examples
+        :type inferred_values: ExamplesInferences
         :return: the evaluation of the theory
         :rtype: float
         """
@@ -50,6 +61,14 @@ class TheoryMetric(Initializable):
         """
         pass
 
+    @abstractmethod
+    def __eq__(self, other):
+        pass
+
+    @abstractmethod
+    def __hash__(self):
+        pass
+
 
 # TODO: implement this class and the other metrics
 class RocCurveMetric(TheoryMetric):
@@ -62,9 +81,17 @@ class RocCurveMetric(TheoryMetric):
         pass
 
     # noinspection PyMissingOrEmptyDocstring
-    def evaluate(self, examples, inferred_examples):
+    def compute_metric(self, examples, inferred_values):
         pass
 
     # noinspection PyMissingOrEmptyDocstring
     def difference(self, candidate_evaluation, current_evaluation):
+        pass
+
+    # noinspection PyMissingOrEmptyDocstring
+    def __eq__(self, other):
+        pass
+
+    # noinspection PyMissingOrEmptyDocstring
+    def __hash__(self):
         pass
