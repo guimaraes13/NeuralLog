@@ -20,7 +20,7 @@ def get_term_from_string(string):
 
     :param string: the string
     :type string: str
-    :raise TermMalformedException case the term is malformed
+    :raise TermMalformedException: case the term is malformed
     :return: the term
     :rtype: Term
     """
@@ -40,7 +40,7 @@ def get_constant_from_string(string):
 
     :param string: the string
     :type string: str
-    :raise TermMalformedException case the term is malformed
+    :raise TermMalformedException: case the term is malformed
     :return: the term
     :rtype: Term
     """
@@ -56,7 +56,7 @@ def build_terms(arguments):
 
     :param arguments: the arguments
     :type arguments: list[Term or str]
-    :raise TermMalformedException if the argument is neither a term nor a str
+    :raise TermMalformedException: if the argument is neither a term nor a str
     :return: a list of terms
     :rtype: list[Term]
     """
@@ -676,7 +676,7 @@ class Atom(Clause):
         :type weight: float
         :param provenance: the provenance of the atom
         :type provenance: ClauseProvenance
-        :raise AtomMalformedException in case the number of terms differs
+        :raise AtomMalformedException: in case the number of terms differs
         from the arity of the predicate
         """
         super(Atom, self).__init__(provenance)
@@ -780,7 +780,7 @@ class Literal(Atom):
         :type atom: Atom
         :param negated: if the literal is negated
         :type negated: bool
-        :raise AtomMalformedException in case the number of terms differs
+        :raise AtomMalformedException: in case the number of terms differs
         from the arity of the predicate
         """
         super().__init__(atom.predicate, *atom.terms, weight=atom.weight,

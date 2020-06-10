@@ -779,7 +779,7 @@ class NeuralLogProgram:
 
         :param clauses: the clauses
         :type clauses: collections.iterable[Clause]
-        :raise ClauseMalformedException case the clause is malformed
+        :raise ClauseMalformedException: case the clause is malformed
         """
         for clause in clauses:
             if isinstance(clause, AtomClause):
@@ -853,9 +853,9 @@ class NeuralLogProgram:
 
         :param atom: the atom
         :type atom: Atom
-        :raise PredicateTypeError case a predicate violated the type
+        :raise PredicateTypeError: case a predicate violated the type
         expressed before by another atom of the same predicate
-        :raise TooManyArguments if the atom has more than 2 arguments
+        :raise TooManyArguments: if the atom has more than 2 arguments
         """
         atom_predicate = atom.predicate
         if 0 < MAX_NUMBER_OF_ARGUMENTS < atom_predicate.arity:
@@ -1131,7 +1131,7 @@ class NeuralLogProgram:
         facts that appears in the knowledge base, even if its weight is 0.0;
         or 0.0 otherwise
         :type mask: bool
-        :raise UnsupportedMatrixRepresentation in the case the predicate is
+        :raise UnsupportedMatrixRepresentation: in the case the predicate is
         not convertible to matrix form
         :return: the matrix representation of the data for the given predicate
         :rtype: csr_matrix or np.matrix or (csr_matrix, csr_matrix) or float
@@ -1350,7 +1350,7 @@ class NeuralLogProgram:
         facts that appears in the knowledge base, even if its weight is 0.0;
         or 0.0 otherwise
         :type mask: bool
-        :raise UnsupportedMatrixRepresentation in the case the predicate is
+        :raise UnsupportedMatrixRepresentation: in the case the predicate is
         not convertible to matrix form
         :return: the vector representation
         :rtype: csr_matrix

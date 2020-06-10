@@ -218,7 +218,7 @@ class LayerFactory:
 
         :param atom: the atom
         :type atom: Atom
-        :raise UnsupportedMatrixRepresentation in the case the predicate is
+        :raise UnsupportedMatrixRepresentation: in the case the predicate is
         not convertible to matrix form
         :return: the matrix representation of the data for the given predicate
         :rtype: AbstractFactLayer
@@ -261,7 +261,7 @@ class LayerFactory:
 
         :param predicate: the predicate
         :type predicate: Predicate
-        :raise UnsupportedMatrixRepresentation in the case the predicate is
+        :raise UnsupportedMatrixRepresentation: in the case the predicate is
         not convertible to matrix form
         :return: the matrix representation of the data for the given predicate
         :rtype: csr_matrix or np.matrix or (csr_matrix, csr_matrix) or float
@@ -275,7 +275,7 @@ class LayerFactory:
 
         :param atom: the atom
         :type atom: Atom
-        :raise UnsupportedMatrixRepresentation in the case the predicate is
+        :raise UnsupportedMatrixRepresentation: in the case the predicate is
         not convertible to matrix form
         :return: the vector representation of the data for the given atom
         :rtype: csr_matrix
@@ -661,7 +661,7 @@ class LayerFactory:
 
         :param atom: the atom, must be grounded
         :type atom: Atom
-        :raise NotGroundAtomException if the atom is not ground
+        :raise NotGroundAtomException: if the atom is not ground
         :return: the initial value of the atom
         :rtype: function or float
         """

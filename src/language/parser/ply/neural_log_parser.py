@@ -201,7 +201,7 @@ class NeuralLogParser:
         """
         Expands the placeholders from the Horn clauses.
 
-        :raise BadClauseException if a clause is malformed
+        :raise BadClauseException: if a clause is malformed
         """
         expanded_clauses = deque()
         predicates_names = set()

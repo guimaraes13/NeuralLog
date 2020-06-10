@@ -118,7 +118,7 @@ def solve_place_holder_term(term, key, substitution):
     :type key: str
     :param substitution: the value of the place holder
     :type substitution: str
-    :raise BadTermException case a bad term is found
+    :raise BadTermException: case a bad term is found
     :return: the solved predicate
     :rtype: Term
     """

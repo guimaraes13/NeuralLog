@@ -74,8 +74,7 @@ class TheoryRevisionManager(Initializable):
         :type revision_examples:
             RevisionExamples or collections.Iterable[RevisionExamples]
         """
-        self.revision_manager.revise(
-            revision_examples, self.train_using_all_examples)
+        self.revision_manager.revise(revision_examples)
 
     def apply_revision(self, operator_selector, examples):
         """
@@ -87,6 +86,8 @@ class TheoryRevisionManager(Initializable):
         :type operator_selector: RevisionOperatorSelector
         :param examples: the revision examples
         :type examples: RevisionExamples
+        :raise TheoryRevisionException: if an error occur during the revision
+        of the theory
         :return: `True`, if the call result in an actual change of the
         theory; otherwise, `False`
         :rtype: bool
