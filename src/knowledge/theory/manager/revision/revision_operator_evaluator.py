@@ -18,6 +18,7 @@ class RevisionOperatorEvaluator(Initializable):
 
     def __init__(self, revision_operator: RevisionOperator):
         self.revision_operator = revision_operator
+        self.is_revised = False
 
     # noinspection PyMissingOrEmptyDocstring
     def required_fields(self):
@@ -59,3 +60,9 @@ class RevisionOperatorEvaluator(Initializable):
         :type revised_theory: NeuralLogProgram
         """
         self.revision_operator.theory_revision_accepted(revised_theory)
+
+    def clear_cached_theory(self):
+        """
+        Clears the revised theory.
+        """
+        self.is_revised = False
