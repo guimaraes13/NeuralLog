@@ -42,3 +42,18 @@ class RevisionManager(Initializable):
     # noinspection PyMissingOrEmptyDocstring,PyMethodMayBeStatic
     def get_required_fields(self):
         return ["theory_revision_manager", "operator_selector"]
+
+    def revise(self, revision_examples, train_using_all_examples):
+        """
+        Revises the theory based on the revision examples.
+
+        :param revision_examples: the revision examples
+        :type revision_examples:
+            RevisionExamples or collections.Iterable[RevisionExamples]
+        :param train_using_all_examples: if `True`, the model will use all
+        the available examples, in the revision examples, for training/learning;
+        otherwise, only the relevant examples will be used
+        :type train_using_all_examples: bool
+        """
+        # TODO: call the revision
+        pass

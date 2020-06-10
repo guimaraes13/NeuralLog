@@ -47,23 +47,35 @@ class RevisionExamples:
         the relevant ones
         :type all_examples: bool
         :return: the examples
-        :rtype: dict[Predicate, dict[Any, Atom]]
+        :rtype: Dict[Predicate, Dict[Any, Atom]]
         """
         return \
             self.incoming_examples if all_examples else self.relevant_examples
 
-    def get_relevant_sample_size(self, predicate=None):
+    def get_number_of_examples(self, all_examples=True, predicate=None):
         """
-        Gets the number of relevant examples, based on the sample selector.
-        If `predicate` is not `None`, computes only the examples of the given
-        predicate.
+        Gets the number of examples. If `all_examples` is `True`, return
+        the number of all examples; otherwise, returns only the number of
+        relevant examples. If `predicate` is not `None`, computes only the
+        examples of the given predicate.
 
+        :param all_examples: if `True`, return the number of all examples;
+        otherwise, returns only the number of relevant examples.
+        :type all_examples: bool
         :param predicate: the predicate of the examples
         :type predicate: Predicate or None
         :return: the number of relevant examples
         :rtype: int
         """
-        pass
+        if all_examples:
+            examples_dict = self.relevant_examples
+        else:
+            examples_dict = self.inferred_examples
+
+        if predicate is not None:
+            return len(examples_dict.get(predicate, {}))
+        else:
+            return sum(map(lambda x: len(x), examples_dict.values()))
 
     def add_example(self, example, inferred_value=None):
         """

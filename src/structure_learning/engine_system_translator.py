@@ -28,3 +28,20 @@ class EngineSystemTranslator(Initializable):
         :rtype: Dict[Predicate, Dict[Any, float]]
         """
         pass
+
+    @abstractmethod
+    def train_parameters(self, training_examples):
+        """
+        Trains the parameters of the model.
+
+        :param training_examples: the training examples
+        :type training_examples: Dict[Predicate, Dict[Any, Atom]]
+        """
+        pass
+
+    @abstractmethod
+    def save_trained_parameters(self):
+        """
+        Saves the trained parameters.
+        """
+        pass

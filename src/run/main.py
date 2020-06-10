@@ -60,7 +60,7 @@ def main():
     # noinspection PyBroadException
     try:
         command.run()
-    except Exception as e:
+    except Exception:
         # logger.error("Main program error, reason: %s", e)
         logger.exception("Main program error:")
         traceback.print_exc()

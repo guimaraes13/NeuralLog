@@ -830,8 +830,6 @@ class Train(Command):
         """
         Saves the transitions to file.
         """
-        # TODO: Create a way to save this information into a predicate
-        #  defined in the logic program
         loss_function = self.parameters["loss_function"]
         if isinstance(loss_function, LossMaskWrapper):
             loss_function = loss_function.function

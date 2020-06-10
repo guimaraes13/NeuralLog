@@ -1665,6 +1665,8 @@ class NeuralLogProgram:
 
         return program
 
+    # TODO: implement __str__ and __repr__
+
 
 DEFAULT_PARAMETERS = [
     ("dataset_class", "default_dataset",
