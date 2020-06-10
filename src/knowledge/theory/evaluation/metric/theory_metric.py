@@ -3,6 +3,7 @@ Handles the theory metrics.
 """
 from abc import abstractmethod
 
+from src.knowledge.examples import Examples, ExamplesInferences
 from src.util import Initializable
 
 
@@ -12,14 +13,14 @@ class TheoryMetric(Initializable):
     """
 
     @abstractmethod
-    def evaluate(self, examples, inferred_examples) -> float:
+    def evaluate(self, examples, inferred_examples):
         """
         Evaluates the theory according to the metric.
 
         :param examples: the examples
-        :type examples: Dict[Predicate, Dict[Any, Atom]]
+        :type examples: Examples
         :param inferred_examples: the inferred examples
-        :type inferred_examples: Dict[Predicate, Dict[Any, float]]
+        :type inferred_examples: ExamplesInferences
         :return: the evaluation of the theory
         :rtype: float
         """
@@ -57,7 +58,11 @@ class RocCurveMetric(TheoryMetric):
     """
 
     # noinspection PyMissingOrEmptyDocstring
-    def evaluate(self, examples, inferred_examples) -> float:
+    def required_fields(self):
+        pass
+
+    # noinspection PyMissingOrEmptyDocstring
+    def evaluate(self, examples, inferred_examples):
         pass
 
     # noinspection PyMissingOrEmptyDocstring

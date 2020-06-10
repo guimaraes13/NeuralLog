@@ -1,13 +1,12 @@
 """
 Handle the evaluation of the revision operators.
 """
-from typing import Dict
 
+from src.knowledge.examples import Examples
 from src.knowledge.program import NeuralLogProgram
 from src.knowledge.theory.evaluation.metric.theory_metric import TheoryMetric
 from src.knowledge.theory.manager.revision.operator.revision_operator import \
     RevisionOperator
-from src.language.language import Predicate, Atom
 from src.util import Initializable
 
 
@@ -29,7 +28,7 @@ class RevisionOperatorEvaluator(Initializable):
         Evaluates the operator in the examples, based on the metric.
 
         :param examples: the examples
-        :type examples: Dict[Predicate, Dict[Any, Atom]]
+        :type examples: Examples
         :param theory_metric: the metric
         :type theory_metric: TheoryMetric
         :return: the evaluation of the operator
@@ -45,7 +44,7 @@ class RevisionOperatorEvaluator(Initializable):
         theory, in order to improve performance.
         
         :param training_examples: the training examples
-        :type training_examples: Dict[Predicate, Dict[Any, Atom]]
+        :type training_examples: Examples
         :return: the revised theory
         :rtype: NeuralLogProgram
         """

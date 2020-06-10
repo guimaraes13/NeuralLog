@@ -195,7 +195,7 @@ class TooManyArgumentsFunction(Exception):
 
     MAX_NUMBER_OF_ARGUMENTS = 1
 
-    def __init__(self, predicate) -> None:
+    def __init__(self, predicate):
         """
         Creates a too many arguments exception.
 
@@ -213,7 +213,7 @@ class AtomMalformedException(Exception):
     Represents an atom malformed exception.
     """
 
-    def __init__(self, expected, found) -> None:
+    def __init__(self, expected, found):
         """
         Creates an atom malformed exception.
 
@@ -231,7 +231,7 @@ class TermMalformedException(Exception):
     Represents an term malformed exception.
     """
 
-    def __init__(self) -> None:
+    def __init__(self):
         """
         Creates an term malformed exception.
         """
@@ -244,7 +244,7 @@ class ClauseMalformedException(Exception):
     Represents an term malformed exception.
     """
 
-    def __init__(self, clause=None) -> None:
+    def __init__(self, clause=None):
         """
         Creates an term malformed exception.
         """
@@ -258,7 +258,7 @@ class BadArgumentException(Exception):
     Represents an bad argument exception.
     """
 
-    def __init__(self, value) -> None:
+    def __init__(self, value):
         """
         Creates an term malformed exception.
         """
@@ -293,7 +293,7 @@ class UnsupportedMatrixRepresentation(Exception):
     Represents an unsupported matrix representation exception.
     """
 
-    def __init__(self, predicate) -> None:
+    def __init__(self, predicate):
         """
         Creates an unsupported matrix representation exception.
         """
@@ -664,7 +664,7 @@ class Atom(Clause):
     Represents a logic atom.
     """
 
-    def __init__(self, predicate, *args, weight=1.0, provenance=None) -> None:
+    def __init__(self, predicate, *args, weight=1.0, provenance=None):
         """
         Creates a logic atom.
 
@@ -772,7 +772,7 @@ class Literal(Atom):
     Represents a logic literal.
     """
 
-    def __init__(self, atom, negated=False) -> None:
+    def __init__(self, atom, negated=False):
         """
         Creates a logic literal from an atom.
 
@@ -807,7 +807,7 @@ class AtomClause(Clause):
     it is written with a `END_SIGN` at the end.
     """
 
-    def __init__(self, atom) -> None:
+    def __init__(self, atom):
         """
         Creates an atom clause
         :param atom: the atom
@@ -828,7 +828,7 @@ class AtomClause(Clause):
     def key(self):
         return self.atom.key()
 
-    def __str__(self) -> str:
+    def __str__(self):
         return self.atom.__str__() + END_SIGN
 
     def simple_key(self):
@@ -850,7 +850,7 @@ class HornClause(Clause):
     Represents a logic horn clause.
     """
 
-    def __init__(self, head, *body, provenance=None) -> None:
+    def __init__(self, head, *body, provenance=None):
         """
         Creates a Horn clause.
 

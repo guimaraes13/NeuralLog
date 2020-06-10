@@ -36,7 +36,7 @@ class RevisionManager(Initializable):
 
     # noinspection PyMissingOrEmptyDocstring
     @abstractmethod
-    def initialize(self) -> None:
+    def initialize(self):
         super().initialize()
 
     # noinspection PyMissingOrEmptyDocstring,PyMethodMayBeStatic

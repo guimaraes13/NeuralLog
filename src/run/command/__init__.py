@@ -25,14 +25,10 @@ def get_command_docs(commands):
     """
     Gets the documentation of the commands, formatted to a help printing.
 
-    Parameters
-    ----------
-    commands : the commands
-
-    Returns
-    -------
-    out : str
-        the formatted documentation for each command
+    :param commands: the commands
+    :type commands: dict
+    :return: the formatted documentation for each command
+    :rtype: str
     """
     message = "\n"
     max_key_length = max(map(lambda x: len(x), commands.keys()))
@@ -56,10 +52,8 @@ def build_parent_dir(path):
     """
     Builds the parent directory of the `path`, if it does not exist.
 
-    Parameters
-    ----------
-    path : str
-        the path
+    :param path: the path
+    :type path: str
     """
     if path is not None:
         parent_folder = os.path.dirname(path)
@@ -73,35 +67,29 @@ def suggest_similar_commands(selected_command, possible_commands, logger,
     Suggest the command(s) from the `possible_commands` which is the most
     similar to the `selected_command`.
 
-    Parameters
-    ----------
-    possible_commands : collections.Iterable[str]
-        the possible commands
-    selected_command : str
-        the selected commands
-    logger : logger
-        the logger
-    similarity_threshold : float
-        the smaller similarity accepted to suggest the command.
-    Returns
-    -------
-    out : bool
-        True if at least a command is suggested, False otherwise
+    :param selected_command: the selected commands
+    :type selected_command: str
+    :param possible_commands: the possible commands
+    :type possible_commands: collections.Iterable[str]
+    :param logger: the logger
+    :type logger:  logger
+    :param similarity_threshold: the smaller similarity accepted to suggest the
+    command.
+    :type similarity_threshold: float
+    :return: True if at least a command is suggested, False otherwise
+    :rtype: bool
     """
 
     def similar(a, b):
         """
         Returns how similar string `a` is from string `b`.
-        Parameters
-        ----------
-        a : str
-            string a
-        b : str
-            string b
-        Returns
-        -------
-        out : float
-            the similarity between `a` and `b`
+
+        :param a: string a
+        :type a: str
+        :param b: string b
+        :type b: str
+        :return: the similarity between `a` and `b`
+        :rtype: float
         """
         return SequenceMatcher(a=a, b=b).ratio()
 
@@ -142,29 +130,20 @@ def make_command():
         """
         Returns a function to registry the command with the name.
 
-        Parameters
-        ----------
-        name : the name of the command
-
-        Returns
-        -------
-        out : function
-            a function to registry the command with the name
+        :param name: the name of the command
+        :type name: str
+        :return: a function to registry the command with the name
+        :rtype: function
         """
 
         def registry(cls):
             """
             Registries the command.
 
-            Parameters
-            ----------
-            cls : Command
-                the Command class to be registered.
-
-            Returns
-            -------
-            out : Command
-                the registered command
+            :param cls: the Command class to be registered.
+            :type cls: Command
+            :return: the registered command
+            :rtype: Command
             """
 
             func_name = name if name is not None else cls.__name__
@@ -192,14 +171,13 @@ class Command(ABC):
         """
         Template class for the commands to appear at the Command Line Interface.
 
-        Parameters
-        ----------
-        program : str
-            the program command
-        args : list[str]
-            the command line arguments to be parsed
-        direct : bool
-            if the command is directly called or if it is under another CLI
+        :param program: the program command
+        :type program: str
+        :param args: the command line arguments to be parsed
+        :type args: list[str]
+        :param direct: if the command is directly called or if it is under
+        another CLI
+        :type direct: bool
         """
         configure_log()
         self.direct = direct
@@ -209,7 +187,7 @@ class Command(ABC):
         self.parse_args()
 
     @abstractmethod
-    def build_parser(self) -> ArgumentParser:
+    def build_parser(self):
         """
         Builds the command line parser.
         Returns
@@ -272,10 +250,8 @@ def create_log_file(log_file):
     """
     Creates a log file.
 
-    Parameters
-    ----------
-    log_file : str
-        the path of the log file
+    :param log_file: the path of the log file
+    :type log_file: str
     """
     if log_file is not None:
         build_parent_dir(log_file)

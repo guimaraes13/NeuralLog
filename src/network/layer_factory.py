@@ -85,7 +85,7 @@ class NotGroundAtomException(Exception):
     Represents an atom malformed exception.
     """
 
-    def __init__(self, atom) -> None:
+    def __init__(self, atom):
         """
         Creates a not ground atom exception.
 

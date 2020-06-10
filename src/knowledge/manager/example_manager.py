@@ -35,7 +35,7 @@ class IncomingExampleManager(Initializable):
         self.sample_selector = sample_selector
 
     # noinspection PyMissingOrEmptyDocstring
-    def initialize(self) -> None:
+    def initialize(self):
         super().initialize()
         self.sample_selector.learning_system = self.learning_system
         self.sample_selector.initialize()

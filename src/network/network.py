@@ -135,7 +135,7 @@ class CyclicProgramException(Exception):
     Represents a cyclic program exception.
     """
 
-    def __init__(self, atom) -> None:
+    def __init__(self, atom):
         """
         Creates an term malformed exception.
 

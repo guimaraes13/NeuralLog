@@ -1,14 +1,13 @@
 """
 The core of the structure learning system.
 """
-from typing import Dict
 
+from src.knowledge.examples import Examples, ExamplesInferences
 from src.knowledge.manager.example_manager import IncomingExampleManager
 from src.knowledge.program import NeuralLogProgram
 from src.knowledge.theory.evaluation.theory_evaluator import TheoryEvaluator
 from src.knowledge.theory.manager.theory_revision_manager import \
     TheoryRevisionManager
-from src.language.language import Predicate, Atom
 from src.structure_learning.engine_system_translator import \
     EngineSystemTranslator
 
@@ -30,7 +29,7 @@ class StructureLearningSystem:
         :param theory: the theory
         :type theory: NeuralLogProgram
         :param examples: the examples
-        :type examples: NeuralLogProgram
+        :type examples: Examples
         :param engine_system_translator: the engine system translator
         :type engine_system_translator: EngineSystemTranslator
         :param theory_revision_manager: the theory revision manager
@@ -83,18 +82,18 @@ class StructureLearningSystem:
         Perform the inference for the given examples.
 
         :param examples: the examples
-        :type examples: Dict[Predicate, Dict[Any, Atom]]
+        :type examples: Examples
         :return: the inference value of the examples
-        :rtype: Dict[Predicate, Dict[Any, float]]
+        :rtype: ExamplesInferences
         """
         self.engine_system_translator.infer_examples(examples)
 
-    def train_parameters(self, training_examples):
+    def train_parameters(self, training_examples: Examples):
         """
         Trains the parameters of the model.
 
         :param training_examples: the training examples
-        :type training_examples: Dict[Predicate, Dict[Any, Atom]]
+        :type training_examples: Examples
         """
         self.engine_system_translator.train_parameters(training_examples)
 

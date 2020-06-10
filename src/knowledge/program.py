@@ -11,6 +11,7 @@ from typing import TypeVar, MutableMapping, Dict, Any, List, Set, Tuple
 import numpy as np
 from scipy.sparse import csr_matrix
 
+from src.knowledge.examples import Examples
 from src.language.language import Number, TermType, Predicate, Atom, \
     HornClause, Term, AtomClause, ClauseMalformedException, \
     PredicateTypeError, \
@@ -255,7 +256,7 @@ class TooManyArguments(Exception):
     Represents an exception raised by an atom with too many arguments.
     """
 
-    def __init__(self, clause, found) -> None:
+    def __init__(self, clause, found):
         """
         Creates a too many arguments exception.
 
@@ -669,6 +670,7 @@ class BiDict(dict, MutableMapping[KT, VT]):
         self.inverse[value] = key
 
     def __delitem__(self, key):
+        # noinspection PyUnresolvedReferences
         self.inverse.setdefault(self[key], []).remove(key)
         if self[key] in self.inverse and not self.inverse[self[key]]:
             del self.inverse[self[key]]
@@ -701,7 +703,7 @@ class NeuralLogProgram:
         Creates a NeuralLog Program.
         """
 
-        self.facts_by_predicate: Dict[Predicate, Dict[Any, Atom]] = dict()
+        self.facts_by_predicate: Examples = Examples()
         """
         The facts. The values of this variable are dictionaries where the key 
         are the predicate and a tuple of the terms and the values are the atoms 
@@ -710,8 +712,7 @@ class NeuralLogProgram:
         definition will be considered
         """
 
-        self.examples: Dict[
-            str, Dict[Predicate, Dict[Any, Atom]]] = OrderedDict()
+        self.examples: Dict[str, Examples] = OrderedDict()
         """
         The examples. The values of this variable are dictionaries where the 
         key are the predicate and a tuple of the terms and the values are the 
@@ -1444,7 +1445,7 @@ class NeuralLogProgram:
         )
 
         example_set = kwargs.get("example_set", NO_EXAMPLE_SET)
-        example_dict = self.examples.setdefault(example_set, OrderedDict())
+        example_dict = self.examples.setdefault(example_set, Examples())
         example_dict = example_dict.setdefault(atom.predicate, OrderedDict())
         key = atom.simple_key()
         old_atom = example_dict.get(key, None)

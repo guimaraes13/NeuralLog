@@ -58,7 +58,7 @@ class StructureLearningMethod(Initializable):
         self.output_directory = output_directory
 
     @abstractmethod
-    def run(self) -> None:
+    def run(self):
         """
         Runs the structure learning method.
         """
@@ -158,7 +158,7 @@ class BatchStructureLearning(StructureLearningMethod):
         self.revision_operator_evaluators = revision_operator_evaluators
 
     # noinspection PyMissingOrEmptyDocstring,PyAttributeOutsideInit
-    def initialize(self) -> None:
+    def initialize(self):
         super().initialize()
         self.time_measure.add_measure(RunTimestamps.BEGIN_INITIALIZE)
         super().initialize()
@@ -290,7 +290,7 @@ class BatchStructureLearning(StructureLearningMethod):
         pass
 
     # noinspection PyMissingOrEmptyDocstring
-    def run(self) -> None:
+    def run(self):
         logger.info("Running %s", self.__class__.__name__)
         self.learn()
         self.time_measure.add_measure(RunTimestamps.BEGIN_DISK_OUTPUT)

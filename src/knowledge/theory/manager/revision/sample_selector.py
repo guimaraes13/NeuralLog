@@ -25,12 +25,12 @@ class SampleSelector(Initializable):
         self._learning_system = learning_system
 
     # noinspection PyMissingOrEmptyDocstring
-    def initialize(self) -> None:
+    def initialize(self):
         if self.learning_system is None:
             raise unset_fields_error("learning_system", self)
 
     @abstractmethod
-    def is_all_relevant(self) -> bool:
+    def is_all_relevant(self):
         """
         Returns `True`, if any example are relevant.
 
@@ -39,7 +39,7 @@ class SampleSelector(Initializable):
         """
         pass
 
-    def is_relevant(self, example) -> bool:
+    def is_relevant(self, example):
         """
         Returns `True`, if the `example` is relevant.
 
@@ -87,11 +87,11 @@ class AllRelevantSampleSelect(SampleSelector):
         super().__init__(learning_system)
 
     # noinspection PyMissingOrEmptyDocstring
-    def is_all_relevant(self) -> bool:
+    def is_all_relevant(self):
         return True
 
     # noinspection PyMissingOrEmptyDocstring
-    def is_relevant(self, example) -> bool:
+    def is_relevant(self, example):
         return True
 
     # noinspection PyMissingOrEmptyDocstring

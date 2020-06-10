@@ -99,7 +99,7 @@ class OutputNLP(Command):
         self.test_set = None
 
     # noinspection PyMissingOrEmptyDocstring
-    def build_parser(self) -> argparse.ArgumentParser:
+    def build_parser(self):
         program = self.program
         if not self.direct:
             program += " {}".format(COMMAND_NAME)

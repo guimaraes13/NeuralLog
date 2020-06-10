@@ -3,10 +3,10 @@ Handles the selection of the revision operators.
 """
 from abc import abstractmethod
 
+from src.knowledge.examples import Examples
 from src.knowledge.theory.evaluation.metric.theory_metric import TheoryMetric
 from src.knowledge.theory.manager.revision.revision_operator_evaluator import \
     RevisionOperatorEvaluator
-from src.language.language import Predicate, Atom
 from src.util import Initializable
 
 
@@ -30,7 +30,7 @@ class RevisionOperatorSelector(Initializable):
         and the metric.
 
         :param examples: the examples
-        :type examples: dict[Predicate, dict[Any, Atom]]
+        :type examples: Examples
         :param theory_metric: the theory metric
         :type theory_metric: TheoryMetric
         :return: the best revision operator

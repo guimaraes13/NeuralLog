@@ -223,7 +223,7 @@ class Train(Command):
         self.best_models = dict()  # type: Dict[str, ModelCheckpoint]
 
     # noinspection PyMissingOrEmptyDocstring,DuplicatedCode
-    def build_parser(self) -> argparse.ArgumentParser:
+    def build_parser(self):
         program = self.program
         if not self.direct:
             program += " {}".format(COMMAND_NAME)
@@ -635,6 +635,7 @@ class Train(Command):
             if len(parameters) == 0:
                 return
             if map_dict is not None:
+                # noinspection PyUnresolvedReferences
                 for key, value in parameters.items():
                     if isinstance(value, dict):
                         new_value = dict()

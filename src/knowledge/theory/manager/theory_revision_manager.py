@@ -57,7 +57,7 @@ class TheoryRevisionManager(Initializable):
         self.theory_evaluation = 0.0
 
     # noinspection PyMissingOrEmptyDocstring
-    def initialize(self) -> None:
+    def initialize(self):
         if self.theory_metric is None:
             self.theory_metric = DEFAULT_THEORY_METRIC()
         super().initialize()

@@ -13,7 +13,7 @@ class InitializationException(Exception):
     Represents an initialization exception.
     """
 
-    def __init__(self, message) -> None:
+    def __init__(self, message):
         """
         Creates an exception with message.
 
@@ -28,7 +28,7 @@ class Initializable(ABC):
     Interface to allow object to be initialized.
     """
 
-    def initialize(self) -> None:
+    def initialize(self):
         """
         Initializes the object.
 
@@ -58,7 +58,7 @@ class Initializable(ABC):
         """
         pass
 
-    def __setattr__(self, name: str, value: Any) -> None:
+    def __setattr__(self, name: str, value: Any):
         required_fields = self.required_fields()
         if required_fields is not None and name in required_fields:
             if hasattr(self, name) and getattr(self, name) is not None:

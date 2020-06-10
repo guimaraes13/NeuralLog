@@ -1,12 +1,8 @@
 """
 Handles the examples to be used on the theory revision.
 """
-import collections
-from collections import OrderedDict
-from typing import Dict, Any
-
+from src.knowledge.examples import Examples, ExamplesInferences
 from src.knowledge.theory.manager.revision.sample_selector import SampleSelector
-from src.language.language import Atom, Predicate
 from src.structure_learning.structure_learning_system import \
     StructureLearningSystem
 from src.util import time_measure
@@ -29,12 +25,10 @@ class RevisionExamples:
         self.learning_system = learning_system
         self.sample_selector = sample_selector
 
-        self.incoming_examples: Dict[Predicate, Dict[Any, Atom]] = OrderedDict()
-        self.relevant_examples: Dict[Predicate, Dict[Any, Atom]] = OrderedDict()
-        self.inferred_examples: Dict[Predicate, Dict[Any, float]] = \
-            OrderedDict()
-        self.not_evaluated_examples: Dict[Predicate, Dict[Any, Atom]] = \
-            OrderedDict()
+        self.incoming_examples = Examples()
+        self.relevant_examples = Examples()
+        self.inferred_examples = ExamplesInferences()
+        self.not_evaluated_examples = Examples()
         self.last_inference = 0.0
 
     def get_training_examples(self, all_examples=True):
@@ -47,10 +41,12 @@ class RevisionExamples:
         the relevant ones
         :type all_examples: bool
         :return: the examples
-        :rtype: Dict[Predicate, Dict[Any, Atom]]
+        :rtype: Examples
         """
-        return \
-            self.incoming_examples if all_examples else self.relevant_examples
+        if all_examples:
+            return self.incoming_examples
+        else:
+            return self.relevant_examples
 
     def get_number_of_examples(self, all_examples=True, predicate=None):
         """
@@ -68,14 +64,9 @@ class RevisionExamples:
         :rtype: int
         """
         if all_examples:
-            examples_dict = self.relevant_examples
+            return self.incoming_examples.size(predicate)
         else:
-            examples_dict = self.inferred_examples
-
-        if predicate is not None:
-            return len(examples_dict.get(predicate, {}))
-        else:
-            return sum(map(lambda x: len(x), examples_dict.values()))
+            return self.relevant_examples.size(predicate)
 
     def add_example(self, example, inferred_value=None):
         """
@@ -86,19 +77,13 @@ class RevisionExamples:
         :param inferred_value: the inferred value of the example
         :type inferred_value: float or None
         """
-        predicate = example.predicate
-        key = example.simple_key()
-        self.incoming_examples.setdefault(
-            predicate, OrderedDict())[key] = example
+        self.incoming_examples.add_example(example)
         if self.sample_selector.is_relevant(example):
-            self.relevant_examples.setdefault(
-                predicate, OrderedDict())[key] = example
+            self.relevant_examples.add_example(example)
             if inferred_value is None:
-                self.not_evaluated_examples.setdefault(
-                    predicate, OrderedDict())[key] = example
+                self.not_evaluated_examples.add_example(example)
             else:
-                self.inferred_examples.setdefault(
-                    predicate, OrderedDict())[key] = inferred_value
+                self.inferred_examples.add_inference(example, inferred_value)
 
     def add_examples(self, examples):
         """
@@ -118,7 +103,7 @@ class RevisionExamples:
         :param last_theory_change: the last change of the theory
         :type last_theory_change: float
         :return: the inferred examples
-        :rtype: Dict[Predicate, Dict[Any, float]]
+        :rtype: ExamplesInferences
         """
         if self.last_inference < last_theory_change:
             self.clear_inferred_examples()

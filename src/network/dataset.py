@@ -11,6 +11,7 @@ from typing import List
 import numpy as np
 import tensorflow as tf
 
+from src.knowledge.examples import Examples
 from src.knowledge.program import NeuralLogProgram, NO_EXAMPLE_SET, \
     get_predicate_from_string
 from src.language.language import AtomClause, Atom, Predicate, \
@@ -602,10 +603,7 @@ class DefaultDataset(NeuralLogDataset):
         The labels are always a sparse tensor.
 
         :param examples: the set of examples
-        :type examples: Dict[Predicate, Dict[Any, Atom]]
-        sparse tensor. If `False`, the features are generated as a dense
-        tensor of indices, for each index a one hot vector creation is
-        necessary.
+        :type examples: Examples
         :return: the features and labels
         :rtype: (tuple[tf.SparseTensor], tuple[tf.SparseTensor])
         """
@@ -664,6 +662,7 @@ class DefaultDataset(NeuralLogDataset):
                         label_indices.append([i, 0])
                         label_values.append(outputs)
                     else:
+                        # noinspection PyTypeChecker
                         for output_term, output_value in outputs:
                             output_term_index = \
                                 self.program.get_index_of_constant(

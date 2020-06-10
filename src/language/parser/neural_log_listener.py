@@ -14,7 +14,7 @@ class BadTermException(Exception):
     Represents an exception raised by a mal formed term.
     """
 
-    def __init__(self, term, key, substitution) -> None:
+    def __init__(self, term, key, substitution):
         """
         Creates a bad term exception.
 
@@ -35,7 +35,7 @@ class BadClauseException(Exception):
     Represents an exception raised by a mal formed clause.
     """
 
-    def __init__(self, clause) -> None:
+    def __init__(self, clause):
         """
         Creates a bad clause exception.
 
@@ -53,7 +53,7 @@ class KeyDict(dict):
     same.
     """
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     def __getitem__(self, k):

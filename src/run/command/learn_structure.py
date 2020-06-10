@@ -4,7 +4,6 @@ Learns the logic program structure for a given task.
 import argparse
 import logging
 import os
-from argparse import ArgumentParser
 from datetime import datetime
 from shutil import copyfile
 
@@ -63,7 +62,7 @@ class LearnStructure(Command):
         super().__init__(program, args, direct)
 
     # noinspection PyMissingOrEmptyDocstring
-    def build_parser(self) -> ArgumentParser:
+    def build_parser(self):
         program = self.program
         if not self.direct:
             program += " {}".format(COMMAND_NAME)
