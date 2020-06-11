@@ -35,7 +35,7 @@ class Initializable(ABC):
         :raise InitializationException: if an error occurs during the
         initialization of the object
         """
-        logger.debug("Initializing\t%s", self.__class__.__name__)
+        logger.debug("Initializing\t%s", self)
         fields = []
         required_fields = self.required_fields()
         if required_fields is None:
@@ -64,6 +64,9 @@ class Initializable(ABC):
             if hasattr(self, name) and getattr(self, name) is not None:
                 raise reset_field_error(self, "learning_system")
         super().__setattr__(name, value)
+
+    def __repr__(self):
+        return self.__class__.__name__
 
 
 def unset_fields_error(field_name, clazz):

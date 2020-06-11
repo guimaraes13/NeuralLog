@@ -1666,7 +1666,7 @@ class NeuralLogProgram:
 
         return program
 
-    # TODO: implement __str__ and __repr__
+    # TODO: implement __repr__
 
 
 DEFAULT_PARAMETERS = [

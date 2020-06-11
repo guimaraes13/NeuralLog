@@ -85,7 +85,7 @@ class TheoryEvaluator(Initializable):
             examples,
             self.learning_system.infer_examples(
                 examples, theory=theory,
-                retrain=metric.parameters_retrain_before_evaluate))
+                retrain=metric.parameters_retrain))
 
     def evaluate_theory_appending_clause(self, examples, metric, clauses):
         """
@@ -105,4 +105,4 @@ class TheoryEvaluator(Initializable):
         return metric.compute_metric(
             examples, self.learning_system.infer_examples_appending_clauses(
                 examples, clauses,
-                retrain=metric.parameters_retrain_before_evaluate))
+                retrain=metric.parameters_retrain))

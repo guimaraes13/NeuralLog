@@ -23,17 +23,16 @@ class TheoryMetric(Initializable):
     Class to define the theory metric.
     """
 
-    def __init__(self, parameters_retrain_before_evaluate=False):
+    def __init__(self, parameters_retrain=False):
         """
         Creates a theory metric.
 
-        :param parameters_retrain_before_evaluate: if `True`, the parameters
-        will be trained before each candidate evaluation on this metric.
-        :type parameters_retrain_before_evaluate: bool
+        :param parameters_retrain: if `True`, the parameters will be trained
+        before each candidate evaluation on this metric.
+        :type parameters_retrain: bool
         """
         self.default_value = 0.0
-        self.parameters_retrain_before_evaluate = \
-            parameters_retrain_before_evaluate
+        self.parameters_retrain = parameters_retrain
 
     @abstractmethod
     def compute_metric(self, examples, inferred_values):
@@ -145,18 +144,15 @@ class TheoryMetric(Initializable):
         if self.__class__.__name__ != other.__class__.__name__:
             return False
 
-        if self.parameters_retrain_before_evaluate != \
-                other.parameters_retrain_before_evaluate:
+        if self.parameters_retrain != \
+                other.parameters_retrain:
             return False
 
         return self.default_value == other.default_value
 
     def __hash__(self):
         return hash(
-            (self.parameters_retrain_before_evaluate, self.default_value))
-
-    def __repr__(self):
-        return self.__class__.__name__
+            (self.parameters_retrain, self.default_value))
 
 
 J = TypeVar('J')  # Key type.
