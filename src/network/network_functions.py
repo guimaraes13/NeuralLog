@@ -13,7 +13,8 @@ from tensorflow_core.python import keras
 import src.network.layer_factory
 from src.knowledge.graph import RuleGraph, Edge
 from src.knowledge.program import ANY_PREDICATE_NAME
-from src.language.language import Predicate, Term, Literal, Atom
+from src.language.language import Predicate, Term, Literal, Atom, \
+    KnowledgeException
 from src.network import registry
 
 EMPTY_DICT = dict()
@@ -1330,7 +1331,7 @@ class RuleLayer(NeuralLogLayer):
         return cls(**config)
 
 
-class CyclicRuleException(Exception):
+class CyclicRuleException(KnowledgeException):
     """
     Represents a cyclic rule exception.
     """

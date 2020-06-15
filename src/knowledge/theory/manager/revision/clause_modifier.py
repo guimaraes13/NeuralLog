@@ -25,7 +25,7 @@ class ClauseModifier(Initializable):
         self.learning_system = learning_system
 
     @abstractmethod
-    def modify_clause(self, clause):
+    def modify_clause(self, clause, examples):
         """
         Modifies the clause, given the examples.
 

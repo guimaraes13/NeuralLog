@@ -9,7 +9,7 @@ from src.language.language import *
 logger = logging.getLogger(__name__)
 
 
-class BadTermException(Exception):
+class BadTermException(KnowledgeException):
     """
     Represents an exception raised by a mal formed term.
     """
@@ -30,7 +30,7 @@ class BadTermException(Exception):
                                           sub=substitution))
 
 
-class BadClauseException(Exception):
+class BadClauseException(KnowledgeException):
     """
     Represents an exception raised by a mal formed clause.
     """

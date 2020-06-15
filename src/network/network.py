@@ -14,7 +14,7 @@ from src.knowledge.program import NeuralLogProgram, ANY_PREDICATE_NAME, \
     SimpleRulePathFinder
 from src.language.language import Atom, Term, HornClause, Literal, \
     get_renamed_literal, get_substitution, get_variable_indices, Predicate, \
-    get_renamed_atom, get_variable_atom
+    get_renamed_atom, get_variable_atom, KnowledgeException
 from src.network.dataset import NeuralLogDataset
 from src.network.layer_factory import LayerFactory, \
     get_standardised_name
@@ -130,7 +130,7 @@ def is_cyclic(atom, previous_atoms):
     return False
 
 
-class CyclicProgramException(Exception):
+class CyclicProgramException(KnowledgeException):
     """
     Represents a cyclic program exception.
     """

@@ -188,7 +188,13 @@ def get_variable_indices(atom):
     return indexes
 
 
-class TooManyArgumentsFunction(Exception):
+class KnowledgeException(Exception):
+    """
+    Represents a exception in the logic knowledge.
+    """
+
+
+class TooManyArgumentsFunction(KnowledgeException):
     """
     Represents an exception raised by function literal with too many arguments.
     """
@@ -208,7 +214,7 @@ class TooManyArgumentsFunction(Exception):
                                  self.MAX_NUMBER_OF_ARGUMENTS))
 
 
-class AtomMalformedException(Exception):
+class AtomMalformedException(KnowledgeException):
     """
     Represents an atom malformed exception.
     """
@@ -226,7 +232,7 @@ class AtomMalformedException(Exception):
                          "{} argument(s) but {} found.".format(expected, found))
 
 
-class TermMalformedException(Exception):
+class TermMalformedException(KnowledgeException):
     """
     Represents an term malformed exception.
     """
@@ -239,7 +245,7 @@ class TermMalformedException(Exception):
                          "or a string.")
 
 
-class ClauseMalformedException(Exception):
+class ClauseMalformedException(KnowledgeException):
     """
     Represents an term malformed exception.
     """
@@ -253,7 +259,7 @@ class ClauseMalformedException(Exception):
                          "`{}`".format(clause))
 
 
-class BadArgumentException(Exception):
+class BadArgumentException(KnowledgeException):
     """
     Represents an bad argument exception.
     """
@@ -963,7 +969,7 @@ class TermType:
                         self.number or other.number)
 
 
-class PredicateTypeError(Exception):
+class PredicateTypeError(KnowledgeException):
     """
     Represents a predicate type exception.
     """

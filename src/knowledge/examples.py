@@ -7,6 +7,39 @@ from typing import Dict, Any, MutableMapping
 from src.language.language import Predicate, Atom
 
 
+class ExampleIterator:
+    """Iterates over the examples."""
+
+    def __init__(self, examples, predicate=None):
+        """
+        Creates an example iterator.
+
+        :param examples: the examples
+        :type examples: Examples
+        :param predicate: the predicate to iterate over, if `None`, it iterates
+        over all examples
+        :type predicate: Predicate or None
+        """
+        self._examples = examples
+        if predicate is not None:
+            self._outer_iterator = iter([examples.get(predicate, dict())])
+        else:
+            self._outer_iterator = iter(examples.values())
+        self._inner_iterator = None
+
+    def __next__(self) -> Atom:
+        if self._inner_iterator is None:
+            self._inner_iterator = iter(next(self._outer_iterator).values())
+        try:
+            return next(self._inner_iterator)
+        except StopIteration:
+            self._inner_iterator = None
+            return self.__next__()
+
+    def __iter__(self):
+        return self
+
+
 class Examples(UserDict, MutableMapping[Predicate, Dict[Any, Atom]]):
     """
     Handles a set of training examples.

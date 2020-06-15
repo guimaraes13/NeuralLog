@@ -13,7 +13,7 @@ from scipy.sparse import csr_matrix
 
 from src.knowledge.program import NeuralLogProgram
 from src.language.language import Predicate, Atom, Variable, \
-    get_variable_atom, get_renamed_atom
+    get_variable_atom, get_renamed_atom, KnowledgeException
 from src.network.network_functions import get_initializer, \
     get_combining_function, SPARSE_FUNCTION_SUFFIX, FactLayer, \
     AttributeFactLayer, SpecificFactLayer, DiagonalFactLayer, \
@@ -80,7 +80,7 @@ def get_initial_value_by_name(initializer, shape):
     return initial_value
 
 
-class NotGroundAtomException(Exception):
+class NotGroundAtomException(KnowledgeException):
     """
     Represents an atom malformed exception.
     """

@@ -16,7 +16,7 @@ from src.language.language import Number, TermType, Predicate, Atom, \
     HornClause, Term, AtomClause, ClauseMalformedException, \
     PredicateTypeError, \
     UnsupportedMatrixRepresentation, Literal, \
-    get_constant_from_string
+    get_constant_from_string, KnowledgeException
 
 ANY_PREDICATE_NAME = ":any:"
 NO_EXAMPLE_SET = ":none:"
@@ -251,7 +251,7 @@ def _join_sets_with_common_elements(sets):
     return join_sets
 
 
-class TooManyArguments(Exception):
+class TooManyArguments(KnowledgeException):
     """
     Represents an exception raised by an atom with too many arguments.
     """
@@ -1666,7 +1666,14 @@ class NeuralLogProgram:
 
         return program
 
-    # TODO: implement __repr__
+    def __repr__(self):
+        message = ""
+        for predicate in sorted(self.clauses_by_predicate.keys(),
+                                key=lambda x: x.__str__()):
+            for clause in self.clauses_by_predicate[predicate]:
+                message += str(clause)
+
+        return message
 
 
 DEFAULT_PARAMETERS = [
