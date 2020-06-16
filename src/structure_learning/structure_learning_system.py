@@ -9,8 +9,37 @@ from src.knowledge.program import NeuralLogProgram
 from src.knowledge.theory.evaluation.theory_evaluator import TheoryEvaluator
 from src.knowledge.theory.manager.theory_revision_manager import \
     TheoryRevisionManager
+from src.language.language import get_term_from_string, Atom, Predicate
 from src.structure_learning.engine_system_translator import \
     EngineSystemTranslator
+
+# TODO: add __null__ example for each predicate
+#    be aware of the type (categorical or numeric) of the predicate's terms.
+
+NULL_ENTITY = get_term_from_string("'__NULL__'")
+
+
+def build_null_atom(knowledge_base, predicate):
+    """
+    Builds the null atom for the predicate. The null atom is an atom with a
+    constant, that must not appear anywhere else, for each logic term;
+    zeros for the numeric terms; and zero weight.
+
+    :param knowledge_base: the knowledge base
+    :type knowledge_base: NeuralLogProgram
+    :param predicate: the predicate
+    :type predicate: Predicate
+    :return: the null atom
+    :rtype: Atom
+    """
+    terms = []
+    for term_type in knowledge_base.predicates[predicate]:
+        if term_type.number:
+            terms.append(0.0)
+        else:
+            terms.append(NULL_ENTITY)
+
+    return Atom(predicate, *terms, weight=0.0)
 
 
 class StructureLearningSystem:

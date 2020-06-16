@@ -30,7 +30,7 @@ class ClauseEvaluationProcess(Process):
         :type theory_metric: TheoryMetric
         :param examples: the examples
         :type examples: Examples
-        :param horn_clause: the horn clause
+        :param horn_clause: the Horn clause
         :type horn_clause: HornClause
         :param returning_queue: a queue to return the value
         :type returning_queue: Queue
@@ -80,7 +80,7 @@ class AsyncTheoryEvaluator(Generic[E]):
         :type theory_metric: TheoryMetric
         :param timeout: the timeout
         :type timeout: int or None
-        :param horn_clause: the horn clause
+        :param horn_clause: the Horn clause
         :type horn_clause: HornClause
         :param element: an element
         :type element: E
@@ -98,7 +98,7 @@ class AsyncTheoryEvaluator(Generic[E]):
         "The timeout."
 
         self.horn_clause = horn_clause
-        "The horn clause."
+        "The Horn clause."
 
         self.element = element
         "An element"

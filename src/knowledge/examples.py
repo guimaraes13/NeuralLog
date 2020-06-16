@@ -94,3 +94,15 @@ class ExamplesInferences(UserDict, MutableMapping[Predicate, Dict[Any, float]]):
         """
         self.data.setdefault(
             example.predicate, OrderedDict())[example.simple_key()] = value
+
+    def get_value_for_example(self, example):
+        """
+        Returns the inference value for the examples, if exists.
+
+        :param example: the example
+        :type example: Atom
+        :return: the inference value, if exists; otherwise, returns `None`
+        :rtype: float or None
+        """
+        return \
+            self.get(example.predicate, dict()).get(example.simple_key(), 0.0)

@@ -3,18 +3,20 @@ Handle the revision operators.
 """
 import logging
 from abc import abstractmethod
-from typing import List
+from collections import Collection
+from typing import Dict
 
-from src.knowledge.examples import Examples, ExampleIterator
+from src.knowledge.examples import Examples, ExampleIterator, ExamplesInferences
 from src.knowledge.program import NeuralLogProgram
 from src.knowledge.theory import TheoryRevisionException
 from src.knowledge.theory.evaluation.metric.theory_metric import TheoryMetric
 from src.knowledge.theory.evaluation.theory_evaluator import TheoryEvaluator
 from src.knowledge.theory.manager.revision.clause_modifier import ClauseModifier
-from src.language.language import KnowledgeException, Atom
+from src.language.language import KnowledgeException, Atom, Predicate, \
+    HornClause
 from src.structure_learning.structure_learning_system import \
-    StructureLearningSystem
-from src.util import Initializable
+    StructureLearningSystem, build_null_atom
+from src.util import Initializable, InitializationException
 from src.util.multiprocessing.evaluation_transformer import \
     EquivalentHonClauseAsyncTransformer
 from src.util.multiprocessing.multiprocessing import MultiprocessingEvaluation
@@ -24,6 +26,47 @@ DEFAULT_VARIABLE_GENERATOR = VariableGenerator
 
 logger = logging.getLogger(__name__)
 
+cached_null_atoms: Dict[Predicate, Atom] = dict()
+
+
+def get_null_example(knowledge_base, predicate):
+    """
+    Gets and cached the null example for the predicate.
+
+    :param knowledge_base: the knowledge base
+    :type knowledge_base: NeuralLogProgram
+    :param predicate: the predicate
+    :type predicate: Predicate
+    :return: the null example
+    :rtype: Atom
+    """
+    null_atom = cached_null_atoms.get(predicate)
+    if null_atom is None:
+        null_atom = build_null_atom(knowledge_base, predicate)
+        cached_null_atoms[predicate] = null_atom
+
+    return null_atom
+
+
+def is_covered(knowledge_base, example, inferred_examples):
+    """
+    Checks if the example is covered.
+
+    :param knowledge_base: the knowledge base
+    :type knowledge_base: NeuralLogProgram
+    :param example: the example
+    :type example: Atom
+    :param inferred_examples: the inference of the examples
+    :type inferred_examples: ExamplesInferences
+    :return: `True`, if the example is covered; otherwise, `False`
+    :rtype: bool
+    """
+    null_atom = get_null_example(knowledge_base, example.predicate)
+    null_value = inferred_examples.get_value_for_example(null_atom)
+    example_value = inferred_examples.get_value_for_example(example)
+
+    return example_value > null_value
+
 
 # TODO: extend this class
 class RevisionOperator(Initializable):
@@ -32,7 +75,7 @@ class RevisionOperator(Initializable):
     """
 
     def __init__(self, learning_system=None, theory_metric=None,
-                 clause_modifier=None):
+                 clause_modifiers=None):
         """
         Creates a revision operator.
 
@@ -40,13 +83,22 @@ class RevisionOperator(Initializable):
         :type learning_system: StructureLearningSystem
         :param theory_metric: the theory metric
         :type theory_metric: TheoryMetric
-        :param clause_modifier: a clause modifier, a list of clause modifiers
+        :param clause_modifiers: a clause modifier, a list of clause modifiers
         or none
-        :type clause_modifier: ClauseModifier or List[ClauseModifier] or None
+        :type clause_modifiers: ClauseModifier or Collection[ClauseModifier]
+        or None
         """
         self.learning_system = learning_system
         self.theory_metric = theory_metric
-        self.clause_modifier = clause_modifier
+        self.clause_modifiers: Collection[ClauseModifier] = clause_modifiers
+
+    # noinspection PyMissingOrEmptyDocstring
+    def initialize(self):
+        super().initialize()
+        if self.clause_modifiers is None:
+            self.clause_modifiers = []
+        elif not isinstance(self.clause_modifiers, Collection):
+            self.clause_modifiers = [self.clause_modifiers]
 
     # noinspection PyMissingOrEmptyDocstring
     @property
@@ -205,17 +257,33 @@ class BottomClauseBoundedRule(RevisionOperator):
         try:
             logger.info("Performing operation on\t%d examples.", targets.size())
             theory = self.learning_system.theory.copy()
+            self.add_null_examples(targets)
+            inferred_examples = self.learning_system.infer_examples(targets)
             for example in ExampleIterator(targets):
-                self.perform_operation_for_example(example, theory, targets)
+                self.perform_operation_for_example(
+                    example, theory, targets, inferred_examples)
             return theory
         except KnowledgeException as e:
             raise TheoryRevisionException("Error when revising the theory.", e)
+
+    def add_null_examples(self, targets):
+        """
+        Adds the null example for each predicate in `targets`.
+
+        :param targets: the targets
+        :type targets: Examples
+        """
+        for predicate in targets.keys():
+            targets.add_example(
+                get_null_example(self.learning_system.knowledge_base,
+                                 predicate))
 
     # noinspection PyMissingOrEmptyDocstring
     def theory_revision_accepted(self, revised_theory):
         pass
 
-    def perform_operation_for_example(self, example, theory, targets):
+    def perform_operation_for_example(self, example, theory, targets,
+                                      inferred_examples):
         """
         Performs the operation for a single examples.
 
@@ -225,6 +293,54 @@ class BottomClauseBoundedRule(RevisionOperator):
         :type theory: NeuralLogProgram
         :param targets: the other examples
         :type targets: Examples
+        :param inferred_examples: the inferred value for the examples
+        :type inferred_examples: ExamplesInferences
+        """
+        try:
+            if example.weight <= 0.0 or \
+                    is_covered(self.learning_system.knowledge_base, example,
+                               inferred_examples):
+                if example.weight > 0.0:
+                    logger.debug("Skipping covered example:\t%s", example)
+                # It skips negatives or covered positive examples
+                return
+
+            logger.debug("Building clause from the example:\t%s", example)
+            bottom_clause = self.build_bottom_clause(example)
+            horn_clause = \
+                self.build_rule_from_bottom_clause(targets, bottom_clause)
+            for clause_modifier in self.clause_modifiers:
+                horn_clause = \
+                    clause_modifier.modify_clause(horn_clause, targets)
+            theory.add_clauses(horn_clause)
+            theory.build_program()
+            logger.info("Rule appended to the theory:\t%s", horn_clause)
+        except (KnowledgeException, InitializationException):
+            logger.exception("Error when revising the example, reason:")
+
+    def build_bottom_clause(self, example):
+        """
+        Builds a bottom clause based on the `example`.
+
+        :param example: the example
+        :type example: Atom
+        :return: the bottom clause
+        :rtype: HornClause
+        """
+        pass
+
+    def build_rule_from_bottom_clause(self, targets, bottom_clause):
+        """
+        Builds a Horn clause from a bottom clause, based on the Guimarães and
+        Paes rule creation algorithm.
+
+        :param targets: the evaluation targets
+        :type targets: Examples
+        :param bottom_clause: the bottom clause
+        :type bottom_clause: HornClause
+        :raise KnowledgeException: in case an error occurs during the revision
+        :return: a Horn clause
+        :rtype: HornClause
         """
         pass
 

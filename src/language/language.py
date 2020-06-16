@@ -853,7 +853,7 @@ class AtomClause(Clause):
 
 class HornClause(Clause):
     """
-    Represents a logic horn clause.
+    Represents a logic Horn clause.
     """
 
     def __init__(self, head, *body, provenance=None):

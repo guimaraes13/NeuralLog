@@ -225,7 +225,7 @@ def solve_place_holders(clause, place_holders):
     :type clause: HornClause
     :param place_holders: the place holders
     :type place_holders: dict[str, set[str]]
-    :return: the set of horn clauses
+    :return: the set of Horn clauses
     :rtype: set[HornClause]
     """
     queue = deque([clause])

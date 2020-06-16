@@ -130,13 +130,13 @@ class MultiprocessingEvaluation(Generic[V, E]):
         """
         Retrieves the evaluations from the `Future` `AsyncTheoryEvaluator`s
         and appends it to the `evaluation_map`, it is not None. Also, returns
-        the best evaluated horn clause.
+        the best evaluated Horn clause.
 
         :param futures: the futures
         :type futures: Set[Future[AsyncTheoryEvaluator[E]]]
         :param evaluation_map: the evaluation map
         :type evaluation_map: Dict[AsyncTheoryEvaluator[E], float] or None
-        :return: the best horn clause
+        :return: the best Horn clause
         :rtype: HornClause
         """
         best_evaluation = self.theory_metric.default_value

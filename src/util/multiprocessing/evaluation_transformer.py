@@ -14,6 +14,11 @@ E = TypeVar('E')
 
 # TODO: implement
 class EquivalentHornClause:
+    """
+    A container for a Horn clause with improved information about it
+    generation, in order to detect equivalent clauses and make atoms relevant
+    to the equivalent clauses also relevant to this one.
+    """
 
     def __init__(self, horn_clause):
         self.horn_clause = horn_clause

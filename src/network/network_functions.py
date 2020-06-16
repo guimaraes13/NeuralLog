@@ -1367,7 +1367,7 @@ class GraphRuleLayer(NeuralLogLayer):
 
         :param name: the name of the layer
         :type name: str
-        :param clause: the horn clause
+        :param clause: the Horn clause
         :param clause: HornClause
         :param rule_graph: the rule graph
         :type rule_graph: RuleGraph

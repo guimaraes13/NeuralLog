@@ -1,7 +1,7 @@
 """
 Handle the evaluation of the revision operators.
 """
-from typing import List
+from typing import List, Collection
 
 from src.knowledge.examples import Examples
 from src.knowledge.program import NeuralLogProgram
@@ -109,9 +109,9 @@ class RevisionOperatorEvaluator(Initializable):
         Gets the clause modifiers.
 
         :return: the clause modifiers
-        :rtype: ClauseModifier or List[ClauseModifier] or None
+        :rtype: ClauseModifier or Collection[ClauseModifier] or None
         """
-        return self.revision_operator.clause_modifier
+        return self.revision_operator.clause_modifiers
 
     @clause_modifiers.setter
     def clause_modifiers(self, value):
