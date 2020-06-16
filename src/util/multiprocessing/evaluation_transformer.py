@@ -30,8 +30,7 @@ class AsyncEvaluationTransformer(ABC, Generic[V, E]):
         Transforms a element of type `V` into an `AsyncTheoryEvaluator`.
 
         :param evaluator: the evaluator
-        :type evaluator: src.util.multiprocessing.theory_evaluation
-        .AsyncTheoryEvaluator[E]
+        :type evaluator: AsyncTheoryEvaluator[E]
         :param v: the element
         :type v: V
         :param examples: the examples

@@ -195,8 +195,9 @@ class BottomClauseBoundedRule(RevisionOperator):
             self.variable_generator = DEFAULT_VARIABLE_GENERATOR()
         # noinspection PyAttributeOutsideInit
         self.multiprocessing = MultiprocessingEvaluation(
-            self.learning_system, self.theory_metric, self.evaluation_timeout,
-            EquivalentHonClauseAsyncTransformer(), self.number_of_process
+            self.learning_system, self.theory_metric,
+            EquivalentHonClauseAsyncTransformer(),
+            self.evaluation_timeout, self.number_of_process
         )
 
     # noinspection PyMissingOrEmptyDocstring

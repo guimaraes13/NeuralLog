@@ -2,7 +2,9 @@
 Handles the evaluation of theories, in parallel.
 """
 import logging
+import multiprocessing
 import sys
+from multiprocessing import Queue
 from multiprocessing.context import Process
 from typing import TypeVar, Generic, Optional
 
@@ -17,7 +19,8 @@ class ClauseEvaluationProcess(Process):
     Class to represent an evaluation process.
     """
 
-    def __init__(self, theory_evaluator, theory_metric, examples, horn_clause):
+    def __init__(self, theory_evaluator, theory_metric, examples, horn_clause,
+                 returning_queue):
         """
         Creates a clause evaluation process.
 
@@ -29,13 +32,18 @@ class ClauseEvaluationProcess(Process):
         :type examples: Examples
         :param horn_clause: the horn clause
         :type horn_clause: HornClause
+        :param returning_queue: a queue to return the value
+        :type returning_queue: Queue
         """
         super().__init__(target=self)
         self.theory_evaluator = theory_evaluator
         self.theory_metric = theory_metric
         self.examples = examples
         self.horn_clause = horn_clause
+
         self.evaluation = None
+
+        self.returning_queue = returning_queue
 
     def __call__(self, *args, **kwargs):
         self.evaluation_finished = False
@@ -48,6 +56,7 @@ class ClauseEvaluationProcess(Process):
             )
         self.end_real = time_measure.process_time()
         self.end_performance = time_measure.performance_time()
+        self.returning_queue.put(self)
 
 
 class AsyncTheoryEvaluator(Generic[E]):
@@ -107,9 +116,11 @@ class AsyncTheoryEvaluator(Generic[E]):
         "The process time take to evaluate the clause"
 
     def __call__(self, *args, **kwargs):
+        manager = multiprocessing.Manager()
+        queue = manager.Queue(1)
         process = ClauseEvaluationProcess(
             self.theory_evaluator, self.theory_metric, self.examples,
-            self.horn_clause)
+            self.horn_clause, queue)
         # noinspection PyBroadException
         try:
             process.start()
@@ -123,11 +134,27 @@ class AsyncTheoryEvaluator(Generic[E]):
                 "Evaluation of the theory timed out after %d seconds.",
                 self.timeout)
         else:
+            result = queue.get()
             self.has_finished = True
-            self.evaluation = process.evaluation
-            self.real_time = process.end_real - process.begin_real
+            self.evaluation = result.evaluation
+            self.real_time = result.end_real - result.begin_real
             self.performance_time = \
-                process.end_performance - process.begin_performance
+                result.end_performance - result.begin_performance
+
+        return self
 
     def __repr__(self):
         return "[{}]: {}".format(self.__class__.__name__, self.horn_clause)
+
+    def _get_key(self):
+        return self.horn_clause, self.has_finished, self.evaluation, \
+               self.real_time, self.performance_time
+
+    def __hash__(self):
+        return hash(self._get_key())
+
+    def __eq__(self, other):
+        if not isinstance(other, AsyncTheoryEvaluator):
+            return False
+
+        return self._get_key() == other._get_key()
