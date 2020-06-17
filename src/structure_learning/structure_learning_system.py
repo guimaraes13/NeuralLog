@@ -2,6 +2,7 @@
 The core of the structure learning system.
 """
 import collections
+from collections import Collection, Set
 
 from src.knowledge.examples import Examples, ExamplesInferences
 from src.knowledge.manager.example_manager import IncomingExampleManager
@@ -150,6 +151,19 @@ class StructureLearningSystem:
         """
         return self.engine_system_translator.infer_examples_appending_clauses(
             examples, clauses, retrain=retrain)
+
+    def inferred_relevant(self, terms):
+        """
+        Perform the inference in order to get all atoms directly relevant to
+        `terms`. The atoms directly relevant ot a term is the atoms which
+        contain the term.
+
+        :param terms: the terms
+        :type terms: Collection[Term]
+        :return: the atoms relevant to the terms
+        :rtype: Set[Atom]
+        """
+        return self.engine_system_translator.inferred_relevant(terms)
 
     def train_parameters(self, training_examples: Examples):
         """

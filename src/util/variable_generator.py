@@ -17,6 +17,16 @@ class VariableGenerator:
         self._max_index = len(self._possible_values) - 1
         self._pointers = deque([0])
 
+    # noinspection PyMethodMayBeStatic
+    def clean_copy(self):
+        """
+        Returns a clean copy of the variable generator class.
+
+        :return: A clean copy of this class
+        :rtype: VariableGenerator
+        """
+        return VariableGenerator()
+
     def _increment_pointers(self):
         next_step = 1
         for i in reversed(range(len(self._pointers))):

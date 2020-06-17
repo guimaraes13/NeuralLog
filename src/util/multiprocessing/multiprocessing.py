@@ -86,7 +86,7 @@ class MultiprocessingEvaluation(Generic[V, E]):
         return futures
 
     def get_best_clause_from_candidates(
-            self, candidates, examples, evaluation_map):
+            self, candidates, examples, evaluation_map=None):
         """
         Evaluates the candidate clauses against the metric and returns the
         best evaluated clause.
@@ -96,7 +96,7 @@ class MultiprocessingEvaluation(Generic[V, E]):
         :param examples: the examples
         :type examples: Examples
         :param evaluation_map: the map of rules and their evaluations
-        :type evaluation_map: Dict[AsyncTheoryEvaluator[E], float]
+        :type evaluation_map: Dict[AsyncTheoryEvaluator[E], float] or None
         :return: the async theory evaluator containing the best evaluated clause
         :rtype: AsyncTheoryEvaluator[E]
         """

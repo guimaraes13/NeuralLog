@@ -8,6 +8,8 @@ from src.knowledge.examples import Examples, ExamplesInferences
 from src.util import Initializable
 
 
+# TODO: implement NeuralLogEngineSystemTranslator
+
 class EngineSystemTranslator(Initializable):
     """
     Translates the results of the engine system to the structure learning
@@ -58,6 +60,22 @@ class EngineSystemTranslator(Initializable):
         :type clauses: collections.Iterable[HornClauses]
         :return: the inference value of the examples
         :rtype: ExamplesInferences
+        """
+        pass
+
+    @abstractmethod
+    def inferred_relevant(self, terms):
+        """
+        Perform the inference in order to get all atoms directly
+        relevant to
+        `terms`. The atoms directly relevant ot a term is the atoms
+        which
+        contain the term.
+
+        :param terms: the terms
+        :type terms: Collection[Term]
+        :return: the atoms relevant to the terms
+        :rtype: Set[Atom]
         """
         pass
 

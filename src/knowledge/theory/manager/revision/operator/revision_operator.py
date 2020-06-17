@@ -3,8 +3,8 @@ Handle the revision operators.
 """
 import logging
 from abc import abstractmethod
-from collections import Collection
-from typing import Dict
+from collections import Collection, deque
+from typing import Dict, Set, List
 
 from src.knowledge.examples import Examples, ExampleIterator, ExamplesInferences
 from src.knowledge.program import NeuralLogProgram
@@ -13,13 +13,17 @@ from src.knowledge.theory.evaluation.metric.theory_metric import TheoryMetric
 from src.knowledge.theory.evaluation.theory_evaluator import TheoryEvaluator
 from src.knowledge.theory.manager.revision.clause_modifier import ClauseModifier
 from src.language.language import KnowledgeException, Atom, Predicate, \
-    HornClause
+    HornClause, Term, Number, Literal
 from src.structure_learning.structure_learning_system import \
     StructureLearningSystem, build_null_atom
 from src.util import Initializable, InitializationException
+from src.util.clause import apply_substitution, to_variable_atom, \
+    may_rule_be_safe, get_non_negated_literals_with_head_variable, is_rule_safe
 from src.util.multiprocessing.evaluation_transformer import \
-    EquivalentHonClauseAsyncTransformer
+    EquivalentHonClauseAsyncTransformer, EquivalentHornClause, \
+    EquivalentClauseAtom
 from src.util.multiprocessing.multiprocessing import MultiprocessingEvaluation
+from src.util.multiprocessing.theory_evaluation import AsyncTheoryEvaluator
 from src.util.variable_generator import VariableGenerator
 
 DEFAULT_VARIABLE_GENERATOR = VariableGenerator
@@ -27,6 +31,85 @@ DEFAULT_VARIABLE_GENERATOR = VariableGenerator
 logger = logging.getLogger(__name__)
 
 cached_null_atoms: Dict[Predicate, Atom] = dict()
+
+
+def relevant_breadth_first_search(terms, relevant_depth,
+                                  learning_system, safe_stop=False):
+    """
+    Retrieve the relevant atom, given the `terms`, by performing a
+    breadth-first search in the knowledge base graph, until a given
+    `relevant_depth`.
+
+    :param terms: the terms
+    :type terms: Collection[Term]
+    :param relevant_depth: the distance maximum to the initial term,
+    to be considered as relevant; if negative, it considers all found term as
+    relevant
+    :type relevant_depth: int
+    :param learning_system: the learning system
+    :type learning_system: StructureLearningSystem
+    :param safe_stop: if `True`, the search stops when all the atoms of a
+    distance are added and those atoms, collectively, contains all `terms`
+    :type safe_stop: bool
+    :return: the set of relevant atoms with respect to the `terms`
+    :rtype: Set[Atom]
+    """
+    terms_distance: Dict[Term, int] = dict()
+    queue = deque()
+    atoms: Set[Atom] = set()
+    current_relevant: Set[Term] = set()
+    head_terms: Set[Term] = set()
+    body_terms: Set[Term] = set()
+
+    for term in terms:
+        if isinstance(term, Number):
+            continue
+        terms_distance[term] = 0
+        queue.append(term)
+        current_relevant.add(term)
+        head_terms.add(term)
+
+    atom_set = learning_system.inferred_relevant(current_relevant)
+    atoms.update(atom_set)
+
+    previous_distance = 0
+    while queue:
+        current_term = queue.popleft()
+        current_distance = terms_distance[current_term]
+
+        if current_distance != previous_distance:
+            atom_set = learning_system.inferred_relevant(current_relevant)
+            atoms.update(atom_set)
+            if safe_stop:
+                # If `safe_stop`, the minimal safe rule (i.e. the rule where
+                # all atoms in the head appears in the body) is returned.
+                # So, there is no point in adding more atoms beyond that.
+                # The body_terms contains the already found terms, so it can
+                # check if this method can stop early, by this criteria
+                for atom in atom_set:
+                    body_terms.update(atom.terms)
+                if body_terms.issuperset(head_terms):
+                    # The rule is safe, can return the atoms
+                    break
+            current_relevant = set()
+            previous_distance = current_distance
+
+        if current_term not in terms_distance:
+            current_relevant.add(current_term)
+
+        atom_set = \
+            learning_system.knowledge_base.get_atoms_with_term(current_term)
+        atoms.update(atom_set)
+
+        if relevant_depth < 0 or current_distance < relevant_depth:
+            neighbour_terms = \
+                learning_system.knowledge_base.get_neighbour_terms(current_term)
+            for neighbour in neighbour_terms:
+                if neighbour not in terms_distance:
+                    terms_distance[neighbour] = current_distance + 1
+                    queue.append(neighbour)
+
+    return atoms
 
 
 def get_null_example(knowledge_base, predicate):
@@ -68,7 +151,6 @@ def is_covered(knowledge_base, example, inferred_examples):
     return example_value > null_value
 
 
-# TODO: extend this class
 class RevisionOperator(Initializable):
     """
     Operator to revise the theory.
@@ -154,6 +236,30 @@ class BottomClauseBoundedRule(RevisionOperator):
                  generic=True,
                  evaluation_timeout=300,
                  number_of_process=1):
+        """
+        Creates a Bottom Clause Bounded Rule operator.
+
+        :param learning_system: the learning system
+        :type learning_system: StructureLearningSystem
+        :param theory_metric: the theory metric
+        :type theory_metric: TheoryMetric
+        :param variable_generator: the variable generator
+        :type variable_generator: VariableGenerator
+        :param relevant_depth: the relevant depth
+        :type relevant_depth: int
+        :param refine: if it is to refine the rules
+        :type refine: bool
+        :param maximum_side_way_movements: the maximum side way movements
+        :type maximum_side_way_movements: int
+        :param improvement_threshold: the improvement threshold
+        :type improvement_threshold: float
+        :param generic: if it is to return the most generic rule
+        :type generic: bool
+        :param evaluation_timeout: the evaluation timeout, in seconds
+        :type evaluation_timeout: int
+        :param number_of_process: the number of parallel process
+        :type number_of_process: int
+        """
         super().__init__(learning_system, theory_metric)
 
         self.variable_generator = variable_generator
@@ -327,7 +433,18 @@ class BottomClauseBoundedRule(RevisionOperator):
         :return: the bottom clause
         :rtype: HornClause
         """
-        pass
+        relevant_set = relevant_breadth_first_search(
+            example.terms, self.relevant_depth,
+            self.learning_system, not self.refine)
+        variable_generator = self.variable_generator.clean_copy()
+        variable_map: Dict[Term, Term] = dict()
+        body = []
+        for atom in relevant_set:
+            body.append(Literal(to_variable_atom(
+                atom, variable_generator, variable_map)))
+
+        return HornClause(
+            to_variable_atom(example, variable_generator, variable_map), *body)
 
     def build_rule_from_bottom_clause(self, targets, bottom_clause):
         """
@@ -340,8 +457,200 @@ class BottomClauseBoundedRule(RevisionOperator):
         :type bottom_clause: HornClause
         :raise KnowledgeException: in case an error occurs during the revision
         :return: a Horn clause
-        :rtype: HornClause
+        :rtype: HornClause or None
         """
-        pass
+        logger.debug("Finding the minimal safe clauses from the bottom clause.")
+        candidate_clauses = build_minimal_safe_equivalent_clauses(bottom_clause)
+        logger.debug(
+            "Evaluating the initial %s theory(es).", len(candidate_clauses))
+        best_clause = self.multiprocessing.get_best_clause_from_candidates(
+            candidate_clauses, targets
+        )
+        if best_clause is None:
+            logger.debug(
+                "No minimal safe clause could be evaluated. There are two "
+                "possible reasons: the timeout is too low; or the metric "
+                "returns the default value for all evaluations")
+            return None
 
-    # TODO: finish this class
+        if self.refine:
+            best_clause = \
+                self.refine_rule(best_clause, bottom_clause.body, targets)
+
+        return best_clause.horn_clause
+
+    def refine_rule(self, initial_clause, candidate_literals, targets):
+        """
+        Refines the rule.
+
+        It starts from the `initial_clause` and adds a literal at a time,
+        from `candidate_literals` into its body. At each time, getting the best
+        possible Horn clause, in a greedy search.
+
+        It finishes when one of the following criteria is met:
+        1) the addition of another literal did not improve the clause in
+        `self.maximum_side_way_movements` times; or
+        2) there is no more possible candidates to add.
+
+        After it finishes, it returns the best found Horn clause, based on
+        the `targets`.
+
+        :param initial_clause: the initial clause
+        :type initial_clause: AsyncTheoryEvaluator[EquivalentHornClause]
+        :param candidate_literals: the candidate literals
+        :type candidate_literals: Collection[Literal]
+        :param targets: the target examples
+        :type targets: Examples
+        :return: a async theory evaluator containing the best Horn clause
+        :rtype: AsyncTheoryEvaluator[EquivalentHornClause]
+        """
+        candidates = set(candidate_literals)
+        best_clause = initial_clause
+        current_clause = initial_clause
+        remove_equivalent_candidates(candidates, initial_clause.element)
+        side_way_movements = 0
+        logger.debug("Refining rule:\t%s", initial_clause.horn_clause)
+        while not self.is_to_stop_by_side_way_movements(side_way_movements) \
+                and not candidates:
+            remove_last_literal_equivalent_candidates(
+                candidates, current_clause.element)
+            current_clause = self.specify_rule(
+                current_clause.element, candidates, targets)
+            if current_clause is None:
+                break
+            improvement = self.theory_metric.difference(
+                current_clause.evaluation, best_clause.evaluation)
+            if improvement > self.improvement_threshold:
+                # Current clause is better than the best clause, making it
+                # the best clause
+                logger.debug("Accepting new best refined candidate:\t%s",
+                             current_clause.horn_clause)
+                best_clause = current_clause
+                side_way_movements = 0
+            else:
+                # Current clause is not better than the best clause
+                logger.debug("Making side movement for candidate:\t%s",
+                             current_clause.element)
+                side_way_movements += 1
+                if improvement >= 0.0 and not self.generic:
+                    # There current close is not worst than the best clause,
+                    # and is more specific than the best one. Since the generic
+                    # flag is `False`, make the current clause the best one
+                    best_clause = current_clause
+
+        return best_clause
+
+    def is_to_stop_by_side_way_movements(self, side_way_movements):
+        """
+        Checks if it is to stop due to reaching the maximum side way movements.
+
+        :param side_way_movements: the number of iterations without improvement
+        :type side_way_movements: int
+        :return: `True`, if it is to stop due to the maximum side way
+        movements; otherwise, `False`
+        :rtype: bool
+        """
+        return -1 < self.maximum_side_way_movements < side_way_movements
+
+    def specify_rule(self, clause, candidates, targets):
+        """
+        Makes the Horn clause more specific by adding a literal from
+        `candidates` into its body. All the possible literals are tested,
+        and the best one, based on the `targets` is returned.
+
+        :param clause: the clause
+        :type clause: EquivalentHornClause
+        :param candidates: the candidates
+        :type candidates: Set[Literal]
+        :param targets: the target examples
+        :type targets: Examples
+        :return: the best obtained clause
+        :rtype: AsyncTheoryEvaluator[EquivalentHornClause]
+        """
+        return self.multiprocessing.get_best_clause_from_candidates(
+            clause.build_appended_candidates(candidates), targets)
+
+
+def build_minimal_safe_equivalent_clauses(bottom_clause):
+    """
+    Builds a set of Horn clauses with the least number of literals in the
+    body that makes the clause safe.
+
+    :param bottom_clause: the bottom clause
+    :type bottom_clause: HornClause
+    :raise TheoryRevisionException: if an error occurs during the revision
+    :return: a set of Horn clauses, where each clause contains the minimal
+    set of literals, in its body, which makes the clause safe.
+    :rtype: Set[EquivalentHornClause] or None
+    """
+
+    if not may_rule_be_safe(bottom_clause):
+        raise TheoryRevisionException(
+            "Error when generating a new rule, the generate rule can not "
+            "become safe.")
+
+    candidate_literals = \
+        list(get_non_negated_literals_with_head_variable(bottom_clause))
+    candidate_literals.sort(key=lambda x: str(x.predicate))
+    queue = deque()
+    queue.append(EquivalentHornClause(bottom_clause.head))
+    for _ in range(len(candidate_literals)):
+        append_all_candidates_to_queue(queue, candidate_literals)
+        safe_clauses = set(map(lambda x: is_rule_safe(x), queue))
+        if safe_clauses:
+            return safe_clauses
+
+    return None
+
+
+def append_all_candidates_to_queue(queue, candidates):
+    """
+    Creates a list of equivalent horn clauses containing a equivalent Horn
+    clause for each substitution of each candidate, skipping equivalent
+    clauses.
+
+    :param queue: the queue with initial clauses
+    :type queue: deque[EquivalentHornClause]
+    :param candidates: the list of candidates
+    :type candidates: List[Literal]
+    """
+    skip_atom: Dict[EquivalentClauseAtom, EquivalentClauseAtom] = dict()
+    skip_clause: Dict[EquivalentClauseAtom, EquivalentHornClause] = dict()
+
+    size = len(queue)  # the initial size of the queue
+    for _ in range(size):
+        equivalent_horn_clause = queue.popleft()
+        queue.append(equivalent_horn_clause.build_initial_clause_candidates(
+            candidates, skip_atom, skip_clause))
+
+
+def remove_equivalent_candidates(candidates, equivalent_clause):
+    """
+    Removes all equivalent candidates of the body of the clause from the
+    candidate set.
+
+    :param candidates: the candidate set
+    :type candidates: Set[Literal]
+    :param equivalent_clause: the equivalent clause
+    :type equivalent_clause: EquivalentHornClause
+    """
+    for literal in equivalent_clause.clause_body:
+        for substitutions in equivalent_clause.substitution_maps:
+            candidates.discard(apply_substitution(literal, substitutions))
+        candidates.discard(literal)
+
+
+def remove_last_literal_equivalent_candidates(candidates, equivalent_clause):
+    """
+    Removes all equivalent candidates of the body of the clause from the
+    candidate set.
+
+    :param candidates: the candidate set
+    :type candidates: Set[Literal]
+    :param equivalent_clause: the equivalent clause
+    :type equivalent_clause: EquivalentHornClause
+    """
+    for substitutions in equivalent_clause.substitution_maps:
+        candidates.discard(apply_substitution(
+            equivalent_clause.last_literal, substitutions))
+    candidates.discard(equivalent_clause.last_literal)

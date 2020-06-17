@@ -5,7 +5,7 @@ import collections
 import logging
 import re
 import sys
-from collections import OrderedDict, deque
+from collections import OrderedDict, deque, Collection
 from typing import TypeVar, MutableMapping, Dict, Any, List, Set, Tuple
 
 import numpy as np
@@ -759,6 +759,10 @@ class NeuralLogProgram:
         self._predicate_parameters_to_add = list()
         self._parameters_to_add = list()
         self._last_atom_for_predicate: Dict[Predicate, Atom] = dict()
+
+        self._cached_atoms_by_term: Dict[Term, Set[Atom]] = dict()
+        self._cached_neighbours_by_term: Dict[Term, Set[Term]] = dict()
+
         # self.add_clauses(clauses)
         # del self._last_atom_for_predicate
         # self.build_program()
@@ -844,7 +848,23 @@ class NeuralLogProgram:
                                old_atom, atom)
 
         fact_dict[atom.simple_key()] = atom
+        self._update_atoms_by_term(atom)
         self.logic_predicates.add(atom.predicate)
+
+    def _update_atoms_by_term(self, atom):
+        """
+        Updates the cache of atoms by terms, if the term is cached.
+
+        :param atom: the atom
+        :type atom: Atom
+        """
+        if not self._cached_atoms_by_term:
+            return
+
+        for term in atom.terms:
+            atoms_by_term = self._cached_atoms_by_term.get(term)
+            if atoms_by_term is not None:
+                atoms_by_term.add(atom)
 
     def _add_predicate(self, atom):
         """
@@ -1674,6 +1694,48 @@ class NeuralLogProgram:
                 message += str(clause)
 
         return message
+
+    def get_atoms_with_term(self, term):
+        """
+        Gets the atoms that contains the `term`.
+
+        :param term: the term
+        :type term: Term
+        :return: the atoms that contains the `term`
+        :rtype: Set[Atom]
+        """
+        atoms = self._cached_atoms_by_term.get(term)
+        if atoms is None:
+            atoms = set()
+            for facts in self.facts_by_predicate.values():
+                for atom in facts.values():
+                    if term in atom.terms:
+                        atoms.add(atom)
+            self._cached_atoms_by_term[term] = atoms
+
+        return atoms
+
+    def get_neighbour_terms(self, term):
+        """
+        Gets the neighbour terms of the `term`.
+        :param term: the term
+        :type term: Term
+        :return: the neighbour terms
+        :rtype: Collection[Term]
+        """
+        if isinstance(term, Number):
+            return set()
+
+        neighbours = self._cached_neighbours_by_term.get(term)
+        if neighbours is None:
+            neighbours = set()
+            for atom in self.get_atoms_with_term(term):
+                for neighbour in atom.terms:
+                    if term != neighbour and not isinstance(neighbour, Number):
+                        neighbours.add(neighbour)
+            self._cached_neighbours_by_term[term] = neighbours
+
+        return neighbours
 
 
 DEFAULT_PARAMETERS = [
