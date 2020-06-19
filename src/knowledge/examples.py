@@ -45,8 +45,8 @@ class Examples(UserDict, MutableMapping[Predicate, Dict[Any, Atom]]):
     Handles a set of training examples.
     """
 
-    def __init__(self):
-        super().__init__(OrderedDict())
+    def __init__(self, *args):
+        super().__init__(OrderedDict(*args))
 
     def add_example(self, example):
         """

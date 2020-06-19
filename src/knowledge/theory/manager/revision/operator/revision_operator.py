@@ -1,6 +1,7 @@
 """
 Handle the revision operators.
 """
+import itertools
 import logging
 from abc import abstractmethod
 from collections import Collection, deque
@@ -152,6 +153,121 @@ def is_covered(knowledge_base, example, inferred_examples):
     return example_value > null_value
 
 
+def build_minimal_safe_equivalent_clauses(bottom_clause):
+    """
+    Builds a set of Horn clauses with the least number of literals in the
+    body that makes the clause safe.
+
+    :param bottom_clause: the bottom clause
+    :type bottom_clause: HornClause
+    :raise TheoryRevisionException: if an error occurs during the revision
+    :return: a set of Horn clauses, where each clause contains the minimal
+    set of literals, in its body, which makes the clause safe.
+    :rtype: Set[EquivalentHornClause] or None
+    """
+
+    if not may_rule_be_safe(bottom_clause):
+        raise TheoryRevisionException(
+            "Error when generating a new rule, the generate rule can not "
+            "become safe.")
+
+    candidate_literals = \
+        list(get_non_negated_literals_with_head_variable(bottom_clause))
+    candidate_literals.sort(key=lambda x: str(x.predicate))
+    queue = deque()
+    queue.append(EquivalentHornClause(bottom_clause.head))
+    for _ in range(len(candidate_literals)):
+        append_all_candidates_to_queue(queue, candidate_literals)
+        safe_clauses = set(map(lambda x: is_rule_safe(x), queue))
+        if safe_clauses:
+            return safe_clauses
+
+    return None
+
+
+def append_all_candidates_to_queue(queue, candidates):
+    """
+    Creates a list of equivalent Horn clauses containing a equivalent Horn
+    clause for each substitution of each candidate, skipping equivalent
+    clauses.
+
+    :param queue: the queue with initial clauses
+    :type queue: deque[EquivalentHornClause]
+    :param candidates: the list of candidates
+    :type candidates: List[Literal]
+    """
+    skip_atom: Dict[EquivalentClauseAtom, EquivalentClauseAtom] = dict()
+    skip_clause: Dict[EquivalentClauseAtom, EquivalentHornClause] = dict()
+
+    size = len(queue)  # the initial size of the queue
+    for _ in range(size):
+        equivalent_horn_clause = queue.popleft()
+        queue.extend(equivalent_horn_clause.build_initial_clause_candidates(
+            candidates, skip_atom, skip_clause))
+
+
+def remove_equivalent_candidates(candidates, equivalent_clause):
+    """
+    Removes all equivalent candidates of the body of the clause from the
+    candidate set.
+
+    :param candidates: the candidate set
+    :type candidates: Set[Literal]
+    :param equivalent_clause: the equivalent clause
+    :type equivalent_clause: EquivalentHornClause
+    """
+    for literal in equivalent_clause.clause_body:
+        for substitutions in equivalent_clause.substitution_maps:
+            candidates.discard(apply_substitution(literal, substitutions))
+        candidates.discard(literal)
+
+
+def remove_last_literal_equivalent_candidates(candidates, equivalent_clause):
+    """
+    Removes all equivalent candidates of the body of the clause from the
+    candidate set.
+
+    :param candidates: the candidate set
+    :type candidates: Set[Literal]
+    :param equivalent_clause: the equivalent clause
+    :type equivalent_clause: EquivalentHornClause
+    """
+    for substitutions in equivalent_clause.substitution_maps:
+        candidates.discard(apply_substitution(
+            equivalent_clause.last_literal, substitutions))
+    candidates.discard(equivalent_clause.last_literal)
+
+
+def is_positive(example):
+    """
+    Check if the example is positive.
+
+    :param example: the example
+    :type example: Atom
+    :return: `True` if the example is positive; otherwise, `False`
+    :rtype: bool
+    """
+    return example.weight > 0.0
+
+
+def add_variable_substitutions(atom, variable_map, variables):
+    """
+    Adds the substitution of the i-th term of the atom as the i-th term from
+    the variable list, if it is a constant, to the `variable_map`.
+
+    :param atom: the atom
+    :type atom: Atom
+    :param variable_map: the variable map
+    :type variable_map: Dict[Term, Term]
+    :param variables: the examples' variables
+    :type variables: List[Term]
+    """
+    for i in range(len(atom.terms)):
+        if atom.terms[i].is_constant() and \
+                not atom.terms[i] not in variable_map:
+            variable_map[atom.terms[i]] = variables[i]
+
+
 class RevisionOperator(Initializable):
     """
     Operator to revise the theory.
@@ -215,6 +331,22 @@ class RevisionOperator(Initializable):
         :type revised_theory: NeuralLogProgram
         """
         pass
+
+    def apply_clause_modifiers(self, horn_clause, targets):
+        """
+        Applies the clause modifiers to the `horn_clause`, given the target
+        examples.
+
+        :param horn_clause: the Horn clause
+        :type horn_clause: HornClause
+        :param targets: the target examples
+        :type targets: Examples
+        :return: the modified Horn clause
+        :rtype: HornClause
+        """
+        for clause_modifier in self.clause_modifiers:
+            horn_clause = clause_modifier.modify_clause(horn_clause, targets)
+        return horn_clause
 
 
 class BottomClauseBoundedRule(RevisionOperator):
@@ -404,10 +536,10 @@ class BottomClauseBoundedRule(RevisionOperator):
         :type inferred_examples: ExamplesInferences
         """
         try:
-            if example.weight <= 0.0 or \
+            if not is_positive(example) or \
                     is_covered(self.learning_system.knowledge_base, example,
                                inferred_examples):
-                if example.weight > 0.0:
+                if is_positive(example):
                     logger.debug("Skipping covered example:\t%s", example)
                 # It skips negatives or covered positive examples
                 return
@@ -416,9 +548,7 @@ class BottomClauseBoundedRule(RevisionOperator):
             bottom_clause = self.build_bottom_clause(example)
             horn_clause = \
                 self.build_rule_from_bottom_clause(targets, bottom_clause)
-            for clause_modifier in self.clause_modifiers:
-                horn_clause = \
-                    clause_modifier.modify_clause(horn_clause, targets)
+            horn_clause = self.apply_clause_modifiers(horn_clause, targets)
             theory.add_clauses(horn_clause)
             theory.build_program()
             logger.info("Rule appended to the theory:\t%s", horn_clause)
@@ -573,86 +703,100 @@ class BottomClauseBoundedRule(RevisionOperator):
             clause.build_appended_candidates(candidates), targets)
 
 
-def build_minimal_safe_equivalent_clauses(bottom_clause):
+class CombinedBottomClauseBoundedRule(BottomClauseBoundedRule):
     """
-    Builds a set of Horn clauses with the least number of literals in the
-    body that makes the clause safe.
-
-    :param bottom_clause: the bottom clause
-    :type bottom_clause: HornClause
-    :raise TheoryRevisionException: if an error occurs during the revision
-    :return: a set of Horn clauses, where each clause contains the minimal
-    set of literals, in its body, which makes the clause safe.
-    :rtype: Set[EquivalentHornClause] or None
+    Class to create a single rule from a set of examples by choosing literals
+    from the combined bottom clause from all the examples.
     """
 
-    if not may_rule_be_safe(bottom_clause):
-        raise TheoryRevisionException(
-            "Error when generating a new rule, the generate rule can not "
-            "become safe.")
+    # noinspection PyMissingOrEmptyDocstring
+    def perform_operation(self, targets):
+        try:
+            logger.info("Performing operation on\t%d examples.", len(targets))
+            theory = self.learning_system.theory.copy()
+            self.perform_operation_for_examples(targets, theory)
+            return theory
+        except TheoryRevisionException:
+            logger.exception("Error when copying the theory.")
 
-    candidate_literals = \
-        list(get_non_negated_literals_with_head_variable(bottom_clause))
-    candidate_literals.sort(key=lambda x: str(x.predicate))
-    queue = deque()
-    queue.append(EquivalentHornClause(bottom_clause.head))
-    for _ in range(len(candidate_literals)):
-        append_all_candidates_to_queue(queue, candidate_literals)
-        safe_clauses = set(map(lambda x: is_rule_safe(x), queue))
-        if safe_clauses:
-            return safe_clauses
+    def perform_operation_for_examples(self, targets, theory):
+        """
+        Performs the operation for all the examples combined.
 
-    return None
+        :param targets: the examples
+        :type targets: Examples
+        :param theory: the theory
+        :type theory: NeuralLogProgram
+        """
+        logger.info("Number of predicates found among the examples:\t%d",
+                    len(targets))
+        for predicate, examples in targets.items():
+            try:
+                examples = Examples({predicate: examples})
+                logger.info("Building rule for predicate\t%s and\t%d examples.",
+                            predicate, len(examples))
+                bottom_clause = self.build_combined_bottom_clause(
+                    predicate, examples)
+                logger.info("Bottom clause body size:\t%d",
+                            len(bottom_clause.body))
+                new_rule = self.build_rule_from_bottom_clause(
+                    targets, bottom_clause)
+                new_rule = self.apply_clause_modifiers(new_rule, examples)
+                theory.add_clauses(new_rule)
+                theory.build_program()
+                logger.info("Rule appended to the theory:\t%s", new_rule)
+            except TheoryRevisionException as e:
+                logger.debug("Error when revising the example, reason:\t%s", e)
 
+    def build_combined_bottom_clause(self, predicate, examples):
+        """
+        Builds the bottom clause from the combination of the bottom clause
+        from the examples.
 
-def append_all_candidates_to_queue(queue, candidates):
-    """
-    Creates a list of equivalent Horn clauses containing a equivalent Horn
-    clause for each substitution of each candidate, skipping equivalent
-    clauses.
+        :param predicate: the predicate of the examples
+        :type predicate: Predicate
+        :param examples: the examples
+        :type examples: Examples
+        :return: the combined bottom clause
+        :rtype: HornClause
+        """
+        examples = examples.get(predicate)
+        positive_terms = map(lambda x: x.terms, examples.values())
+        positive_terms = set(itertools.chain.from_iterable(positive_terms))
+        relevant_set = relevant_breadth_first_search(
+            positive_terms, self.relevant_depth, self.learning_system,
+            not self.refine)
+        positive_examples = set(filter(is_positive, examples.values()))
 
-    :param queue: the queue with initial clauses
-    :type queue: deque[EquivalentHornClause]
-    :param candidates: the list of candidates
-    :type candidates: List[Literal]
-    """
-    skip_atom: Dict[EquivalentClauseAtom, EquivalentClauseAtom] = dict()
-    skip_clause: Dict[EquivalentClauseAtom, EquivalentHornClause] = dict()
+        return self.build_variable_bottom_clause(
+            predicate, relevant_set, positive_examples)
 
-    size = len(queue)  # the initial size of the queue
-    for _ in range(size):
-        equivalent_horn_clause = queue.popleft()
-        queue.extend(equivalent_horn_clause.build_initial_clause_candidates(
-            candidates, skip_atom, skip_clause))
+    def build_variable_bottom_clause(
+            self, predicate, relevant_set, positive_examples):
+        """
+        Builds the variable bottom clause from the relevant set and the grounded
+        examples.
 
+        :param predicate: the predicate
+        :type predicate: Predicate
+        :param relevant_set: the relevant set of atoms
+        :type relevant_set: Set[Atom]
+        :param positive_examples: the positive examples
+        :type positive_examples: Set[Atom]
+        :return: the variable bottom clause combined from the examples
+        :rtype: HornClause
+        """
+        variable_map: Dict[Term, Term] = dict()
+        variable_generator = self.variable_generator.clean_copy()
+        body = []
+        example_variables = list(map(lambda x: next(variable_generator),
+                                     range(predicate.arity)))
+        for atom in positive_examples:
+            add_variable_substitutions(atom, variable_map, example_variables)
 
-def remove_equivalent_candidates(candidates, equivalent_clause):
-    """
-    Removes all equivalent candidates of the body of the clause from the
-    candidate set.
+        for atom in relevant_set:
+            body.append(
+                Literal(
+                    to_variable_atom(atom, variable_generator, variable_map)))
 
-    :param candidates: the candidate set
-    :type candidates: Set[Literal]
-    :param equivalent_clause: the equivalent clause
-    :type equivalent_clause: EquivalentHornClause
-    """
-    for literal in equivalent_clause.clause_body:
-        for substitutions in equivalent_clause.substitution_maps:
-            candidates.discard(apply_substitution(literal, substitutions))
-        candidates.discard(literal)
-
-
-def remove_last_literal_equivalent_candidates(candidates, equivalent_clause):
-    """
-    Removes all equivalent candidates of the body of the clause from the
-    candidate set.
-
-    :param candidates: the candidate set
-    :type candidates: Set[Literal]
-    :param equivalent_clause: the equivalent clause
-    :type equivalent_clause: EquivalentHornClause
-    """
-    for substitutions in equivalent_clause.substitution_maps:
-        candidates.discard(apply_substitution(
-            equivalent_clause.last_literal, substitutions))
-    candidates.discard(equivalent_clause.last_literal)
+        return HornClause(Atom(predicate, *example_variables), *body)
