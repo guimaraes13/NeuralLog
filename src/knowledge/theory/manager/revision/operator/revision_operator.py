@@ -5,7 +5,7 @@ import itertools
 import logging
 from abc import abstractmethod
 from collections import Collection, deque
-from typing import Dict, Set, List
+from typing import Dict, Set, List, Deque
 
 from src.knowledge.examples import Examples, ExampleIterator, ExamplesInferences
 from src.knowledge.program import NeuralLogProgram
@@ -21,7 +21,10 @@ from src.structure_learning.structure_learning_system import \
     StructureLearningSystem, build_null_atom
 from src.util import Initializable, InitializationException, OrderedSet
 from src.util.clause_utils import apply_substitution, to_variable_atom, \
-    may_rule_be_safe, get_non_negated_literals_with_head_variable, is_rule_safe
+    may_rule_be_safe, get_non_negated_literals_with_head_variable, \
+    is_rule_safe, \
+    find_biggest_gap
+from src.util.language import iterable_to_string
 from src.util.multiprocessing.evaluation_transformer import \
     EquivalentHonClauseAsyncTransformer
 from src.util.multiprocessing.multiprocessing import MultiprocessingEvaluation
@@ -266,6 +269,36 @@ def add_variable_substitutions(atom, variable_map, variables):
         if atom.terms[i].is_constant() and \
                 not atom.terms[i] not in variable_map:
             variable_map[atom.terms[i]] = variables[i]
+
+
+# noinspection PyMissingOrEmptyDocstring
+def my_cmp_to_key(my_cmp, key):
+    """Convert a cmp= function into a key= function"""
+
+    class K(object):
+        __slots__ = ['obj']
+
+        def __init__(self, obj):
+            self.obj = obj
+
+        def __lt__(self, other):
+            return my_cmp(key(self.obj), key(other.obj)) < 0
+
+        def __gt__(self, other):
+            return my_cmp(key(self.obj), key(other.obj)) > 0
+
+        def __eq__(self, other):
+            return my_cmp(key(self.obj), key(other.obj)) == 0
+
+        def __le__(self, other):
+            return my_cmp(key(self.obj), key(other.obj)) <= 0
+
+        def __ge__(self, other):
+            return my_cmp(key(self.obj), key(other.obj)) >= 0
+
+        __hash__ = None
+
+    return K
 
 
 class RevisionOperator(Initializable):
@@ -732,9 +765,9 @@ class CombinedBottomClauseBoundedRule(BottomClauseBoundedRule):
                     len(targets))
         for predicate, examples in targets.items():
             try:
-                examples = Examples({predicate: examples})
                 logger.info("Building rule for predicate\t%s and\t%d examples.",
                             predicate, len(examples))
+                examples = Examples({predicate: examples})
                 bottom_clause = self.build_combined_bottom_clause(
                     predicate, examples)
                 logger.info("Bottom clause body size:\t%d",
@@ -746,7 +779,7 @@ class CombinedBottomClauseBoundedRule(BottomClauseBoundedRule):
                 theory.build_program()
                 logger.info("Rule appended to the theory:\t%s", new_rule)
             except TheoryRevisionException as e:
-                logger.debug("Error when revising the example, reason:\t%s", e)
+                logger.debug("Error when revising the theory, reason:\t%s", e)
 
     def build_combined_bottom_clause(self, predicate, examples):
         """
@@ -800,3 +833,221 @@ class CombinedBottomClauseBoundedRule(BottomClauseBoundedRule):
                     to_variable_atom(atom, variable_generator, variable_map)))
 
         return HornClause(Atom(predicate, *example_variables), *body)
+
+
+class CombinedBottomClauseBreadthSearch(CombinedBottomClauseBoundedRule):
+    """
+    Class to create a set of rules from a set of examples by doing a breadth
+    search on the space of the combined bottom clause from all the examples.
+
+    It appends a literal at a time until creates all the possible clauses of
+    size `self.maximum_size`. Then, it evaluates those clauses and split
+    them in the biggest difference between the evaluation of the `n` first
+    clauses and the `n + 1` last clauses; returning the first `n` clauses.
+    """
+
+    def __init__(
+            self, maximum_size=2, strict_to_maximum_size=False,
+            learning_system=None, theory_metric=None, variable_generator=None,
+            relevant_depth=0, refine=False, maximum_side_way_movements=-1,
+            improvement_threshold=0.0, generic=True, evaluation_timeout=300,
+            number_of_process=1):
+        """
+        Creates a Combined Bottom Clause Breadth Search operator.
+
+        :param maximum_size: the maximum size of the clauses.
+        :type maximum_size: int
+        :param strict_to_maximum_size: If `True`, it creates only rules of the
+        maximum size. Otherwise, it looks for improvements until one of the
+        three criteria is met: (1) the maximum size is reached; (2) the
+        theory does not improve over `maximum_side_way_movements` iterations;
+        (3) there are no more candidates to test
+        :type strict_to_maximum_size: bool
+        :param learning_system: the learning system
+        :type learning_system: StructureLearningSystem
+        :param theory_metric: the theory metric
+        :type theory_metric: TheoryMetric
+        :param variable_generator: the variable generator
+        :type variable_generator: VariableGenerator
+        :param relevant_depth: the relevant depth
+        :type relevant_depth: int
+        :param refine: if it is to refine the rules
+        :type refine: bool
+        :param maximum_side_way_movements: the maximum side way movements
+        :type maximum_side_way_movements: int
+        :param improvement_threshold: the improvement threshold
+        :type improvement_threshold: float
+        :param generic: if it is to return the most generic rule
+        :type generic: bool
+        :param evaluation_timeout: the evaluation timeout, in seconds
+        :type evaluation_timeout: int
+        :param number_of_process: the number of parallel process
+        :type number_of_process: int
+        """
+        super().__init__(learning_system, theory_metric, variable_generator,
+                         relevant_depth, refine, maximum_side_way_movements,
+                         improvement_threshold, generic, evaluation_timeout,
+                         number_of_process)
+        self.strict_to_maximum_size = strict_to_maximum_size
+        self.maximum_size = maximum_size
+
+    # noinspection PyMissingOrEmptyDocstring
+    def perform_operation_for_examples(self, targets, theory):
+        logger.info("Number of predicates found among the examples:\t%d",
+                    len(targets))
+        for predicate, examples in targets.items():
+            try:
+                logger.info("Building rule for predicate\t%s and\t%s examples.",
+                            predicate, len(examples))
+                examples = Examples({predicate: examples})
+                bottom_clause = self.build_combined_bottom_clause(
+                    predicate, examples)
+                logger.info("Bottom clause body size:\t%d",
+                            len(bottom_clause.body))
+                self.build_rules_from_bottom_clause(
+                    targets, bottom_clause, theory)
+            except TheoryRevisionException as e:
+                logger.debug("Error when revising the theory, reason:\t%s", e)
+
+    def build_rules_from_bottom_clause(self, targets, bottom_clause, theory):
+        """
+        Builds a Horn clause from a bottom clause, based on the Guimarães and
+        Paes rule creation algorithm.
+
+        :param targets: the target examples
+        :type targets: Examples
+        :param bottom_clause: the bottom clause
+        :type bottom_clause: HornClause
+        :param theory: the theory
+        :type theory: NeuralLogProgram
+        """
+        candidate_literals = filter(lambda x: not x.negated, bottom_clause.body)
+        candidate_literals = sorted(
+            candidate_literals,
+            key=lambda x: (x.predicate.name, x.predicate.arity))
+        candidate_literals = list(candidate_literals)
+        horn_clauses = self.refine_rules(
+            candidate_literals, targets, bottom_clause)
+        for clause in horn_clauses:
+            modified_clause = self.apply_clause_modifiers(clause, targets)
+            theory.add_clauses(modified_clause)
+            logger.info("Rule appended to the theory:\t%s", modified_clause)
+        theory.build_program()
+
+    def refine_rules(self, candidates, targets, bottom_clause):
+        """
+        Refines the set of clauses
+
+        :param candidates: the candidate literals
+        :type candidates: List[Literal]
+        :param targets: the evaluation examples
+        :type targets: Examples
+        :param bottom_clause: the initial bottom clause
+        :type bottom_clause: HornClause
+        :return: the best set of clauses
+        :rtype: List[HornClause]
+        """
+        queue: Deque[EquivalentHornClause] = deque()
+        queue.append(EquivalentHornClause(bottom_clause.head))
+        size = self._get_size(bottom_clause)
+        i = 1
+        side_way_movements = 0
+        best_evaluation = self.theory_metric.default_value
+        best_clauses = []
+
+        while not self.is_to_stop_by_side_way_movements(side_way_movements) \
+                and queue and i < size:
+            current_clauses = self.get_next_clauses(
+                candidates, targets, queue, i)
+            if not current_clauses:
+                break
+            candidate_string = iterable_to_string(current_clauses)
+            logger.info("Candidate clauses:\n%s", candidate_string)
+            current_evaluation = self.evaluate_clauses(current_clauses, targets)
+            logger.debug("Candidates evaluation:\t%f", current_evaluation)
+            improvement = self.theory_metric.difference(
+                current_evaluation, best_evaluation)
+            if improvement > self.improvement_threshold:
+                logger.debug("Accepting new best refined candidate:\n%s",
+                             candidate_string)
+                best_evaluation = current_evaluation
+                best_clauses = current_clauses
+                side_way_movements = 0
+            else:
+                logger.debug("Making side movement for candidate:\n%s",
+                             candidate_string)
+                side_way_movements += 1
+                if improvement >= 0.0 and not self.generic:
+                    best_clauses = current_clauses
+            if self.strict_to_maximum_size:
+                break
+            i += 1
+
+        return best_clauses
+
+    def _get_size(self, bottom_clause):
+        return len(
+            bottom_clause.body) if self.maximum_size < 1 else self.maximum_size
+
+    def get_next_clauses(self, candidates, targets, queue, index):
+        """
+        Gets the next iteration of clauses.
+
+        :param candidates: the candidate literals
+        :type candidates: List[Literal]
+        :param targets: the evaluation examples
+        :type targets: Examples
+        :param queue: the queue of clauses
+        :type queue: deque[EquivalentHornClause]
+        :param index: the index of the iteration
+        :type index: int
+        :return: the next iteration of clauses
+        :rtype: List[HornClause]
+        """
+        if self.strict_to_maximum_size:
+            for j in range(index, self.maximum_size + 1):
+                logger.debug("Finding the clauses, from the bottom clause, "
+                             "of size:\t%d", j)
+                append_all_candidates_to_queue(queue, candidates)
+        else:
+            logger.debug("Finding the clauses, from the bottom clause, "
+                         "of size:\t%d", index)
+            append_all_candidates_to_queue(queue, candidates)
+
+        if not queue:
+            return []
+
+        logger.debug("Evaluating %s theory(es) of size:\t%d", len(queue), index)
+        evaluation_map: \
+            Dict[AsyncTheoryEvaluator[EquivalentHornClause], float] = dict()
+        self.multiprocessing.get_best_clause_from_candidates(
+            queue, targets, evaluation_map)
+        equivalent_horn_clauses = \
+            sorted(
+                evaluation_map.items(),
+                key=my_cmp_to_key(
+                    self.theory_metric.compare, key=lambda x: x[1]))
+        equivalent_horn_clauses = \
+            list(map(lambda x: x[0], equivalent_horn_clauses))
+        biggest_gap = find_biggest_gap(
+            equivalent_horn_clauses, lambda x: x.evaluation)
+        logger.debug("The biggest gap threshold was:\t%f",
+                     equivalent_horn_clauses[biggest_gap - 1].evaluation)
+        equivalent_horn_clauses = equivalent_horn_clauses[:biggest_gap]
+
+        return list(map(lambda x: x.horn_clause, equivalent_horn_clauses))
+
+    def evaluate_clauses(self, clauses, targets):
+        """
+        Evaluates the clauses on the targets.
+
+        :param clauses: the clauses
+        :type clauses: Collection[HornClause]
+        :param targets: the targets
+        :type targets: Examples
+        :return: the evaluation of the clauses on the targets
+        :rtype: float
+        """
+        theory_evaluator = self.learning_system.theory_evaluator
+        return theory_evaluator.evaluate_theory_appending_clause(
+            targets, self.theory_metric, clauses)

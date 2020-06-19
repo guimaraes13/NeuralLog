@@ -68,3 +68,18 @@ def does_terms_match(goal, atom, fixed_terms):
             get_unify_map(atom, goal, fixed_terms) is None:
         return None
     return get_unify_map(goal, atom, fixed_terms)
+
+
+def iterable_to_string(iterable, separator="\n"):
+    """
+    Transforms the `iterable` to a string by getting the string value of
+    each item and joining them with `sep`.
+
+    :param iterable: the iterable
+    :type iterable: Any
+    :param separator: the separator
+    :type separator: str
+    :return: the joined string
+    :rtype: str
+    """
+    return separator.join(map(lambda x: str(x), iterable))

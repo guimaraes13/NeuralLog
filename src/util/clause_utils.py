@@ -2,7 +2,7 @@
 Useful methods to deal with Horn clauses.
 """
 from collections import Collection, Iterable
-from typing import Set
+from typing import Set, List, Callable, TypeVar
 
 from src.language.language import Literal, Atom, Number, get_term_from_string, \
     HornClause, Term
@@ -183,3 +183,31 @@ def will_rule_be_safe(head, body, candidate):
         append_non_constant_terms(candidate, unsafe_terms)
 
     return get_safe_terms(body).issuperset(unsafe_terms)
+
+
+E = TypeVar('E')
+
+
+def find_biggest_gap(elements: List[E], function: Callable[[E], float]):
+    """
+    Finds the index of the list where the biggest gat between the evaluation
+    of the function on the element is.
+
+    :param elements: the elements
+    :type elements: List[E]
+    :param function: the evaluation function
+    :type function: Callable[[E], float]
+    :return: the index of the biggest gap, i.e. the number of elements that
+    the first part of the list must have to break at the biggest gap
+    :rtype: int
+    """
+    size = len(elements) - 1
+    max_index = size
+    max_value = 0
+    for i in range(size):
+        auxiliary = abs(function(elements[i]) - function(elements[i + 1]))
+        if auxiliary > max_value:
+            max_value = auxiliary
+            max_index = i
+
+    return max_index + 1
