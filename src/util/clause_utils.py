@@ -1,7 +1,7 @@
 """
 Useful methods to deal with Horn clauses.
 """
-from collections import Collection
+from collections import Collection, Iterable
 from typing import Set
 
 from src.language.language import Literal, Atom, Number, get_term_from_string, \
@@ -61,7 +61,7 @@ def get_safe_terms(clause_body):
     terms that appears in positive literals in the body of the clause.
 
     :param clause_body: the body of the clause
-    :type clause_body: Collection[Literal]
+    :type clause_body: Iterable[Literal]
     :return: the safe terms
     :rtype: Set[Term]
     """
@@ -95,7 +95,7 @@ def get_unsafe_terms(head, body):
     :param head: the head of the clause
     :type head: Atom
     :param body: the body of the clause
-    :type body: Collection[Literal]
+    :type body: Iterable[Literal]
     :return: the safe terms
     :rtype: Set[Term]
     """
@@ -163,3 +163,23 @@ def get_non_negated_literals_with_head_variable(horn_clause):
             literals.add(literal)
 
     return literals
+
+
+def will_rule_be_safe(head, body, candidate):
+    """
+    Checks if a Horn clause will be safe if `candidate` is added to its body.
+
+    :param head: the head of the clause
+    :type head: Atom
+    :param body: the body of the clause
+    :type body: Iterable[Literal]
+    :param candidate: the candidate
+    :type candidate: Literal
+    :return: `True` if the clause is safe with the candidate; otherwise, `False`
+    :rtype: bool
+    """
+    unsafe_terms = get_unsafe_terms(head, body)
+    if candidate.negated:
+        append_non_constant_terms(candidate, unsafe_terms)
+
+    return get_safe_terms(body).issuperset(unsafe_terms)

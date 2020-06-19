@@ -3,9 +3,172 @@ Package with generic useful tools.
 """
 import logging
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Iterator, Iterable, Union, Tuple, AbstractSet, Set, \
+    TypeVar
 
 logger = logging.getLogger(__name__)
+
+
+# noinspection PyMissingOrEmptyDocstring
+class OrderedSet(set):
+    """
+    An set that iterates in the same order in the elements were added.
+    """
+    _T = TypeVar('_T')
+    _S = TypeVar('_S')
+
+    def __init__(self, iterable: Iterable[_T] = ...) -> None:
+        super().__init__()
+        self._list = []
+        self.update(iterable)
+
+    def add(self, element: _T) -> None:
+        if element not in self:
+            super().add(element)
+            self._list.append(element)
+
+    def clear(self) -> None:
+        super().clear()
+        self._list.clear()
+
+    def copy(self) -> Set[_T]:
+        return OrderedSet(self)
+
+    def difference(self, *s: Iterable[Any]) -> Set[_T]:
+        return super().difference(*s)
+
+    def difference_update(self, *s: Iterable[Any]) -> None:
+        super().difference_update(*s)
+
+    def discard(self, element: _T) -> None:
+        if element in self:
+            super().discard(element)
+            self._list.remove(element)
+
+    def intersection(self, *s: Iterable[Any]) -> Set[_T]:
+        return super().intersection(*s)
+
+    def intersection_update(self, *s: Iterable[Any]) -> None:
+        self.update(self.intersection(*s))
+
+    def isdisjoint(self, s: Iterable[Any]) -> bool:
+        return super().isdisjoint(s)
+
+    def issubset(self, s: Iterable[Any]) -> bool:
+        return super().issubset(s)
+
+    def issuperset(self, s: Iterable[Any]) -> bool:
+        return super().issuperset(s)
+
+    def pop(self) -> _T:
+        value = self._list[-1]
+        self.remove(value)
+        return value
+
+    def remove(self, element: _T) -> None:
+        super().remove(element)
+        self._list.remove(element)
+
+    def symmetric_difference(self, s: Iterable[_T]) -> Set[_T]:
+        return super().symmetric_difference(s)
+
+    def symmetric_difference_update(self, s: Iterable[_T]) -> None:
+        self.update(self.symmetric_difference(s))
+
+    def union(self, *s: Iterable[_T]) -> Set[_T]:
+        return super().union(*s)
+
+    def update(self, *s: Iterable[_T]) -> None:
+        for sequence in s:
+            for item in sequence:
+                self.add(item)
+
+    def __len__(self) -> int:
+        return super().__len__()
+
+    def __contains__(self, o: object) -> bool:
+        return super().__contains__(o)
+
+    def __iter__(self) -> Iterator[_T]:
+        return iter(self._list)
+
+    def __str__(self) -> str:
+        return self.__repr__()
+
+    def __and__(self, s: AbstractSet[object]) -> Set[_T]:
+        return super().__and__(s)
+
+    def __iand__(self, s: AbstractSet[object]) -> Set[_T]:
+        return super().__iand__(s)
+
+    def __or__(self, s: AbstractSet[_S]) -> Set[Union[_T, _S]]:
+        return super().__or__(s)
+
+    def __ior__(self, s: AbstractSet[_S]) -> Set[Union[_T, _S]]:
+        return super().__ior__(s)
+
+    def __sub__(self, s: AbstractSet[object]) -> Set[_T]:
+        return super().__sub__(s)
+
+    def __isub__(self, s: AbstractSet[object]) -> Set[_T]:
+        return super().__isub__(s)
+
+    def __xor__(self, s: AbstractSet[_S]) -> Set[Union[_T, _S]]:
+        return super().__xor__(s)
+
+    def __ixor__(self, s: AbstractSet[_S]) -> Set[Union[_T, _S]]:
+        return super().__ixor__(s)
+
+    def __le__(self, s: AbstractSet[object]) -> bool:
+        return super().__le__(s)
+
+    def __lt__(self, s: AbstractSet[object]) -> bool:
+        return super().__lt__(s)
+
+    def __ge__(self, s: AbstractSet[object]) -> bool:
+        return super().__ge__(s)
+
+    def __gt__(self, s: AbstractSet[object]) -> bool:
+        return super().__gt__(s)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        super().__setattr__(name, value)
+
+    def __eq__(self, o: object) -> bool:
+        return super().__eq__(o)
+
+    def __ne__(self, o: object) -> bool:
+        return super().__ne__(o)
+
+    def __repr__(self) -> str:
+        return "{{{}}}".format(", ".join(map(lambda x: str(x), self._list)))
+
+    def __hash__(self) -> int:
+        return sum(map(lambda x: hash(x), self._list))
+
+    def __format__(self, format_spec: str) -> str:
+        return super().__format__(format_spec)
+
+    def __getattribute__(self, name: str) -> Any:
+        return super().__getattribute__(name)
+
+    def __delattr__(self, name: str) -> None:
+        super().__delattr__(name)
+
+    def __sizeof__(self) -> int:
+        return super().__sizeof__()
+
+    def __reduce__(self) -> Union[str, Tuple[Any, ...]]:
+        return super().__reduce__()
+
+    def __reduce_ex__(self, protocol: int) -> Union[str, Tuple[Any, ...]]:
+        return super().__reduce_ex__(protocol)
+
+    def __dir__(self) -> Iterable[str]:
+        return super().__dir__()
+
+    def __init_subclass__(cls) -> None:
+        super().__init_subclass__()
 
 
 class InitializationException(Exception):

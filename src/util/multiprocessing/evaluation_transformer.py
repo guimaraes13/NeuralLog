@@ -6,40 +6,11 @@ from abc import ABC, abstractmethod
 from typing import TypeVar, Generic
 
 from src.knowledge.examples import Examples
+from src.language.equivalent_clauses import EquivalentHornClause
 from src.util.multiprocessing.theory_evaluation import AsyncTheoryEvaluator
 
 V = TypeVar('V')
 E = TypeVar('E')
-
-
-# TODO: implement
-class EquivalentHornClause:
-    """
-    A container for a Horn clause with improved information about it
-    generation, in order to detect equivalent clauses and make atoms relevant
-    to the equivalent clauses also relevant to this one.
-    """
-
-    def __init__(self, head):
-        self.head = head
-        self.horn_clause = None
-        self.clause_body = None
-        self.substitution_maps = None
-        self.last_literal = None
-
-    def build_appended_candidates(self, candidates):
-        pass
-
-    def build_initial_clause_candidates(self, candidates, skip_atom,
-                                        skip_clause):
-        pass
-
-
-class EquivalentClauseAtom:
-    """
-    Clause to extend the concept of equivalent atom, also comparing the
-    clause's body
-    """
 
 
 class AsyncEvaluationTransformer(ABC, Generic[V, E]):

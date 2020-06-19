@@ -13,6 +13,7 @@ from src.knowledge.theory.evaluation.metric.theory_metric import TheoryMetric
 from src.language.language import HornClause, KnowledgeException
 from src.structure_learning.structure_learning_system import \
     StructureLearningSystem
+from src.util import OrderedSet
 from src.util.multiprocessing.evaluation_transformer import \
     AsyncEvaluationTransformer
 from src.util.multiprocessing.theory_evaluation import AsyncTheoryEvaluator
@@ -72,7 +73,7 @@ class MultiprocessingEvaluation(Generic[V, E]):
         :return: the set of futures
         :rtype: Set[Future[AsyncTheoryEvaluator[E]]]
         """
-        futures = set()
+        futures: Set[Future[AsyncTheoryEvaluator[E]]] = OrderedSet()
         for candidate in candidates:
             logger.debug("Submitting candidate:\t%s", candidate)
             evaluator = AsyncTheoryEvaluator(

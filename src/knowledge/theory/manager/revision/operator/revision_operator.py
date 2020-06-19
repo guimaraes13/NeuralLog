@@ -12,16 +12,17 @@ from src.knowledge.theory import TheoryRevisionException
 from src.knowledge.theory.evaluation.metric.theory_metric import TheoryMetric
 from src.knowledge.theory.evaluation.theory_evaluator import TheoryEvaluator
 from src.knowledge.theory.manager.revision.clause_modifier import ClauseModifier
+from src.language.equivalent_clauses import EquivalentClauseAtom, \
+    EquivalentHornClause
 from src.language.language import KnowledgeException, Atom, Predicate, \
     HornClause, Term, Number, Literal
 from src.structure_learning.structure_learning_system import \
     StructureLearningSystem, build_null_atom
-from src.util import Initializable, InitializationException
-from src.util.clause import apply_substitution, to_variable_atom, \
+from src.util import Initializable, InitializationException, OrderedSet
+from src.util.clause_utils import apply_substitution, to_variable_atom, \
     may_rule_be_safe, get_non_negated_literals_with_head_variable, is_rule_safe
 from src.util.multiprocessing.evaluation_transformer import \
-    EquivalentHonClauseAsyncTransformer, EquivalentHornClause, \
-    EquivalentClauseAtom
+    EquivalentHonClauseAsyncTransformer
 from src.util.multiprocessing.multiprocessing import MultiprocessingEvaluation
 from src.util.multiprocessing.theory_evaluation import AsyncTheoryEvaluator
 from src.util.variable_generator import VariableGenerator
@@ -504,7 +505,8 @@ class BottomClauseBoundedRule(RevisionOperator):
         :return: a async theory evaluator containing the best Horn clause
         :rtype: AsyncTheoryEvaluator[EquivalentHornClause]
         """
-        candidates = set(candidate_literals)
+        # noinspection PyTypeChecker
+        candidates = OrderedSet(candidate_literals)
         best_clause = initial_clause
         current_clause = initial_clause
         remove_equivalent_candidates(candidates, initial_clause.element)
@@ -605,7 +607,7 @@ def build_minimal_safe_equivalent_clauses(bottom_clause):
 
 def append_all_candidates_to_queue(queue, candidates):
     """
-    Creates a list of equivalent horn clauses containing a equivalent Horn
+    Creates a list of equivalent Horn clauses containing a equivalent Horn
     clause for each substitution of each candidate, skipping equivalent
     clauses.
 
@@ -620,7 +622,7 @@ def append_all_candidates_to_queue(queue, candidates):
     size = len(queue)  # the initial size of the queue
     for _ in range(size):
         equivalent_horn_clause = queue.popleft()
-        queue.append(equivalent_horn_clause.build_initial_clause_candidates(
+        queue.extend(equivalent_horn_clause.build_initial_clause_candidates(
             candidates, skip_atom, skip_clause))
 
 

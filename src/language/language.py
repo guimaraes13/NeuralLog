@@ -3,6 +3,7 @@ Define the classes to represent the knowledge of the system.
 """
 
 import re
+from collections import Collection
 
 TRAINABLE_KEY = "$"
 
@@ -851,6 +852,23 @@ class AtomClause(Clause):
         return self.atom.simple_key()
 
 
+def format_horn_clause(head, body):
+    """
+    Formats the Horn clause to print.
+
+    :param head: the head of the clause
+    :type head: Atom
+    :param body: the body of the clause
+    :type body: Collection[Literal]
+    :return: the formatted Horn clause
+    :rtype: str
+    """
+    body = Literal(Atom("true")) if body is None else body
+    return "{} {} {}{}".format(
+        head, IMPLICATION_SIGN,
+        ", ".join(map(lambda x: str(x), body)), END_SIGN)
+
+
 class HornClause(Clause):
     """
     Represents a logic Horn clause.
@@ -885,11 +903,7 @@ class HornClause(Clause):
         return tuple(key_tuple)
 
     def __str__(self):
-        body = Literal(Atom("true")) if self.body is None else self.body
-
-        return "{} {} {}{}".format(self.head, IMPLICATION_SIGN,
-                                   ", ".join(map(lambda x: str(x), body)),
-                                   END_SIGN)
+        return format_horn_clause(self.head, self.body)
 
     # noinspection PyMissingOrEmptyDocstring
     def is_template(self):
