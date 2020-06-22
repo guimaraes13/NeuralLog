@@ -75,6 +75,14 @@ set_parameter(initial_value, config, mean, 0.5).
 set_parameter(initial_value, config, stddev, 0.125).
 
 
+
+%% Constraints the values of the learnable facts to [0, 1]
+% set_predicate(value_constraint, class_name, partial).
+% set_predicate(value_constraint, config, function_name, "tf.clip_by_value").
+% set_predicate(value_constraint, config, clip_value_min, 0.0).
+% set_predicate(value_constraint, config, clip_value_max, 1.0).
+
+
 %% Default parameters for network functions
 %% function to get the value of a negated literal from the non-negated one
 set_parameter(literal_negation_function, literal_negation_function).

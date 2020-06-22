@@ -72,6 +72,9 @@ class TestNetworkTraining(unittest.TestCase):
         target_index = self.program.get_index_of_constant(
             Predicate("parents", 3), 2, Constant("lucia"))
         value_before = before_training_1[0][target_index]
+        for example in self.program.facts_by_predicate.get(
+                Predicate("father", 2)).values():
+            print(example)
         print("Value before training:", value_before, sep="\t")
         self.model.fit(train_set, epochs=NUMBER_OF_EPOCHS, verbose=0)
         after_training_1 = self.model.predict(dense_feature_1)
@@ -81,3 +84,11 @@ class TestNetworkTraining(unittest.TestCase):
         self.assertGreater(value_after, value_before)
         # noinspection PyUnresolvedReferences
         self.assertTrue((before_training_2 == after_training_2).all())
+        self.model.update_program()
+        for example in self.program.facts_by_predicate.get(
+                Predicate("father", 2)).values():
+            print(example)
+            self.assertTrue(
+                0.0 <= example.weight <= 1.0,
+                "Fact {} outside the constraint range of [0, 1]".format(
+                    example.weight))

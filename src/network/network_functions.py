@@ -104,6 +104,11 @@ def _deserialize(configuration, function_dict, keras_func, name_only=False):
     :param keras_func: the keras function to get the function from, if it is
     not in `function_dict`
     :type keras_func: function or None
+    :param name_only: if `True`, and `identifier` refers to a Keras function,
+    returns only the function by name, it does not try to initialize a class
+    with parameters. That is because some Keras' functions might not have
+    parameters
+    :type name_only: bool
     :raise ValueError: if the function is not found
     :return: the function
     :rtype: function
@@ -135,6 +140,11 @@ def _get(identifier, function_dict, keras_func, name_only=False):
     :param keras_func: the keras function to get the function from, if it is
     not in `function_dict`
     :type keras_func: function or None
+    :param name_only: if `True`, and `identifier` refers to a Keras function,
+    returns only the function by name, it does not try to initialize a class
+    with parameters. That is because some Keras' functions might not have
+    parameters
+    :type name_only: bool
     :raise ValueError: if the function is not found
     :return: the function
     :rtype: function

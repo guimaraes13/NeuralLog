@@ -1750,13 +1750,17 @@ DEFAULT_PARAMETERS = [
      "This must be handled by the dataset; otherwise, an exception will be "
      "raised."),
 
-    ("initial_value", {
-        "class_name": "random_normal",
-        "config": {"mean": 0.5, "stddev": 0.125}
-    },
+    ("initial_value",
+     {"class_name": "random_normal", "config": {"mean": 0.5, "stddev": 0.125}},
      "initializer for learnable predicates. This initializer will be used to "
      "initialize facts from learnable predicates that are not in the "
      "knowledge base."),
+
+    ("value_constraint", {},
+     "A function to be applied to the weights of the learnable predicates in "
+     "order to restrict its value. This function must take as input the "
+     "tensor representing the unconstrained weights and return another tensor "
+     "(of same shape) with the constrained values."),
 
     ("allow_sparse", True,
      "by default, we represent constant facts as sparse matrices whenever "

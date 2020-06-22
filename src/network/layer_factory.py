@@ -17,7 +17,7 @@ from src.language.language import Predicate, Atom, Variable, \
 from src.network.network_functions import get_initializer, \
     get_combining_function, SPARSE_FUNCTION_SUFFIX, FactLayer, \
     AttributeFactLayer, SpecificFactLayer, DiagonalFactLayer, \
-    InvertedFactLayer, InvertedSpecificFactLayer
+    InvertedFactLayer, InvertedSpecificFactLayer, get_literal_function
 
 logger = logging.getLogger(__name__)
 
@@ -452,13 +452,14 @@ class LayerFactory:
         return get_combining_function(combining_function)
 
     # noinspection PyTypeChecker
-    def _get_variable(self, name, value, shape, dtype=tf.float32):
+    def _get_variable(self, name, value, shape, dtype=tf.float32,
+                      constraint=None):
         tensor = self._tensor_by_name.get(name, None)
         if tensor is None:
             # noinspection PyArgumentList
             tensor = tf.Variable(initial_value=value, dtype=dtype,
                                  shape=shape, name=get_standardised_name(name),
-                                 trainable=True)
+                                 trainable=True, constraint=constraint)
             self._tensor_by_name[name] = tensor
         return tensor
 
@@ -495,8 +496,9 @@ class LayerFactory:
                 name = renamed_atom.__str__()
             else:
                 name = name_format.format(renamed_atom.__str__())
-
-            tensor = self._get_variable(name, initial_value, shape)
+            constraint = self._get_value_constraint(atom.predicate)
+            tensor = self._get_variable(
+                name, initial_value, shape, constraint=constraint)
             # noinspection PyTypeChecker
             self.variable_cache[renamed_atom] = tensor
 
@@ -690,6 +692,32 @@ class LayerFactory:
         :rtype: str
         """
         return self.program.get_parameter_value("initial_value", predicate)
+
+    def _get_value_constraint(self, predicate):
+        """
+        Gets the value constraint of the initializer for the predicate.
+
+        :param predicate: the predicate
+        :type predicate: Predicate
+        :return: the value constraint
+        :rtype: Optional[Callable[[tf.Tensor], tf.Tensor]]
+        """
+        value_constraint = \
+            self.program.get_parameter_value("value_constraint", predicate)
+        try:
+            if not value_constraint:
+                return None
+            function_value = get_literal_function(value_constraint)
+            return function_value
+        except (ValueError, TypeError):
+            name = None
+            if isinstance(value_constraint, dict):
+                name = value_constraint.get("class_name", None)
+            if name is None:
+                name = value_constraint
+            logger.warning("Value constraint of name %s not found for "
+                           "predicate %s", name, predicate)
+            return None
 
     def get_constant_lookup(self, atom, term_index):
         """
