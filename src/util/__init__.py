@@ -6,6 +6,8 @@ from abc import ABC, abstractmethod
 from typing import Any, Iterator, Iterable, Union, Tuple, AbstractSet, Set, \
     TypeVar
 
+from src.run.command import SKIP_SIZE, INDENT_SIZE
+
 logger = logging.getLogger(__name__)
 
 
@@ -273,3 +275,28 @@ def reset_field_error(clazz, field_name):
     return InitializationException(
         "Reset {}, at class {}, is not allowed.".format(
             field_name, clazz.__class__.__name__))
+
+
+def print_args(args, the_logger):
+    """
+    Prints the parsed arguments in an organized way.
+
+    :param args: the parsed arguments
+    :type args: argparse.Namespace or dict
+    :param the_logger: the logger
+    :type the_logger: logger
+    """
+    if isinstance(args, dict):
+        arguments = args
+    else:
+        arguments = args.__dict__
+    max_key_length = max(
+        map(lambda x: len(str(x)), arguments.keys()))
+    for k, v in sorted(arguments.items(), key=lambda x: str(x)):
+        if hasattr(v, "__len__") and len(v) == 1 and not isinstance(v, dict):
+            v = v[0]
+        k = str(k)
+        the_logger.info("%s:%s%s", k,
+                        " " * (int((max_key_length - len(k)) / SKIP_SIZE)
+                               + INDENT_SIZE), v)
+    the_logger.info("")

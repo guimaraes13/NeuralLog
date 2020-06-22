@@ -48,7 +48,7 @@ def get_dataset_class(identifier):
 
 
 # noinspection PyTypeChecker,DuplicatedCode
-def print_neural_log_predictions(model, neural_program, dataset,
+def print_neural_log_predictions(model, neural_program, neural_dataset, dataset,
                                  writer=sys.stdout, dataset_name=None,
                                  print_batch_header=False):
     """
@@ -56,6 +56,8 @@ def print_neural_log_predictions(model, neural_program, dataset,
 
     :param model: the model
     :type model: NeuralLogNetwork
+    :param neural_dataset: the NeuralLog dataset
+    :type neural_dataset: NeuralLogDataset
     :param neural_program: the neural program
     :type neural_program: NeuralLogProgram
     :param dataset: the dataset
@@ -68,10 +70,9 @@ def print_neural_log_predictions(model, neural_program, dataset,
     batch
     :type print_batch_header: bool
     """
-    neural_dataset = model.dataset  # type: NeuralLogDataset
     if isinstance(neural_dataset, WordCharDataset):
         return _print_word_char_predictions(
-            model, neural_program, dataset, writer=writer,
+            model, neural_program, neural_dataset, dataset, writer=writer,
             dataset_name=dataset_name, print_batch_header=print_batch_header
         )
     count = 0
@@ -162,7 +163,7 @@ def print_neural_log_predictions(model, neural_program, dataset,
 
 
 # noinspection DuplicatedCode
-def _print_word_char_predictions(model, neural_program, dataset,
+def _print_word_char_predictions(model, neural_program, neural_dataset, dataset,
                                  writer=sys.stdout, dataset_name=None,
                                  print_batch_header=False):
     """
@@ -170,6 +171,8 @@ def _print_word_char_predictions(model, neural_program, dataset,
 
     :param model: the model
     :type model: NeuralLogNetwork
+    :param neural_dataset: the NeuralLog dataset
+    :type neural_dataset: WordCharDataset
     :param neural_program: the neural program
     :type neural_program: NeuralLogProgram
     :param dataset: the dataset
@@ -182,7 +185,6 @@ def _print_word_char_predictions(model, neural_program, dataset,
     batch
     :type print_batch_header: bool
     """
-    neural_dataset = model.dataset  # type: WordCharDataset
     count = 0
     batches = None
     fix = -1

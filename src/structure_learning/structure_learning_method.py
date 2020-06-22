@@ -5,6 +5,7 @@ import logging
 from abc import abstractmethod
 from enum import Enum
 
+from src.knowledge.examples import Examples
 from src.knowledge.manager.example_manager import IncomingExampleManager
 from src.knowledge.program import NeuralLogProgram
 from src.knowledge.theory.evaluation.metric.theory_metric import TheoryMetric
@@ -20,6 +21,8 @@ from src.knowledge.theory.manager.theory_revision_manager import \
 from src.run.command import TRAIN_SET_NAME, VALIDATION_SET_NAME
 from src.structure_learning.engine_system_translator import \
     EngineSystemTranslator
+from src.structure_learning.structure_learning_system import \
+    StructureLearningSystem
 from src.util import Initializable
 from src.util.file import read_logic_program_from_file
 from src.util.statistics import RunStatistics
@@ -286,8 +289,13 @@ class BatchStructureLearning(StructureLearningMethod):
         """
         Builds the learning system.
         """
-        # TODO: to build the learning system
-        pass
+        logger.info("Build the learning system:\t%s",
+                    StructureLearningSystem.__class__.__name__)
+        # noinspection PyAttributeOutsideInit
+        self.learning_system = StructureLearningSystem(
+            self.knowledge_base, self.theory, Examples(),
+            self.engine_system_translator, None, None, None)
+        # TODO: to build the learning system (finish this method)
 
     # noinspection PyMissingOrEmptyDocstring
     def run(self):

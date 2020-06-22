@@ -15,7 +15,6 @@ from src.knowledge.program import NeuralLogProgram, ANY_PREDICATE_NAME, \
 from src.language.language import Atom, Term, HornClause, Literal, \
     get_renamed_literal, get_substitution, get_variable_indices, Predicate, \
     get_renamed_atom, get_variable_atom, KnowledgeException
-from src.network.dataset import NeuralLogDataset
 from src.network.layer_factory import LayerFactory, \
     get_standardised_name
 from src.network.network_functions import get_literal_function, \
@@ -226,13 +225,13 @@ class NeuralLogNetwork(keras.Model):
     """
 
     # noinspection PyTypeChecker
-    def __init__(self, dataset, train=True, inverse_relations=True,
+    def __init__(self, program, train=True, inverse_relations=True,
                  regularizer=None):
         """
         Creates a NeuralLogNetwork.
 
-        :param dataset: the NeuralLog dataset
-        :type dataset: NeuralLogDataset
+        :param program: the NeuralLog program
+        :type program: NeuralLogProgram
         :param train: if `False`, all the literals will be considered as not
         trainable/learnable, this is useful to build neural networks for
         inference only. In this way, the unknown facts will be treated as
@@ -267,8 +266,7 @@ class NeuralLogNetwork(keras.Model):
 
         self.predicates: List[Tuple[Predicate, bool]]
 
-        self.dataset = dataset
-        self.program = dataset.program
+        self.program = program
         self.layer_factory = LayerFactory(
             self.program, train=train, regularizer=regularizer)
         # noinspection PyTypeChecker
@@ -373,12 +371,18 @@ class NeuralLogNetwork(keras.Model):
         function = get_combining_function(combining_function)
         return AnyLiteralLayer("literal_layer_any-X0-X1-", function)
 
-    def build_layers(self):
+    def build_layers(self, target_predicates):
         """
-        Builds the layers of the network.
+        Builds the layers of the network for the target predicates.
+
+        :param target_predicates: a list of tuples, containing the target
+        predicate and whether or not it is inverted.
+        :type target_predicates: List[Tuple[Predicate, bool]]
         """
-        self.input_sizes = []
-        for predicate, inverted in self.dataset.get_target_predicates():
+        # self.input_sizes = []
+        for predicate, inverted in target_predicates:
+            if (predicate, inverted) in self.predicates:
+                continue
             self.input_sizes.append(max(predicate.arity - 1, 1))
             logger.debug("Building output layer for predicate: %s", predicate)
             literal = Literal(Atom(

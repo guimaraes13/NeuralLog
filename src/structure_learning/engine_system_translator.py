@@ -3,8 +3,11 @@ Handles the communication between the structure learning algorithm and the
 inference engine.
 """
 from abc import abstractmethod
+from typing import Optional
 
 from src.knowledge.examples import Examples, ExamplesInferences
+from src.knowledge.program import NeuralLogProgram
+from src.network.network import NeuralLogNetwork
 from src.util import Initializable
 
 
@@ -17,8 +20,20 @@ class EngineSystemTranslator(Initializable):
     """
 
     def __init__(self):
-        self.program = None
-        self.model = None
+        self.knowledge_base: Optional[NeuralLogProgram] = None
+        self.theory: Optional[NeuralLogProgram] = None
+        self.model: Optional[NeuralLogNetwork] = None
+
+    # noinspection PyMissingOrEmptyDocstring
+    def initialize(self):
+        program = self.knowledge_base.copy()
+        for clauses in self.theory.clauses_by_predicate.values():
+            program.add_clauses(clauses)
+        program.build_program()
+        self.model = NeuralLogNetwork(program, inverse_relations=False)
+
+    def _build_model(self):
+        program = self.knowledge_base.copy()
 
     @abstractmethod
     def infer_examples(self, examples, retrain=False, theory=None):

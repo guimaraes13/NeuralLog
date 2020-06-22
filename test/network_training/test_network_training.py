@@ -52,8 +52,8 @@ class TestNetworkTraining(unittest.TestCase):
         cls.dataset = DefaultDataset(cls.program, inverse_relations=False)
 
         # Creates the NeuralLog Model
-        cls.model = NeuralLogNetwork(cls.dataset)
-        cls.model.build_layers()
+        cls.model = NeuralLogNetwork(cls.program)
+        cls.model.build_layers(cls.dataset.get_target_predicates())
         cls.model.compile(
             loss="mse",
             optimizer=(tf.keras.optimizers.Adagrad(learning_rate=0.1)),

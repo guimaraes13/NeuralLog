@@ -6,38 +6,27 @@ import argparse
 import logging
 import os
 import time
-from functools import reduce
 from typing import Dict
 
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.callbacks import ModelCheckpoint
-from tensorflow.python.keras.callbacks import TensorBoard
 
-from src.knowledge.program import NeuralLogProgram, BiDict, \
-    get_predicate_from_string, print_neural_log_program, DEFAULT_PARAMETERS
-from src.language.language import Predicate
-from src.network.callbacks import EpochLogger, get_neural_log_callback, \
-    AbstractNeuralLogCallback, get_formatted_name
+from src.knowledge.program import NeuralLogProgram, print_neural_log_program, \
+    DEFAULT_PARAMETERS
+from src.network import trainer
+from src.network.callbacks import get_formatted_name
 from src.network.dataset import print_neural_log_predictions, get_dataset_class
-from src.network.network import NeuralLogNetwork, LossMaskWrapper
+from src.network.network import LossMaskWrapper
 from src.network.network_functions import get_loss_function, CRFLogLikelihood
-from src.run.command import Command, command, print_args, create_log_file, \
+from src.network.trainer import Trainer, DEFAULT_VALID_PERIOD
+from src.run.command import Command, command, create_log_file, \
     TRAIN_SET_NAME, VALIDATION_SET_NAME, TEST_SET_NAME
+from src.util import print_args
 from src.util.file import read_logic_program_from_file
 
 METRIC_FILE_PREFIX = "metric_"
 LOGIC_PROGRAM_EXTENSION = ".pl"
-
-DEFAULT_LOSS = "mean_squared_error"
-DEFAULT_OPTIMIZER = "sgd"
-DEFAULT_REGULARIZER = None
-DEFAULT_BATCH_SIZE = 1
-DEFAULT_NUMBER_OF_EPOCHS = 10
-DEFAULT_VALID_PERIOD = 1
-DEFAULT_INVERTED_RELATIONS = True
-DEFAULT_MASK_PREDICTIONS = False
-DEFAULT_CLIP_LABELS = False
 
 TAB_SIZE = 4
 
@@ -212,15 +201,9 @@ class Train(Command):
     def __init__(self, program, args, direct=False):
         super().__init__(program, args, direct)
         self.neural_program = NeuralLogProgram()
-        self.parameters = None
         self.train_set = None
         self.validation_set = None
         self.test_set = None
-        self.output_map = BiDict()  # type: BiDict[Predicate, str]
-        self.validation_period = DEFAULT_VALID_PERIOD
-        self.epochs = 1
-        self.callbacks = []
-        self.best_models = dict()  # type: Dict[str, ModelCheckpoint]
 
     # noinspection PyMissingOrEmptyDocstring,DuplicatedCode
     def build_parser(self):
@@ -294,197 +277,16 @@ class Train(Command):
         arguments = list(
             map(lambda x: (x[0], x[2], x[3] if len(x) > 3 else True),
                 DEFAULT_PARAMETERS))
-        arguments += [
-            ("inverse_relations", "if `True`, creates also the inverted "
-                                  "relation for each output predicate. The "
-                                  "default value is: "
-                                  "{}".format(DEFAULT_INVERTED_RELATIONS)),
-            ("loss_function", "the loss function of the neural network and, "
-                              "possibly, its options. The default value is: "
-                              "{}. It can be individually specified for each "
-                              "predicate, just put another term with the name "
-                              "of the predicate"
-                              "".format(DEFAULT_LOSS.replace("_", " "))),
-            ("metrics", "the metric functions to eval the neural network and, "
-                        "possibly, its options. The default value is the loss"
-                        "function, which is always appended to the metrics. "
-                        "It can be individually specified for each "
-                        "predicate, just put another term with the name of "
-                        "the predicate"),
-            ("optimizer", "the optimizer for the training and, "
-                          "possibly, its options. The default value is: "
-                          "{}".format(DEFAULT_OPTIMIZER)),
-            ("regularizer", "specifies the regularizer, it can be `l1`, `l2`"
-                            "or `l1_l2`. The default value is: "
-                            "{}".format(DEFAULT_REGULARIZER)),
-            ("batch_size", "the batch size. The default value is: "
-                           "{}".format(DEFAULT_BATCH_SIZE)),
-            ("epochs", "the number of epochs. The default value is: "
-                       "{}".format(DEFAULT_NUMBER_OF_EPOCHS)),
-            ("shuffle", "if set, shuffles the examples of the "
-                        "dataset for each iteration. This option is "
-                        "computationally expensive"),
-            ("validation_period", "the interval (number of epochs) between the "
-                                  "validation. The default value is:"
-                                  "{}".format(DEFAULT_VALID_PERIOD)),
-            ("callback", "a dictionary of callbacks to be used on training. "
-                         "The default value is `None`"),
-            ("best_model", "a dictionary with keys matching pointing to "
-                           "`ModelCheckpoints` in the callback dictionary."
-                           "For each entry, it will save the program and "
-                           "inference files (with the value of the entry as "
-                           "prefix) based on the best model saved by the "
-                           "checkpoint defined by the key. "
-                           "The default value is `None`"),
-            ("mask_predictions", "if `True`, it masks the output of the "
-                                 "network, during the training phase. Before "
-                                 "the loss function, it sets the predictions "
-                                 "of unknown examples to `0` by multiplying "
-                                 "the output of the network by the square of "
-                                 "the labels. In order to this method work, "
-                                 "the labels must be: `1`, for positive "
-                                 "examples; `-1`, for negative examples; "
-                                 "and `0`, for unknown examples"),
-            ("clip_labels", "if `True`, clips the values of the labels "
-                            "to [0, 1]. This is useful when one wants to keep "
-                            "the output of the network in [0, 1], and also use "
-                            "the mask_predictions features."),
-        ]
+        arguments += trainer.PARAMETERS
         return format_arguments(message, arguments)
 
-    def _read_parameters(self, output_map):
+    def _read_parameters(self):
         """
         Reads the default parameters found in the program
         """
-        self.parameters = dict(self.neural_program.parameters)
-        self.parameters.setdefault("mask_predictions", DEFAULT_MASK_PREDICTIONS)
-        self.parameters["loss_function"] = self._get_loss_function(output_map)
-        self.parameters.setdefault("clip_labels", DEFAULT_CLIP_LABELS)
-        self._wrap_mask_loss_functions()
-        self.parameters["metrics"] = self._get_metrics(output_map)
-        self.parameters.setdefault("optimizer", DEFAULT_OPTIMIZER)
-        self.parameters.setdefault("regularizer", DEFAULT_REGULARIZER)
-        self.parameters.setdefault("batch_size", DEFAULT_BATCH_SIZE)
-        self.parameters.setdefault("epochs", DEFAULT_NUMBER_OF_EPOCHS)
-        self.parameters.setdefault("validation_period", DEFAULT_VALID_PERIOD)
+        self.trainer.read_parameters()
 
-        print_args(self.parameters, logger)
-
-    def _get_loss_function(self, output_map):
-        """
-        Gets the loss function.
-
-        :param output_map: the map of the outputs of the neural network by the
-        predicate
-        :type output_map: BiDict[tuple(Predicate, bool), str]
-        :return: the loss function for each output
-        :rtype: str or dict[str, str]
-        """
-        loss_function = self.parameters.get("loss_function", DEFAULT_LOSS)
-        if isinstance(loss_function, dict) and \
-                "class_name" not in loss_function and \
-                "config" not in loss_function:
-            default_loss = DEFAULT_LOSS
-            results = dict()
-            for key, value in loss_function.items():
-                key = get_predicate_from_string(key)
-                has_not_match = True
-                for predicate, output in output_map.items():
-                    if key.equivalent(predicate[0]):
-                        results.setdefault(output, value)
-                        has_not_match = False
-                if has_not_match:
-                    default_loss = value
-            for key in output_map.values():
-                results.setdefault(key, default_loss)
-            for key, value in results.items():
-                results[key] = get_loss_function(value)
-        else:
-            results = get_loss_function(loss_function)
-        return results
-
-    def _wrap_mask_loss_functions(self):
-        """
-        Wraps the loss functions to mask the values of unknown examples.
-
-        It multiplies the output of the network by the square of the labels. In
-        order to this method work, the labels must be: `1`, for positive
-        examples; `-1`, for negative examples; and `0`, for unknown examples.
-
-        In this way, the square of the labels will be `1` for the positive and
-        negative examples; and `0`, for the unknown examples. When multiplied by
-        the prediction, the predictions of the unknown examples will be zero,
-        thus, having no error and no gradient for those examples. While the
-        predictions of the known examples will remain the same.
-        """
-        if not self.parameters["mask_predictions"]:
-            return
-        loss_function = self.parameters["loss_function"]
-        label_function = None
-        if self.parameters["clip_labels"]:
-            label_function = lambda x: tf.clip_by_value(x, clip_value_min=0.0,
-                                                        clip_value_max=1.0)
-        if isinstance(loss_function, dict):
-            functions = dict()
-            for key, value in loss_function.items():
-                functions[key] = LossMaskWrapper(value, label_function)
-        else:
-            functions = LossMaskWrapper(loss_function, label_function)
-        self.parameters["loss_function"] = functions
-
-    def _get_metrics(self, output_map):
-        """
-        Gets the metrics.
-
-        :param output_map: the map of the outputs of the neural network by the
-        predicate
-        :type output_map: BiDict[tuple(Predicate, bool), str]
-        :return: the loss function for each output
-        :rtype: str or dict[str, str]
-        """
-        metrics = self.parameters.get("metrics", None)
-        loss = self.parameters["loss_function"]
-        if isinstance(metrics, dict):
-            results = dict()
-            all_metrics = []
-            for key, values in metrics.items():
-                if isinstance(values, dict):
-                    values = \
-                        sorted(values.items(), key=lambda x: x[0])
-                    values = list(map(lambda x: x[1], values))
-                else:
-                    values = [values]
-                key = get_predicate_from_string(key)
-                has_not_match = True
-                for predicate, output in output_map.items():
-                    if key.equivalent(predicate[0]):
-                        metric = results.get(output, [])
-                        results[output] = metric + values
-                        has_not_match = False
-                if has_not_match:
-                    all_metrics.append((key, values))
-            all_metrics = sorted(all_metrics, key=lambda x: x[0])
-            all_metrics = list(map(lambda x: x[1], all_metrics))
-            if len(all_metrics) > 0:
-                all_metrics = reduce(list.__add__, all_metrics)
-            for key in output_map.values():
-                values = results.get(key, [])
-                default_loss = loss.get(key) if isinstance(loss, dict) else loss
-                results[key] = unique([default_loss] + all_metrics + values)
-            return results
-        elif metrics is None:
-            if isinstance(loss, dict):
-                return loss
-            else:
-                return [loss]
-        else:
-            if isinstance(loss, dict):
-                results = dict()
-                for key in loss.keys():
-                    results[key] = [loss[key], self.parameters["metrics"]]
-                return results
-            else:
-                return [loss, self.parameters["metrics"]]
+        print_args(self.trainer.parameters, logger)
 
     # noinspection PyMissingOrEmptyDocstring,PyAttributeOutsideInit
     def parse_args(self):
@@ -577,27 +379,18 @@ class Train(Command):
         """
         start_func = time.perf_counter()
         logger.info("Building model...")
+        self.trainer = Trainer(self.neural_program, self.output_path)
         self._create_dataset()
-        regularizer = self.neural_program.parameters.get(
-            "regularizer", DEFAULT_REGULARIZER)
-        self.model = NeuralLogNetwork(
-            self.neural_dataset, train=True,
-            regularizer=regularizer
+        self.trainer.init_model()
+        self.model = self.trainer.model
+        self.model.build_layers(self.neural_dataset.get_target_predicates())
+        self._read_parameters()
+        self.trainer.log_parameters(
+            ["clip_labels", "loss_function", "optimizer",
+             "regularizer" "metrics", "inverse_relations"],
+            self.trainer.output_map.inverse
         )
-        self.model.build_layers()
-        self.output_map = self._get_output_map()
-        self._read_parameters(self.output_map)
-        self._log_parameters(
-            ["clip_labels", "loss_function", "optimizer", "regularizer"
-                                                          "metrics",
-             "inverse_relations"],
-            self.output_map.inverse
-        )
-        self.model.compile(
-            loss=self.parameters["loss_function"],
-            optimizer=self.parameters["optimizer"],
-            metrics=self.parameters["metrics"]
-        )
+        self.trainer.compile_module()
 
         if self.load_model is not None:
             self.model.load_weights(self.load_model)
@@ -607,8 +400,7 @@ class Train(Command):
         logger.info("\nModel building time:\t%0.3fs", end_func - start_func)
 
     def _create_dataset(self):
-        inverse_relations = self.neural_program.parameters.get(
-            "inverse_relations", DEFAULT_INVERTED_RELATIONS)
+        inverse_relations = self.trainer.parameters.get("inverse_relations")
         dataset_class = self.neural_program.parameters["dataset_class"]
         config = dict()
         if isinstance(dataset_class, dict):
@@ -620,117 +412,28 @@ class Train(Command):
         config["inverse_relations"] = inverse_relations
         self.neural_dataset = get_dataset_class(class_name)(**config)
 
-    def _get_output_map(self):
-        output_map = BiDict()  # type: BiDict[Predicate, str]
-        count = 1
-        for predicate in self.model.predicates:
-            output_map[predicate] = "output_{}".format(count)
-            count += 1
-        return output_map
-
-    def _log_parameters(self, parameter_keys, map_dict=None):
-        if logger.isEnabledFor(logging.INFO):
-            parameters = dict(filter(lambda x: x[0] in parameter_keys,
-                                     self.parameters.items()))
-            if len(parameters) == 0:
-                return
-            if map_dict is not None:
-                # noinspection PyUnresolvedReferences
-                for key, value in parameters.items():
-                    if isinstance(value, dict):
-                        new_value = dict()
-                        for k, v in value.items():
-                            k = map_dict.get(k, k)
-                            if isinstance(k, tuple):
-                                k = k[0].__str__() + (" (inv)" if k[1] else "")
-                            new_value[k] = v
-                        parameters[key] = new_value
-            print_args(parameters, logger)
-
     def fit(self):
         """
         Trains the neural network.
         """
         start_func = time.perf_counter()
         logger.info("Training the model...")
-        self.epochs = self.parameters["epochs"]
-        self.validation_period = self.parameters["validation_period"]
-        self._log_parameters(["epochs", "validation_period"])
-        self.callbacks = self._get_callbacks()
-        self._log_parameters(["callback"])
-        history = self.model.fit(
-            self.train_set,
-            epochs=self.epochs,
-            validation_data=self.validation_set,
-            validation_freq=self.validation_period,
-            callbacks=self.callbacks
-        )
+        self.trainer.log_parameters(["epochs", "validation_period"])
+        self.trainer.build_callbacks(
+            train_command=self, tensor_board=self.tensor_board)
+        self.trainer.log_parameters(["callback"])
+        history = self.trainer.fit(self.train_set, self.validation_set)
         end_func = time.perf_counter()
         logger.info("Total training time:\t%0.3fs", end_func - start_func)
 
         return history
 
-    def _get_callbacks(self):
-        callbacks = []
-        if self.tensor_board is not None:
-            callbacks.append(TensorBoard(self.tensor_board))
-
-        self._build_parameter_callbacks(callbacks)
-
-        callbacks.append(EpochLogger(self.epochs, self.output_map.inverse))
-        return callbacks
-
-    def _build_parameter_callbacks(self, callbacks):
-        callbacks_parameters = self.parameters.get("callback", None)
-        if callbacks_parameters is None:
-            return
-
-        best_model_parameters = self.parameters.get("best_model", dict())
-        for name, identifier in callbacks_parameters.items():
-            if isinstance(identifier, dict):
-                class_name = identifier["class_name"]
-                config = identifier.get("config", dict())
-            else:
-                class_name = identifier
-                config = dict()
-            callback_class = get_neural_log_callback(class_name)
-            if callback_class is None:
-                continue
-            config = self._adjust_config_for_callback(config, callback_class)
-            callback = callback_class(**config)
-            if isinstance(callback, ModelCheckpoint):
-                best_model_name = best_model_parameters.get(name, None)
-                if best_model_name is not None:
-                    self.best_models[best_model_name] = callback
-            callbacks.append(callback)
-
-    def _adjust_config_for_callback(self, config, callback_class):
-        config.setdefault("period", self.validation_period)
-        if issubclass(callback_class, AbstractNeuralLogCallback):
-            config["train_command"] = self
-        elif issubclass(callback_class, ModelCheckpoint):
-            config.setdefault("save_best_only", True)
-            config.setdefault("save_weights_only", True)
-            has_no_filepath = "filepath" not in config
-            config.setdefault("filepath", config["monitor"])
-            config["filepath"] = self._get_output_path(config["filepath"])
-            if not config["save_best_only"]:
-                config["filepath"] = config["filepath"] + "_{epoch}"
-            elif has_no_filepath:
-                config["filepath"] = config["filepath"] + "_best"
-            if "mode" not in config:
-                if config["monitor"].startswith("mean_rank"):
-                    config["mode"] = "min"
-                else:
-                    config["mode"] = "max"
-        return config
-
     def _build_examples_set(self):
         start_func = time.perf_counter()
         logger.info("Creating training dataset...")
         shuffle = self.neural_program.parameters.get("shuffle", False)
-        batch_size = self.parameters["batch_size"]
-        self._log_parameters(["dataset_class", "batch_size", "shuffle"])
+        batch_size = self.trainer.parameters["batch_size"]
+        self.trainer.log_parameters(["dataset_class", "batch_size", "shuffle"])
         end_func = time.perf_counter()
         train_set_time = 0
         validation_set_time = 0
@@ -782,7 +485,8 @@ class Train(Command):
                 hist = history.history
                 hist = dict(map(
                     lambda x: (get_formatted_name(
-                        x[0], self.output_map.inverse), x[1]), hist.items()))
+                        x[0], self.trainer.output_map.inverse), x[1]),
+                    hist.items()))
                 logger.info("\nHistory:")
                 for key, value in hist.items():
                     logger.info("%s: %s", key, value)
@@ -797,7 +501,8 @@ class Train(Command):
             for metric in history.history:
                 array = np.array(history.history[metric])
                 # noinspection PyTypeChecker
-                metric = get_formatted_name(metric, self.output_map.inverse)
+                metric = get_formatted_name(
+                    metric, self.trainer.output_map.inverse)
                 metric = METRIC_FILE_PREFIX + metric
                 metric_path = os.path.join(self.output_path,
                                            "{}.txt".format(metric))
@@ -812,7 +517,7 @@ class Train(Command):
 
         if history is not None:
             logger.info("")
-            for key, value in self.best_models.items():
+            for key, value in self.trainer.best_models.items():
                 path = find_best_model(value, history.history)
                 if path is None:
                     continue
@@ -831,7 +536,7 @@ class Train(Command):
         """
         Saves the transitions to file.
         """
-        loss_function = self.parameters["loss_function"]
+        loss_function = self.trainer.parameters["loss_function"]
         if isinstance(loss_function, LossMaskWrapper):
             loss_function = loss_function.function
         if isinstance(loss_function, CRFLogLikelihood):
@@ -922,5 +627,6 @@ class Train(Command):
         dataset = self.get_dataset(dataset_name)
         writer = open(filepath, "w")
         print_neural_log_predictions(self.model, self.neural_program,
-                                     dataset, writer, dataset_name)
+                                     self.neural_dataset, dataset, writer,
+                                     dataset_name)
         writer.close()

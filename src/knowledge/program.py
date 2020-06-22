@@ -782,7 +782,7 @@ class NeuralLogProgram:
         predicates.
 
         :param clauses: the clauses
-        :type clauses: collections.iterable[Clause]
+        :type clauses: collections.Iterable[Clause]
         :raise ClauseMalformedException: case the clause is malformed
         """
         for clause in clauses:

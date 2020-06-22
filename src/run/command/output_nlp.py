@@ -17,7 +17,8 @@ from src.language.language import AtomClause, Atom, \
     Predicate
 from src.network.dataset import get_dataset_class, log_viterbi
 from src.network.network import NeuralLogNetwork
-from src.run.command import Command, command, print_args, TEST_SET_NAME
+from src.run.command import Command, command, TEST_SET_NAME
+from src.util import print_args
 from src.run.command.train import get_clauses, DEFAULT_BATCH_SIZE
 
 SPLIT_VALUE = " "
@@ -243,8 +244,8 @@ class OutputNLP(Command):
         start_func = time.perf_counter()
         logger.info("Building model...")
         self._create_dataset()
-        self.model = NeuralLogNetwork(self.neural_dataset, train=True)
-        self.model.build_layers()
+        self.model = NeuralLogNetwork(self.neural_program, train=True)
+        self.model.build_layers(self.neural_dataset.get_target_predicates())
 
         if self.load_model is not None:
             self.model.load_weights(self.load_model)

@@ -43,6 +43,7 @@ def build_null_atom(knowledge_base, predicate):
     return Atom(predicate, *terms, weight=0.0)
 
 
+# TODO: finish the learning system
 class StructureLearningSystem:
     """
     Represents the core of the structure learning system.
@@ -50,8 +51,8 @@ class StructureLearningSystem:
 
     def __init__(self, knowledge_base, theory, examples,
                  engine_system_translator,
-                 theory_revision_manager, theory_evaluator,
-                 incoming_example_manager):
+                 theory_revision_manager=None, theory_evaluator=None,
+                 incoming_example_manager=None):
         """
         Creates the structure learning system.
 
@@ -64,11 +65,11 @@ class StructureLearningSystem:
         :param engine_system_translator: the engine system translator
         :type engine_system_translator: EngineSystemTranslator
         :param theory_revision_manager: the theory revision manager
-        :type theory_revision_manager: TheoryRevisionManager
+        :type theory_revision_manager: TheoryRevisionManager or None
         :param theory_evaluator: the theory evaluator
-        :type theory_evaluator: TheoryEvaluator
+        :type theory_evaluator: TheoryEvaluator or None
         :param incoming_example_manager: the incoming example manager
-        :type incoming_example_manager: IncomingExampleManager
+        :type incoming_example_manager: IncomingExampleManager or None
         """
         self.knowledge_base = knowledge_base
         "The knowledge base"

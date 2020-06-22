@@ -154,8 +154,8 @@ def setup(examples_files=EXAMPLES, inverse_relations=False):
         neural_program, inverse_relations=inverse_relations)
 
     # Creates the NeuralLog Model
-    model = NeuralLogNetwork(dataset)
-    model.build_layers()
+    model = NeuralLogNetwork(neural_program)
+    model.build_layers(dataset.get_target_predicates())
     return dataset, model
 
 

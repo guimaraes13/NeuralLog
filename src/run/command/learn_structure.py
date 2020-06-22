@@ -11,7 +11,8 @@ import yaml
 
 import resources
 from src.run import configure_log
-from src.run.command import Command, command, print_args, create_log_file
+from src.run.command import Command, command, create_log_file
+from src.util import print_args
 from src.structure_learning.structure_learning_method import \
     BatchStructureLearning
 
