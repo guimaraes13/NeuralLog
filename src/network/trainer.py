@@ -4,7 +4,7 @@ Handles the training of a NeuralLog network.
 import logging
 import os
 from functools import reduce
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 
 import tensorflow as tf
 from tensorflow.keras.callbacks import ModelCheckpoint
@@ -14,6 +14,7 @@ from src.knowledge.program import get_predicate_from_string, BiDict
 from src.language.language import Predicate
 from src.network.callbacks import EpochLogger, get_neural_log_callback, \
     AbstractNeuralLogCallback
+from src.network.dataset import get_dataset_class, NeuralLogDataset
 from src.network.network import LossMaskWrapper, NeuralLogNetwork
 from src.network.network_functions import get_loss_function
 from src.util import print_args
@@ -27,6 +28,7 @@ DEFAULT_VALID_PERIOD = 1
 DEFAULT_INVERTED_RELATIONS = True
 DEFAULT_MASK_PREDICTIONS = False
 DEFAULT_CLIP_LABELS = False
+DEFAULT_SHUFFLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -113,12 +115,13 @@ class Trainer:
         self.neural_program = neural_program
         self.output_path = output_path
         self.model: Optional[NeuralLogNetwork] = None
-        self.parameters = dict()
+        self.parameters: Optional[Dict] = None
         self.output_map: BiDict[Tuple[Predicate, bool], str] = BiDict()
         "The map of the outputs of the neural network by the predicate"
 
         self.callbacks = []
         self.best_models = dict()
+        self.neural_dataset: Optional[NeuralLogDataset] = None
 
     def init_model(self):
         """
@@ -131,6 +134,8 @@ class Trainer:
         """
         Compiles the NeuralLog model.
         """
+        if self.parameters is None:
+            self.read_parameters()
         self.model.compile(
             loss=self.parameters["loss_function"],
             optimizer=self.parameters["optimizer"],
@@ -160,6 +165,7 @@ class Trainer:
         self.parameters.setdefault(
             "inverse_relations", DEFAULT_INVERTED_RELATIONS)
         self.parameters.setdefault("mask_predictions", DEFAULT_MASK_PREDICTIONS)
+        self.parameters.setdefault("shuffle", DEFAULT_SHUFFLE)
         self.parameters["loss_function"] = self._get_loss_function()
         self.parameters.setdefault("clip_labels", DEFAULT_CLIP_LABELS)
         self._wrap_mask_loss_functions()
@@ -308,6 +314,14 @@ class Trainer:
             print_args(parameters, logger)
 
     def fit(self, train_set, validation_set=None):
+        """
+        Fits the model.
+
+        :param train_set: the train set
+        :type train_set: tf.data.Dataset
+        :param validation_set: the validation set
+        :type validation_set: tf.data.Dataset
+        """
         return self.model.fit(
             train_set,
             epochs=self.parameters["epochs"],
@@ -386,3 +400,39 @@ class Trainer:
         if self.output_path is not None:
             return os.path.join(self.output_path, suffix)
         return suffix
+
+    def build_dataset(self):
+        """
+        Builds the NeuralLog dataset.
+
+        :return: the NeuralLog dataset
+        :rtype: NeuralLogDataset
+        """
+        if self.neural_dataset is not None:
+            return self.neural_dataset
+        inverse_relations = self.parameters.get(
+            "inverse_relations", DEFAULT_INVERTED_RELATIONS)
+        dataset_class = self.neural_program.parameters["dataset_class"]
+        config = dict()
+        if isinstance(dataset_class, dict):
+            class_name = dataset_class["class_name"]
+            config.update(dataset_class["config"])
+        else:
+            class_name = dataset_class
+        config["program"] = self.neural_program
+        config["inverse_relations"] = inverse_relations
+        self.neural_dataset = get_dataset_class(class_name)(**config)
+        return self.neural_dataset
+
+    def get_dataset(self, name):
+        """
+        Gets the dataset by name.
+
+        :param name: the name of the dataset
+        :type name: str
+        :return: the dataset
+        :rtype: tf.data.Dataset
+        """
+        return self.neural_dataset.get_dataset(
+            name, self.parameters["batch_size"], self.parameters["shuffle"]
+        )

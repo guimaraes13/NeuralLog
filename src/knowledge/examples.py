@@ -83,17 +83,34 @@ class ExamplesInferences(UserDict, MutableMapping[Predicate, Dict[Any, float]]):
     def __init__(self):
         super().__init__(OrderedDict())
 
-    def add_inference(self, example, value):
+    def contains_example(self, example):
+        """
+        Returns `True` if it contains the inference for the `example`.
+
+        :param example: the example
+        :type example: Atom
+        :return: `True` if it contains the inference for the `example`;
+        otherwise, `False`
+        :rtype: bool
+        """
+        if example.predicate not in self:
+            return False
+        return example.simple_key() in self[example.predicate]
+
+    def add_inference(self, example, value=None):
         """
         Adds the inference for the examples.
 
         :param example: the example
         :type example: Atom
         :param value: the value
-        :type value: float
+        :type value: Optional[float]
         """
+        if value is None:
+            value = example.weight
         self.data.setdefault(
-            example.predicate, OrderedDict())[example.simple_key()] = value
+            example.predicate,
+            OrderedDict())[example.simple_key()] = value
 
     def get_value_for_example(self, example):
         """

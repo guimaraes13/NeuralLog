@@ -74,8 +74,8 @@ class RevisionExamples:
 
         :param example: the example
         :type example: Atom
-        :param inferred_value: the inferred value of the example
-        :type inferred_value: float or None
+        :param inferred_value: the inferred value, if known
+        :type inferred_value: Optional[float]
         """
         self.incoming_examples.add_example(example)
         if self.sample_selector.is_relevant(example):

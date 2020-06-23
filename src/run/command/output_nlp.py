@@ -17,9 +17,10 @@ from src.language.language import AtomClause, Atom, \
     Predicate
 from src.network.dataset import get_dataset_class, log_viterbi
 from src.network.network import NeuralLogNetwork
+from src.network.trainer import DEFAULT_BATCH_SIZE
 from src.run.command import Command, command, TEST_SET_NAME
 from src.util import print_args
-from src.run.command.train import get_clauses, DEFAULT_BATCH_SIZE
+from src.run.command.train import get_clauses
 
 SPLIT_VALUE = " "
 

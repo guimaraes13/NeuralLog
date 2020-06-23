@@ -6,7 +6,6 @@ import argparse
 import logging
 import os
 import time
-from typing import Dict
 
 import numpy as np
 import tensorflow as tf
@@ -16,10 +15,10 @@ from src.knowledge.program import NeuralLogProgram, print_neural_log_program, \
     DEFAULT_PARAMETERS
 from src.network import trainer
 from src.network.callbacks import get_formatted_name
-from src.network.dataset import print_neural_log_predictions, get_dataset_class
+from src.network.dataset import print_neural_log_predictions
 from src.network.network import LossMaskWrapper
 from src.network.network_functions import get_loss_function, CRFLogLikelihood
-from src.network.trainer import Trainer, DEFAULT_VALID_PERIOD
+from src.network.trainer import Trainer
 from src.run.command import Command, command, create_log_file, \
     TRAIN_SET_NAME, VALIDATION_SET_NAME, TEST_SET_NAME
 from src.util import print_args
@@ -149,29 +148,6 @@ def find_best_model(checkpoint, history):
             best_epoch = i
 
     return checkpoint.filepath.format(epoch=(best_epoch + 1) * period)
-
-
-def unique(elements):
-    """
-    Returns a list of unique elements from the `elements`.
-
-    :param elements: the input elements.
-    :type elements: list
-    :return: the list of unique elements
-    :rtype: list
-    """
-    element_set = set()
-    unique_list = []
-    for element in elements:
-        if isinstance(element, dict):
-            key = frozenset(element)
-        else:
-            key = element
-        if key in element_set:
-            continue
-        unique_list.append(element)
-        element_set.add(key)
-    return unique_list
 
 
 def deserialize_loss(loss_function):
@@ -380,7 +356,7 @@ class Train(Command):
         start_func = time.perf_counter()
         logger.info("Building model...")
         self.trainer = Trainer(self.neural_program, self.output_path)
-        self._create_dataset()
+        self.neural_dataset = self.trainer.build_dataset()
         self.trainer.init_model()
         self.model = self.trainer.model
         self.model.build_layers(self.neural_dataset.get_target_predicates())
@@ -398,19 +374,6 @@ class Train(Command):
         end_func = time.perf_counter()
 
         logger.info("\nModel building time:\t%0.3fs", end_func - start_func)
-
-    def _create_dataset(self):
-        inverse_relations = self.trainer.parameters.get("inverse_relations")
-        dataset_class = self.neural_program.parameters["dataset_class"]
-        config = dict()
-        if isinstance(dataset_class, dict):
-            class_name = dataset_class["class_name"]
-            config.update(dataset_class["config"])
-        else:
-            class_name = dataset_class
-        config["program"] = self.neural_program
-        config["inverse_relations"] = inverse_relations
-        self.neural_dataset = get_dataset_class(class_name)(**config)
 
     def fit(self):
         """
@@ -431,7 +394,7 @@ class Train(Command):
     def _build_examples_set(self):
         start_func = time.perf_counter()
         logger.info("Creating training dataset...")
-        shuffle = self.neural_program.parameters.get("shuffle", False)
+        shuffle = self.trainer.parameters["shuffle"]
         batch_size = self.trainer.parameters["batch_size"]
         self.trainer.log_parameters(["dataset_class", "batch_size", "shuffle"])
         end_func = time.perf_counter()

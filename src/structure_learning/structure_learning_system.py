@@ -2,7 +2,7 @@
 The core of the structure learning system.
 """
 import collections
-from collections import Collection, Set
+from typing import Set
 
 from src.knowledge.examples import Examples, ExamplesInferences
 from src.knowledge.manager.example_manager import IncomingExampleManager
@@ -10,12 +10,12 @@ from src.knowledge.program import NeuralLogProgram
 from src.knowledge.theory.evaluation.theory_evaluator import TheoryEvaluator
 from src.knowledge.theory.manager.theory_revision_manager import \
     TheoryRevisionManager
-from src.language.language import get_term_from_string, Atom, Predicate
+from src.language.language import get_term_from_string, Atom, Predicate, Term
 from src.structure_learning.engine_system_translator import \
     EngineSystemTranslator
-
 # TODO: add __null__ example for each predicate
 #    be aware of the type (categorical or numeric) of the predicate's terms.
+from src.util import Initializable
 
 NULL_ENTITY = get_term_from_string("'__NULL__'")
 
@@ -44,7 +44,7 @@ def build_null_atom(knowledge_base, predicate):
 
 
 # TODO: finish the learning system
-class StructureLearningSystem:
+class StructureLearningSystem(Initializable):
     """
     Represents the core of the structure learning system.
     """
@@ -88,6 +88,11 @@ class StructureLearningSystem:
 
         self.incoming_example_manager = incoming_example_manager
         "The incoming example manager"
+
+    # TODO: implement
+    # noinspection PyMissingOrEmptyDocstring
+    def required_fields(self):
+        pass
 
     # noinspection PyMissingOrEmptyDocstring
     @property
@@ -160,7 +165,7 @@ class StructureLearningSystem:
         contain the term.
 
         :param terms: the terms
-        :type terms: Collection[Term]
+        :type terms: Set[Term]
         :return: the atoms relevant to the terms
         :rtype: Set[Atom]
         """

@@ -570,8 +570,9 @@ class BottomClauseBoundedRule(RevisionOperator):
         """
         try:
             if not is_positive(example) or \
-                    is_covered(self.learning_system.knowledge_base, example,
-                               inferred_examples):
+                    inferred_examples.contains_example(example):
+                # The inferred examples contains only the examples whose
+                # weight is greater than the null weight
                 if is_positive(example):
                     logger.debug("Skipping covered example:\t%s", example)
                 # It skips negatives or covered positive examples

@@ -1465,18 +1465,49 @@ class NeuralLogProgram:
         )
 
         example_set = kwargs.get("example_set", NO_EXAMPLE_SET)
+        self.add_example(atom, example_set)
+
+    def add_examples(
+            self, examples, example_set=NO_EXAMPLE_SET, log_override=True):
+        """
+        Adds the `examples` to the `example_set`.
+        :param examples: the examples
+        :type examples: Examples
+        :param example_set: the example set
+        :type example_set: str
+        :param log_override: if `True`, logs a warning if a example replaces
+        another previously added example
+        :type log_override: bool
+        """
+        for facts in examples.values():
+            for atom in facts.values():
+                self.add_example(atom, example_set, log_override)
+
+    def add_example(self, atom, example_set=NO_EXAMPLE_SET, log_override=True):
+        """
+        Adds the `atom` example to the `example_set`.
+
+        :param atom: the atom example
+        :type atom: Atom
+        :param example_set: the example set
+        :type example_set: str
+        :param log_override: if `True`, logs a warning if a example replaces
+        another previously added example
+        :type log_override: bool
+        """
         example_dict = self.examples.setdefault(example_set, Examples())
         example_dict = example_dict.setdefault(atom.predicate, OrderedDict())
         key = atom.simple_key()
-        old_atom = example_dict.get(key, None)
-        if old_atom is not None:
-            logger.warning("Warning: example %s defined in file %s at line "
-                           "%d replaced by Example %s defined in file %s at "
-                           "line %d.",
-                           old_atom, old_atom.provenance.filename,
-                           old_atom.provenance.start_line,
-                           atom, atom.provenance.filename,
-                           atom.provenance.start_line)
+        if log_override:
+            old_atom = example_dict.get(key, None)
+            if old_atom is not None:
+                logger.warning("Warning: example %s defined in file %s at line "
+                               "%d replaced by Example %s defined in file %s "
+                               "at  line %d.",
+                               old_atom, old_atom.provenance.filename,
+                               old_atom.provenance.start_line,
+                               atom, atom.provenance.filename,
+                               atom.provenance.start_line)
         example_dict[key] = atom
 
     # noinspection PyUnusedLocal,DuplicatedCode

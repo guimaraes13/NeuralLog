@@ -1,6 +1,7 @@
 """
 Compiles the language into a neural network.
 """
+import collections
 import logging
 import sys
 from typing import Dict, List, Tuple, Any
@@ -278,11 +279,19 @@ class NeuralLogNetwork(keras.Model):
         self.empty_layer = EmptyLayer("empty")
         self.input_sizes = []
         self.loss_traced_objects = None
+        self.__is_compiled = False
+
+    # noinspection PyMissingOrEmptyDocstring
+    @property
+    def is_compiled(self):
+        return self.__is_compiled
 
     # noinspection PyMissingOrEmptyDocstring
     def compile(self, *args, **kwargs):
         self._build_neural_log_loss(**kwargs)
-        return super().compile(*args, **kwargs)
+        value = super().compile(*args, **kwargs)
+        self.__is_compiled = True
+        return value
 
     def _build_neural_log_loss(self, **kwargs):
         my_loss = kwargs.get("loss", None)
@@ -375,9 +384,9 @@ class NeuralLogNetwork(keras.Model):
         """
         Builds the layers of the network for the target predicates.
 
-        :param target_predicates: a list of tuples, containing the target
+        :param target_predicates: a iterable of tuples, containing the target
         predicate and whether or not it is inverted.
-        :type target_predicates: List[Tuple[Predicate, bool]]
+        :type target_predicates: collections.Iterable[Tuple[Predicate, bool]]
         """
         # self.input_sizes = []
         for predicate, inverted in target_predicates:
@@ -808,35 +817,38 @@ class NeuralLogNetwork(keras.Model):
         return get_combining_function(combining_function)
 
     # noinspection PyTypeChecker
-    def update_program(self):
+    def update_program(self, program=None):
         """
         Updates the program based on the learned parameters.
+        :param program: the program to be updated, if `None`, update the self
+        program
+        :type program: Optional[NeuralLogProgram]
         """
+        if program is None:
+            program = self.program
+
         for atom, tensor in self.layer_factory.variable_cache.items():
             variable_indices = get_variable_indices(atom)
             rank = len(variable_indices)
             values = tensor.numpy()
-            size_0 = self.program.get_constant_size(atom.predicate, 0)
+            size_0 = program.get_constant_size(atom.predicate, 0)
             if rank == 0:
                 fact = Atom(atom.predicate, *atom.terms, weight=values)
-                self.program.add_fact(fact)
+                program.add_fact(fact)
             elif rank == 1:
                 for i in range(size_0):
                     fact = Atom(atom.predicate, *atom.terms, weight=values[i])
                     fact.terms[variable_indices[0]] = \
-                        self.program.get_constant_by_index(
-                            atom.predicate, 0, i)
-                    self.program.add_fact(fact)
+                        program.get_constant_by_index(atom.predicate, 0, i)
+                    program.add_fact(fact)
             elif rank == 2:
-                size_1 = self.program.get_constant_size(atom.predicate, 1)
+                size_1 = program.get_constant_size(atom.predicate, 1)
                 for i in range(size_0):
                     for j in range(size_1):
                         fact = Atom(atom.predicate, *atom.terms,
                                     weight=values[i, j])
                         fact.terms[variable_indices[0]] = \
-                            self.program.get_constant_by_index(
-                                atom.predicate, 0, i)
+                            program.get_constant_by_index(atom.predicate, 0, i)
                         fact.terms[variable_indices[1]] = \
-                            self.program.get_constant_by_index(
-                                atom.predicate, 1, j)
-                        self.program.add_fact(fact)
+                            program.get_constant_by_index(atom.predicate, 1, j)
+                        program.add_fact(fact)

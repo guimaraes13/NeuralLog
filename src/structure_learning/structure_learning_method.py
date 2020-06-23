@@ -4,12 +4,14 @@ The methods to call the structure learning.
 import logging
 from abc import abstractmethod
 from enum import Enum
+from typing import List
 
 from src.knowledge.examples import Examples
 from src.knowledge.manager.example_manager import IncomingExampleManager
 from src.knowledge.program import NeuralLogProgram
 from src.knowledge.theory.evaluation.metric.theory_metric import TheoryMetric
 from src.knowledge.theory.evaluation.theory_evaluator import TheoryEvaluator
+from src.knowledge.theory.manager.revision.clause_modifier import ClauseModifier
 from src.knowledge.theory.manager.revision.revision_manager import \
     RevisionManager
 from src.knowledge.theory.manager.revision.revision_operator_evaluator import \
@@ -159,6 +161,7 @@ class BatchStructureLearning(StructureLearningMethod):
         self.theory_metrics = theory_metrics
         self.revision_operator_selector = revision_operator_selector
         self.revision_operator_evaluators = revision_operator_evaluators
+        self.clause_modifiers: List[ClauseModifier] = []
 
     # noinspection PyMissingOrEmptyDocstring,PyAttributeOutsideInit
     def initialize(self):
@@ -285,6 +288,7 @@ class BatchStructureLearning(StructureLearningMethod):
                         RunTimestamps.BEGIN_BUILD_ENGINE_TRANSLATOR,
                         RunTimestamps.END_BUILD_ENGINE_TRANSLATOR))
 
+    # TODO: to build the learning system (finish this method)
     def build_learning_system(self):
         """
         Builds the learning system.
@@ -294,8 +298,18 @@ class BatchStructureLearning(StructureLearningMethod):
         # noinspection PyAttributeOutsideInit
         self.learning_system = StructureLearningSystem(
             self.knowledge_base, self.theory, Examples(),
-            self.engine_system_translator, None, None, None)
-        # TODO: to build the learning system (finish this method)
+            self.engine_system_translator)
+        self.build_clause_modifiers()
+
+        self.learning_system.initialize()
+
+    def build_clause_modifiers(self):
+        """
+        Builds the clause modifiers.
+        """
+        for clause_modifier in self.clause_modifiers:
+            clause_modifier.learning_system = self.learning_system
+            clause_modifier.initialize()
 
     # noinspection PyMissingOrEmptyDocstring
     def run(self):
