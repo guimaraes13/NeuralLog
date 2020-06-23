@@ -185,3 +185,34 @@ class StructureLearningSystem(Initializable):
         Saves the trained parameters.
         """
         self.engine_system_translator.save_trained_parameters()
+
+    def evaluate(self, examples, inferences):
+        """
+        Evaluates the examples based on the inferences.
+
+        :param examples: the examples
+        :type examples: Examples
+        :param inferences: the inferences
+        :type inferences: ExamplesInference
+        :return: a dictionary of evaluations per metric
+        :rtype: Dict[TheoryMetric, float]
+        """
+        return self.theory_evaluator.evaluate(examples, inferences)
+
+    def save_parameters(self, working_directory):
+        """
+        Saves the parameters to the working directory.
+
+        :param working_directory: the working directory.
+        :type working_directory: str
+        """
+        self.engine_system_translator.save_parameters(working_directory)
+
+    def load_parameters(self, working_directory):
+        """
+        Loads the parameters from the working directory.
+
+        :param working_directory: the working directory.
+        :type working_directory: str
+        """
+        self.engine_system_translator.load_parameters(working_directory)

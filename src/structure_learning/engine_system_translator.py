@@ -3,107 +3,30 @@ Handles the communication between the structure learning algorithm and the
 inference engine.
 """
 import collections
+import logging
+import os
 from abc import abstractmethod
 from typing import Optional, List, Set
 
 import numpy as np
 
 from src.knowledge.examples import Examples, ExamplesInferences
-from src.knowledge.program import NeuralLogProgram
+from src.knowledge.program import NeuralLogProgram, print_neural_log_program
 from src.language.language import Atom, Term
 from src.network.network import NeuralLogNetwork
 from src.network.trainer import Trainer
 from src.structure_learning.structure_learning_system import NULL_ENTITY
 from src.util import Initializable
+from src.util.file import read_logic_program_from_file
+
+logger = logging.getLogger(__name__)
+
+KNOWLEDGE_BASE_FILE_NAME = "knowledge_base.pl"
+THEORY_FILE_NAME = "theory.pl"
+SAVED_MODEL_FILE_NAME = "saved_model"
 
 TEMPORARY_SET_NAME = "__temporary_set__"
 ALL_TERMS_NAME = "__all_terms__"
-
-
-class EngineSystemTranslator(Initializable):
-    """
-    Translates the results of the engine system to the structure learning
-    algorithm and vice versa.
-    """
-
-    def __init__(self):
-        self.knowledge_base: Optional[NeuralLogProgram] = None
-        self.theory: Optional[NeuralLogProgram] = None
-        self.output_path: Optional[str] = None
-
-    @abstractmethod
-    def infer_examples(self, examples, retrain=False, theory=None):
-        """
-        Perform the inference for the given examples. If `retrain` is `True`,
-        it retrains the parameters before inference. If `theory` is not
-        `None`, uses it as the theory to be evaluated, instead of the current
-        theory of the engine system.
-
-        :param examples: the examples
-        :type examples: Examples
-        :param retrain: if `True`, it retrains the parameters before inference
-        :type retrain: bool
-        :param theory: If not `None`, use this theory instead of the current
-        theory of the engine system.
-        :type theory: NeuralLogProgram
-        :return: the inference value of the examples
-        :rtype: ExamplesInferences
-        """
-        pass
-
-    @abstractmethod
-    def infer_examples_appending_clauses(self, examples, clauses,
-                                         retrain=False):
-        """
-        Perform the inference for the given examples. The `clauses` are
-        appended to the current theory, before evaluation. If `retrain` is
-        `True`, it retrains the parameters before inference.
-
-        After evaluation, the appended clauses are discarded and the parameters
-        are restored to its values previously to the evaluation.
-
-        :param examples: the examples
-        :type examples: Examples
-        :param retrain: if `True`, it retrains the parameters before inference
-        :type retrain: bool
-        :param clauses: clauses to be appended to the current theory, for
-        evaluation proposes only
-        :type clauses: collections.Iterable[HornClauses]
-        :return: the inference value of the examples
-        :rtype: ExamplesInferences
-        """
-        pass
-
-    @abstractmethod
-    def inferred_relevant(self, terms):
-        """
-        Perform the inference in order to get all atoms directly
-        relevant to `terms`. The atoms directly relevant ot a term is the atoms
-        which contain the term.
-
-        :param terms: the terms
-        :type terms: Set[Term]
-        :return: the atoms relevant to the terms
-        :rtype: Set[Atom]
-        """
-        pass
-
-    @abstractmethod
-    def train_parameters(self, training_examples):
-        """
-        Trains the parameters of the model.
-
-        :param training_examples: the training examples
-        :type training_examples: Examples
-        """
-        pass
-
-    @abstractmethod
-    def save_trained_parameters(self):
-        """
-        Saves the trained parameters.
-        """
-        pass
 
 
 def append_theory(program, theory):
@@ -205,6 +128,112 @@ def convert_predictions(model, dataset):
                         inferences.add_inference(atom)
 
     return inferences
+
+
+class EngineSystemTranslator(Initializable):
+    """
+    Translates the results of the engine system to the structure learning
+    algorithm and vice versa.
+    """
+
+    def __init__(self):
+        self.knowledge_base: Optional[NeuralLogProgram] = None
+        self.theory: Optional[NeuralLogProgram] = None
+        self.output_path: Optional[str] = None
+
+    @abstractmethod
+    def infer_examples(self, examples, retrain=False, theory=None):
+        """
+        Perform the inference for the given examples. If `retrain` is `True`,
+        it retrains the parameters before inference. If `theory` is not
+        `None`, uses it as the theory to be evaluated, instead of the current
+        theory of the engine system.
+
+        :param examples: the examples
+        :type examples: Examples
+        :param retrain: if `True`, it retrains the parameters before inference
+        :type retrain: bool
+        :param theory: If not `None`, use this theory instead of the current
+        theory of the engine system.
+        :type theory: NeuralLogProgram
+        :return: the inference value of the examples
+        :rtype: ExamplesInferences
+        """
+        pass
+
+    @abstractmethod
+    def infer_examples_appending_clauses(self, examples, clauses,
+                                         retrain=False):
+        """
+        Perform the inference for the given examples. The `clauses` are
+        appended to the current theory, before evaluation. If `retrain` is
+        `True`, it retrains the parameters before inference.
+
+        After evaluation, the appended clauses are discarded and the parameters
+        are restored to its values previously to the evaluation.
+
+        :param examples: the examples
+        :type examples: Examples
+        :param retrain: if `True`, it retrains the parameters before inference
+        :type retrain: bool
+        :param clauses: clauses to be appended to the current theory, for
+        evaluation proposes only
+        :type clauses: collections.Iterable[HornClauses]
+        :return: the inference value of the examples
+        :rtype: ExamplesInferences
+        """
+        pass
+
+    @abstractmethod
+    def inferred_relevant(self, terms):
+        """
+        Perform the inference in order to get all atoms directly
+        relevant to `terms`. The atoms directly relevant ot a term is the atoms
+        which contain the term.
+
+        :param terms: the terms
+        :type terms: Set[Term]
+        :return: the atoms relevant to the terms
+        :rtype: Set[Atom]
+        """
+        pass
+
+    @abstractmethod
+    def train_parameters(self, training_examples):
+        """
+        Trains the parameters of the model.
+
+        :param training_examples: the training examples
+        :type training_examples: Examples
+        """
+        pass
+
+    @abstractmethod
+    def save_trained_parameters(self):
+        """
+        Saves the trained parameters.
+        """
+        pass
+
+    @abstractmethod
+    def save_parameters(self, working_directory):
+        """
+        Saves the parameters to the working directory.
+
+        :param working_directory: the working directory.
+        :type working_directory: str
+        """
+        pass
+
+    @abstractmethod
+    def load_parameters(self, working_directory):
+        """
+        Loads the parameters from the working directory.
+
+        :param working_directory: the working directory.
+        :type working_directory: str
+        """
+        pass
 
 
 class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
@@ -325,6 +354,34 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
     def save_trained_parameters(self):
         self.current_trainer.model.update_program(self.knowledge_base)
         self.saved_trainer = self.current_trainer
+
+    # noinspection PyMissingOrEmptyDocstring
+    def save_parameters(self, working_directory):
+        logger.debug("Saving the trained model to path:\t%s", working_directory)
+        filepath = os.path.join(working_directory, SAVED_MODEL_FILE_NAME)
+        self.saved_trainer.model.save_weights(filepath)
+        knowledge_file = \
+            open(os.path.join(working_directory, KNOWLEDGE_BASE_FILE_NAME), "w")
+        print_neural_log_program(self.knowledge_base, knowledge_file)
+        knowledge_file.close()
+        theory_file = \
+            open(os.path.join(working_directory, THEORY_FILE_NAME), "w")
+        print_neural_log_program(self.theory, theory_file)
+        theory_file.close()
+
+    # noinspection PyMissingOrEmptyDocstring
+    def load_parameters(self, working_directory):
+        logger.debug(
+            "Saving the trained model from path:\t%s", working_directory)
+        knowledge_base_path = \
+            os.path.join(working_directory, KNOWLEDGE_BASE_FILE_NAME)
+        theory_path = os.path.join(working_directory, THEORY_FILE_NAME)
+        self.knowledge_base = NeuralLogProgram()
+        clauses = read_logic_program_from_file(knowledge_base_path)
+        self.knowledge_base.add_clauses(clauses)
+        self.theory = NeuralLogProgram()
+        clauses = read_logic_program_from_file(theory_path)
+        self.theory.add_clauses(clauses)
 
 
 def permute_terms(*iterables):

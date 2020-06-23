@@ -5,6 +5,7 @@ import collections
 import logging
 from abc import abstractmethod
 
+from src.knowledge.examples import Examples
 from src.knowledge.theory.manager.revision.revision_examples import \
     RevisionExamples
 from src.knowledge.theory.manager.revision.sample_selector import SampleSelector
@@ -50,6 +51,16 @@ class IncomingExampleManager(Initializable):
         """
         pass
 
+    @abstractmethod
+    def get_remaining_examples(self):
+        """
+        Gets the remaining examples that were not used on the revision.
+
+        :return: the remaining examples
+        :rtype: Examples
+        """
+        pass
+
     # noinspection PyMissingOrEmptyDocstring
     def required_fields(self):
         return ["learning_system", "sample_selector"]
@@ -64,11 +75,17 @@ class ReviseAllIncomingExample(IncomingExampleManager):
     def incoming_examples(self, examples):
         revision_examples = RevisionExamples(self.learning_system,
                                              self.sample_selector.copy())
-        if not isinstance(examples, collections.Iterable):
-            examples = [examples]
-        size = 0
-        for example in examples:
-            revision_examples.add_example(example)
-            size += 1
+        if isinstance(examples, collections.Iterable):
+            size = 0
+            for example in examples:
+                revision_examples.add_example(example)
+                size += 1
+        else:
+            size = 1
+            revision_examples.add_example(examples)
         logger.info("Calling revision with %d examples", size)
         self.learning_system.revise_theory(revision_examples)
+
+    # noinspection PyMissingOrEmptyDocstring
+    def get_remaining_examples(self):
+        return Examples()

@@ -1,10 +1,57 @@
 """
 Represents training examples.
 """
+import collections
 from collections import OrderedDict, UserDict
 from typing import Dict, Any, MutableMapping
 
 from src.language.language import Predicate, Atom
+
+
+class LimitedIterator:
+    """
+    A limited iterator that iterates over another iterator until a predefined
+    number of items or until the iterator is over.
+
+    It can reset to continue iterating over the remaining items.
+    """
+
+    def __init__(self, iterator, iterator_size=-1):
+        """
+        Creates a limited iterator.
+
+        :param iterator: the iterator
+        :type iterator: collections.Iterable or collections.Iterator
+        :param iterator_size: the size of the iterator if less than or equal
+        to zero, iterates until `iterator` is over
+        :type iterator_size: int
+        """
+        if isinstance(iterator, collections.Iterable):
+            iterator = iter(iterator)
+        self.iterator = iterator
+        self.iterator_size = iterator_size
+        self.current_item = 0
+        self.has_next = True
+
+    def reset(self):
+        """
+        Resets the iterator to continue iterating for more `iterator_size`.
+        """
+        self.current_item = 0
+
+    def __next__(self):
+        if self.iterator_size < 1 or self.current_item < self.iterator_size:
+            try:
+                value = next(self.iterator)
+            except StopIteration as e:
+                self.has_next = False
+                raise e
+            self.current_item += 1
+            return value
+        raise StopIteration
+
+    def __iter__(self):
+        return self
 
 
 class ExampleIterator:

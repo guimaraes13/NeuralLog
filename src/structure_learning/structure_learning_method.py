@@ -2,22 +2,31 @@
 The methods to call the structure learning.
 """
 import logging
+import os
 from abc import abstractmethod
 from enum import Enum
 from typing import List
 
-from src.knowledge.examples import Examples
-from src.knowledge.manager.example_manager import IncomingExampleManager
+import yaml
+
+from src.knowledge.examples import Examples, ExampleIterator, LimitedIterator
+from src.knowledge.manager.example_manager import IncomingExampleManager, \
+    ReviseAllIncomingExample
 from src.knowledge.program import NeuralLogProgram
-from src.knowledge.theory.evaluation.metric.theory_metric import TheoryMetric
+from src.knowledge.theory.evaluation.metric.theory_metric import TheoryMetric, \
+    RocCurveMetric, PrecisionRecallCurveMetric, LogLikelihoodMetric
 from src.knowledge.theory.evaluation.theory_evaluator import TheoryEvaluator
 from src.knowledge.theory.manager.revision.clause_modifier import ClauseModifier
+from src.knowledge.theory.manager.revision.operator.revision_operator import \
+    BottomClauseBoundedRule
 from src.knowledge.theory.manager.revision.revision_manager import \
     RevisionManager
 from src.knowledge.theory.manager.revision.revision_operator_evaluator import \
     RevisionOperatorEvaluator
 from src.knowledge.theory.manager.revision.revision_operator_selector import \
-    RevisionOperatorSelector
+    RevisionOperatorSelector, SelectFirstRevisionOperator
+from src.knowledge.theory.manager.revision.sample_selector import \
+    AllRelevantSampleSelect
 from src.knowledge.theory.manager.theory_revision_manager import \
     TheoryRevisionManager
 from src.run.command import TRAIN_SET_NAME, VALIDATION_SET_NAME
@@ -26,11 +35,58 @@ from src.structure_learning.engine_system_translator import \
 from src.structure_learning.structure_learning_system import \
     StructureLearningSystem
 from src.util import Initializable
-from src.util.file import read_logic_program_from_file
+from src.util.file import read_logic_program_from_file, \
+    print_predictions_to_file
 from src.util.statistics import RunStatistics
 from src.util.time_measure import TimeMeasure, performance_time
 
+STATISTICS_FILE_NAME = "statistics.yaml"
+
+TRAIN_INFERENCE_FILE = "train.inference.pl"
+TEST_INFERENCE_FILE = "test.inference.pl"
+
 logger = logging.getLogger(__name__)
+
+
+def read_logic_file(filepath):
+    """
+    Reads the logic file.
+
+    :param filepath: the filepath
+    :type filepath: str
+    :return: the parsed clauses
+    :rtype: collections.Iterable[Clause]
+    """
+    logger.info("Reading file:\t%s", filepath)
+    start_func = performance_time()
+    clauses = read_logic_program_from_file(filepath)
+    end_func = performance_time()
+    logger.info("\t- Reading time:\t%0.3fs", end_func - start_func)
+    return clauses
+
+
+def default_revision_operator():
+    """
+    Gets the default revision operator.
+
+    :return: a list containing the default revision operator
+    :rtype: List[RevisionOperatorEvaluator]
+    """
+    revision_operator = BottomClauseBoundedRule()
+    revision_operator.theory_metric = RocCurveMetric()
+    return [revision_operator]
+
+
+def default_theory_metrics():
+    """
+    Gets the default theory metrics.
+
+    :return: a list containing the default theory metrics
+    :rtype: List[TheoryMetric]
+    """
+    return [
+        RocCurveMetric(), PrecisionRecallCurveMetric(), LogLikelihoodMetric()
+    ]
 
 
 class StructureLearningMethod(Initializable):
@@ -70,23 +126,6 @@ class StructureLearningMethod(Initializable):
         pass
 
 
-def read_logic_file(filepath):
-    """
-    Reads the logic file.
-
-    :param filepath: the filepath
-    :type filepath: str
-    :return: the parsed clauses
-    :rtype: collections.Iterable[Clause]
-    """
-    logger.info("Reading file:\t%s", filepath)
-    start_func = performance_time()
-    clauses = read_logic_program_from_file(filepath)
-    end_func = performance_time()
-    logger.info("\t- Reading time:\t%0.3fs", end_func - start_func)
-    return clauses
-
-
 class BatchStructureLearning(StructureLearningMethod):
     """
     Class to learn the logic program from a batch of examples.
@@ -108,10 +147,13 @@ class BatchStructureLearning(StructureLearningMethod):
                  theory_metrics,
                  revision_operator_selector,
                  revision_operator_evaluators,
+                 pass_all_examples_at_once,
+                 train_parameters_on_remaining_examples=False
                  ):
         """
         Creates a batch structure learning method.
 
+        :type train_parameters_on_remaining_examples: bool
         :param knowledge_base_file_paths: the path of the knowledge base files
         :type knowledge_base_file_paths: list[str]
         :param theory_file_paths: the path of the theory files
@@ -143,6 +185,13 @@ class BatchStructureLearning(StructureLearningMethod):
         :type revision_operator_selector: RevisionOperatorSelector
         :param revision_operator_evaluators: the revision operator evaluators
         :type revision_operator_evaluators: list[RevisionOperatorEvaluator]
+        :param pass_all_examples_at_once: if `True`, all the examples will be
+        passed to be revised at once; otherwise, will be passed a batch at a
+        time
+        :type pass_all_examples_at_once: bool
+        :param train_parameters_on_remaining_examples: if `True`, it trains the
+        parameters of the engine system translator on the remaining examples
+        that were not used on the revision.
         """
         super(BatchStructureLearning, self).__init__(
             knowledge_base_file_paths,
@@ -162,6 +211,9 @@ class BatchStructureLearning(StructureLearningMethod):
         self.revision_operator_selector = revision_operator_selector
         self.revision_operator_evaluators = revision_operator_evaluators
         self.clause_modifiers: List[ClauseModifier] = []
+        self.pass_all_examples_at_once = pass_all_examples_at_once
+        self.train_parameters_on_remaining_examples = \
+            train_parameters_on_remaining_examples
 
     # noinspection PyMissingOrEmptyDocstring,PyAttributeOutsideInit
     def initialize(self):
@@ -288,7 +340,6 @@ class BatchStructureLearning(StructureLearningMethod):
                         RunTimestamps.BEGIN_BUILD_ENGINE_TRANSLATOR,
                         RunTimestamps.END_BUILD_ENGINE_TRANSLATOR))
 
-    # TODO: to build the learning system (finish this method)
     def build_learning_system(self):
         """
         Builds the learning system.
@@ -299,9 +350,22 @@ class BatchStructureLearning(StructureLearningMethod):
         self.learning_system = StructureLearningSystem(
             self.knowledge_base, self.theory, Examples(),
             self.engine_system_translator)
+        self.build_theory_metrics()
         self.build_clause_modifiers()
+        self.build_operator_selector()
+
+        self.build_incoming_example_manager()
+        self.build_theory_evaluator()
+        self.build_theory_revision_manager()
 
         self.learning_system.initialize()
+
+    def build_theory_metrics(self):
+        """
+        Builds the theory metrics.
+        """
+        if not self.theory_metrics:
+            self.theory_evaluator = default_theory_metrics()
 
     def build_clause_modifiers(self):
         """
@@ -311,15 +375,87 @@ class BatchStructureLearning(StructureLearningMethod):
             clause_modifier.learning_system = self.learning_system
             clause_modifier.initialize()
 
+    def build_operator_selector(self):
+        """
+        Builds the operator selector
+        """
+        if self.revision_operator_selector is None:
+            self.revision_operator_selector = SelectFirstRevisionOperator()
+        if self.revision_operator_selector.operator_evaluators is None:
+            self.revision_operator_selector.operator_evaluators = \
+                self.build_operators()
+
+    def build_operators(self):
+        """
+        Builds the operators.
+
+        :return: the operators
+        :rtype: List[RevisionOperatorEvaluator]
+        """
+        if not self.revision_operator_evaluators:
+            operator_evaluator = default_revision_operator()
+        else:
+            operator_evaluator = list(self.revision_operator_evaluators)
+        for operator in operator_evaluator:
+            operator.learning_system = self.learning_system
+            operator.clause_modifiers = self.clause_modifiers
+        return operator_evaluator
+
+    def build_incoming_example_manager(self):
+        """
+        Builds the incoming example manager.
+        """
+        # IMPROVE: change the AllRelevantSampleSelect to IndependentSampleSelect
+        if self.incoming_example_manager is None:
+            self.incoming_example_manager = ReviseAllIncomingExample(
+                self.learning_system, AllRelevantSampleSelect())
+        else:
+            self.incoming_example_manager.learning_system = self.learning_system
+        self.learning_system.incoming_example_manager = \
+            self.incoming_example_manager
+
+    def build_theory_evaluator(self):
+        """
+        Builds the theory evaluator.
+        """
+        if self.theory_evaluator is None:
+            self.theory_evaluator = TheoryEvaluator()
+        self.theory_evaluator.theory_metrics = self.theory_metrics
+        self.learning_system.theory_evaluator = self.theory_evaluator
+
+    def build_theory_revision_manager(self):
+        """
+        Builds the revision manager.
+        """
+        if self.theory_revision_manager is None:
+            self.theory_revision_manager = TheoryRevisionManager()
+        self.build_revision_manager()
+
+        self.theory_revision_manager.revision_manager = self.revision_manager
+        self.learning_system.theory_revision_manager = \
+            self.theory_revision_manager
+
+    def build_revision_manager(self):
+        """
+        Builds the revision manager.
+        """
+        if self.revision_manager is None:
+            self.revision_manager = RevisionManager()
+        self.revision_manager.operator_selector = \
+            self.revision_operator_selector
+
     # noinspection PyMissingOrEmptyDocstring
     def run(self):
         logger.info("Running %s", self.__class__.__name__)
         self.learn()
+        self.evaluate_model()
         self.time_measure.add_measure(RunTimestamps.BEGIN_DISK_OUTPUT)
         self.save_model()
-        self.save_statistics()
         self.time_measure.add_measure(RunTimestamps.END_DISK_OUTPUT)
         self.time_measure.add_measure(RunTimestamps.END)
+        logger.warning(self.run_statistics)
+        self.log_elapsed_times()
+        self.save_statistics()
 
     def learn(self):
         """
@@ -327,25 +463,129 @@ class BatchStructureLearning(StructureLearningMethod):
         """
         logger.info(RunTimestamps.BEGIN_TRAIN.value)
         self.time_measure.add_measure(RunTimestamps.BEGIN_TRAIN)
-        # TODO: to learn the structure
+        self.revise_examples()
+        self.train_remaining_examples()
         logger.info("%s in \t%s", RunTimestamps.END_TRAIN,
                     self.time_measure.timestamps(
                         RunTimestamps.BEGIN_TRAIN,
                         RunTimestamps.END_TRAIN))
 
+    def train_remaining_examples(self):
+        """
+        Trains the parameters of the engine system translator on the
+        remaining examples.
+        """
+        if not self.train_parameters_on_remaining_examples:
+            return
+        remaining_examples = \
+            self.incoming_example_manager.get_remaining_examples()
+        logger.info("Begin the training of the \t%s remaining example(s)",
+                    remaining_examples.size())
+        self.learning_system.train_parameters(remaining_examples)
+        self.learning_system.save_trained_parameters()
+        logger.info("Ended the training of the remaining example(s)")
+
+    def revise_examples(self):
+        """
+        Calls the method to revise the examples
+        """
+        examples = self.knowledge_base.examples[TRAIN_SET_NAME]
+        logger.info("Begin the revision of\t%s example(s)", examples.size())
+        if self.pass_all_examples_at_once:
+            self.learning_system.incoming_example_manager.incoming_examples(
+                ExampleIterator(examples))
+        elif self.examples_batch_size > 1:
+            self.pass_batch_examples_to_revise(self.examples_batch_size)
+        else:
+            self.pass_batch_examples_to_revise(1)
+        logger.info("Ended the revision of the example(s)")
+
+    def pass_batch_examples_to_revise(self, number_of_examples):
+        """
+        Passes a `number_of_examples` to revise, at a time.
+        """
+        examples = self.knowledge_base.examples[TRAIN_SET_NAME]
+        iterator = LimitedIterator(
+            ExampleIterator(examples), number_of_examples)
+        size = examples.size()
+        count = 0
+        while iterator.has_next:
+            count = min(size, count + number_of_examples)
+            iterator.reset()
+            logger.debug("Passing example\t%d/%d to revise.", count, size)
+            self.learning_system.incoming_example_manager.incoming_examples(
+                iterator)
+
+    def evaluate_model(self):
+        """
+        Evaluates the model.
+        """
+        self.time_measure.add_measure(RunTimestamps.BEGIN_EVALUATION)
+        train_set = self.knowledge_base.examples[TRAIN_SET_NAME]
+        inferred_examples = self.learning_system.infer_examples(train_set)
+        self.run_statistics.train_evaluation = \
+            self.learning_system.evaluate(train_set, inferred_examples)
+        filepath = os.path.join(self.output_directory, TRAIN_INFERENCE_FILE)
+        print_predictions_to_file(train_set, inferred_examples, filepath)
+        test_set = self.knowledge_base.examples.get(
+            VALIDATION_SET_NAME, Examples())
+        if test_set:
+            inferred_examples = self.learning_system.infer_examples(test_set)
+            self.run_statistics.test_evaluation = \
+                self.learning_system.evaluate(test_set, inferred_examples)
+            filepath = os.path.join(self.output_directory, TEST_INFERENCE_FILE)
+            print_predictions_to_file(test_set, inferred_examples, filepath)
+        self.time_measure.add_measure(RunTimestamps.END_EVALUATION)
+
     def save_model(self):
         """
         Saves the model to the output directory.
         """
-        # TODO: to save the model
-        pass
+        self.learning_system.save_parameters(self.output_directory)
 
     def save_statistics(self):
         """
         Saves the statistics to the output directory.
         """
-        # TODO: to save the statistics and running time
-        pass
+        file = open(
+            os.path.join(self.output_directory, STATISTICS_FILE_NAME), "w")
+        yaml.dump(self.run_statistics, file)
+        file.close()
+
+    def log_elapsed_times(self):
+        """
+        Logs the elapsed times of the run.
+        """
+        initialize_time = self.time_measure.time_between_timestamps(
+            RunTimestamps.BEGIN_INITIALIZE, RunTimestamps.END_INITIALIZE)
+        training_time = self.time_measure.time_between_timestamps(
+            RunTimestamps.BEGIN_TRAIN, RunTimestamps.END_TRAIN)
+        evaluation_time = self.time_measure.time_between_timestamps(
+            RunTimestamps.BEGIN_EVALUATION, RunTimestamps.END_EVALUATION)
+        output_time = self.time_measure.time_between_timestamps(
+            RunTimestamps.BEGIN_DISK_OUTPUT, RunTimestamps.END_DISK_OUTPUT)
+        total_time = self.time_measure.time_between_timestamps(
+            RunTimestamps.BEGIN, RunTimestamps.END)
+
+        logger.warning("Total initialization time:\t%fs", initialize_time)
+        logger.warning("Total training time:\t\t%fs", training_time)
+        logger.warning("Total evaluation time:\t\t%fs", evaluation_time)
+        logger.warning("Total output time:\t\t\t%fs", output_time)
+        logger.warning("Total elapsed time:\t\t\t%fs", total_time)
+
+    def __repr__(self):
+        description = \
+            "\tSettings:\n" + \
+            "\tKnowledge base files:\t" + \
+            ", ".join(self.knowledge_base_file_paths or []) + "\n" + \
+            "\t Theory files:\t\t\t" + \
+            ", ".join(self.theory_file_paths or []) + "\n" + \
+            "\tExample files:\t\t\t" + \
+            ", ".join(self.example_file_paths or []) + "\n" + \
+            "\tTest files:\t\t\t\t" + \
+            ", ".join(self.test_file_paths or [])
+
+        return description.strip()
 
 
 class RunTimestamps(Enum):

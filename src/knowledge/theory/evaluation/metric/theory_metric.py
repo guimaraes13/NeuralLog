@@ -154,6 +154,10 @@ class TheoryMetric(Initializable):
         return hash(
             (self.parameters_retrain, self.default_value))
 
+    @abstractmethod
+    def __repr__(self):
+        pass
+
 
 J = TypeVar('J')  # Key type.
 K = TypeVar('K')  # Value type.
@@ -321,6 +325,9 @@ class RocCurveMetric(ListAccumulator):
     def calculate_result(self, result):
         return sklearn.metrics.roc_auc_score(*result)
 
+    def __repr__(self):
+        return "ROC Curve"
+
 
 class PrecisionRecallCurveMetric(ListAccumulator):
     """
@@ -331,6 +338,9 @@ class PrecisionRecallCurveMetric(ListAccumulator):
     def calculate_result(self, result):
         precision, recall, _ = sklearn.metrics.precision_recall_curve(*result)
         return sklearn.metrics.auc(precision, recall)
+
+    def __repr__(self):
+        return "PR Curve"
 
 
 class LikelihoodMetric(AccumulatorMetric[float, float]):
@@ -385,6 +395,9 @@ class LikelihoodMetric(AccumulatorMetric[float, float]):
     def calculate_result(self, result):
         return result
 
+    def __repr__(self):
+        return "Likelihood"
+
 
 class LogLikelihoodMetric(LikelihoodMetric):
     """
@@ -424,3 +437,6 @@ class LogLikelihoodMetric(LikelihoodMetric):
     # noinspection PyMissingOrEmptyDocstring
     def calculate_value(self, example, prediction):
         return math.log(super().calculate_value(example, prediction))
+
+    def __repr__(self):
+        return "Log Likelihood"

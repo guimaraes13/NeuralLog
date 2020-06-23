@@ -122,3 +122,12 @@ class RevisionOperatorEvaluator(Initializable):
         :type value: ClauseModifier or List[ClauseModifier] or None
         """
         self.revision_operator.clause_modifier = value
+
+    # noinspection PyMissingOrEmptyDocstring
+    @property
+    def learning_system(self):
+        return self.revision_operator.learning_system
+
+    @learning_system.setter
+    def learning_system(self, value):
+        self.revision_operator.learning_system = value

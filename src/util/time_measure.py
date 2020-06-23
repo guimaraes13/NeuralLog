@@ -88,3 +88,6 @@ class TimeMeasure:
         begin_index = self.stamps_by_name[begin]
         end_index = self.stamps_by_name[end]
         return self.timestamps[end_index] - self.timestamps[begin_index]
+
+    def __repr__(self):
+        return "{}s".format(self.timestamps[-1] - self.timestamps[0])
