@@ -18,6 +18,9 @@ from src.language.language import Number, TermType, Predicate, Atom, \
     UnsupportedMatrixRepresentation, Literal, \
     get_constant_from_string, KnowledgeException
 
+TRUE_PREDICATE = "true"
+FALSE_PREDICATE = "false"
+
 ANY_PREDICATE_NAME = ":any:"
 NO_EXAMPLE_SET = ":none:"
 
@@ -773,6 +776,8 @@ class NeuralLogProgram:
         """
         Builds the program after all the clauses had been added.
         """
+        self.add_fact(Atom(Predicate(FALSE_PREDICATE), weight=0.0), False)
+        self.add_fact(Atom(Predicate(TRUE_PREDICATE), weight=1.0), False)
         self._expand_clauses()
         self._add_specific_parameter("avoid_constant")
         self._get_constants()

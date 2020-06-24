@@ -3,15 +3,12 @@ Manages the revision of the theory.
 """
 import collections
 import logging
-from abc import abstractmethod
 
+import src.knowledge.theory.manager.revision.revision_examples as revision
+import src.knowledge.theory.manager.theory_revision_manager as manager
 from src.knowledge.theory import TheoryRevisionException
-from src.knowledge.theory.manager.revision.revision_examples import \
-    RevisionExamples
 from src.knowledge.theory.manager.revision.revision_operator_selector import \
     RevisionOperatorSelector
-from src.knowledge.theory.manager.theory_revision_manager import \
-    TheoryRevisionManager
 from src.util import Initializable
 
 logger = logging.getLogger(__name__)
@@ -31,7 +28,7 @@ class RevisionManager(Initializable):
         Creates a revision manager.
 
         :param theory_revision_manager: the theory revision manager
-        :type theory_revision_manager: TheoryRevisionManager
+        :type theory_revision_manager: manager.TheoryRevisionManager
         :param operator_selector: the operator selector
         :type operator_selector: RevisionOperatorSelector
         """
@@ -39,13 +36,12 @@ class RevisionManager(Initializable):
         self.operator_selector = operator_selector
 
     # noinspection PyMissingOrEmptyDocstring
-    @abstractmethod
     def initialize(self):
         super().initialize()
         self.operator_selector.initialize()
 
     # noinspection PyMissingOrEmptyDocstring,PyMethodMayBeStatic
-    def get_required_fields(self):
+    def required_fields(self):
         return ["theory_revision_manager", "operator_selector"]
 
     def revise(self, revision_examples):
@@ -53,8 +49,8 @@ class RevisionManager(Initializable):
         Revises the theory based on the revision examples.
 
         :param revision_examples: the revision examples
-        :type revision_examples: collections.Iterable[RevisionExamples]
-            or RevisionExamples
+        :type revision_examples: collections.Iterable[revision.RevisionExamples]
+            or revision.RevisionExamples
         """
         if not isinstance(revision_examples, collections.Iterable):
             self.call_revision(revision_examples)
@@ -67,7 +63,7 @@ class RevisionManager(Initializable):
         Calls the revision, chosen by the operator selector, on the examples.
 
         :param examples: the examples
-        :type examples: RevisionExamples
+        :type examples: revision.RevisionExamples
         :return: `True`, if the revision was applied; otherwise, `False`
         :rtype: bool
         """

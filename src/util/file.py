@@ -14,7 +14,7 @@ def read_logic_program_from_file(filepath):
     :param filepath: the filepath
     :type filepath: str
     :return: the parsed clauses
-    :rtype: collections.Iterable[Clause]
+    :rtype: collections.Collection[Clause]
     """
     # PLY
     lexer = NeuralLogLexer()

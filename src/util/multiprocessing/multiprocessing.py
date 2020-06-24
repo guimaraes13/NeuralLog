@@ -11,8 +11,7 @@ from typing import TypeVar, Generic, Dict, Set
 from src.knowledge.examples import Examples
 from src.knowledge.theory.evaluation.metric.theory_metric import TheoryMetric
 from src.language.language import HornClause, KnowledgeException
-from src.structure_learning.structure_learning_system import \
-    StructureLearningSystem
+import src.structure_learning.structure_learning_system as sls
 from src.util import OrderedSet
 from src.util.multiprocessing.evaluation_transformer import \
     AsyncEvaluationTransformer
@@ -35,7 +34,7 @@ class MultiprocessingEvaluation(Generic[V, E]):
         Creates a multiprocessing evaluation.
 
         :param learning_system: the learning system
-        :type learning_system: StructureLearningSystem
+        :type learning_system: sls.StructureLearningSystem
         :param theory_metric: the theory metric
         :type theory_metric: TheoryMetric
         :param evaluation_timeout: the individual evaluation timeout, in seconds

@@ -5,7 +5,7 @@ import collections
 from typing import Set
 
 from src.knowledge.examples import Examples, ExamplesInferences
-from src.knowledge.manager.example_manager import IncomingExampleManager
+import src.knowledge.manager.example_manager as manager
 from src.knowledge.program import NeuralLogProgram
 from src.knowledge.theory.evaluation.theory_evaluator import TheoryEvaluator
 from src.knowledge.theory.manager.theory_revision_manager import \
@@ -51,7 +51,7 @@ def add_null_atoms(knowledge_base):
     for predicate in knowledge_base.predicates:
         null_atom = build_null_atom(knowledge_base, predicate)
         knowledge_base.add_fact(null_atom, report_replacement=False)
-    knowledge_base.build_program()
+    # knowledge_base.build_program()
 
 
 class StructureLearningSystem(Initializable):
@@ -76,7 +76,7 @@ class StructureLearningSystem(Initializable):
         :param theory_evaluator: the theory evaluator
         :type theory_evaluator: TheoryEvaluator or None
         :param incoming_example_manager: the incoming example manager
-        :type incoming_example_manager: IncomingExampleManager or None
+        :type incoming_example_manager: manager.IncomingExampleManager or None
         """
         self.engine_system_translator = engine_system_translator
         "The engine system translator"
@@ -106,6 +106,7 @@ class StructureLearningSystem(Initializable):
     # noinspection PyMissingOrEmptyDocstring
     def initialize(self):
         super().initialize()
+        self.engine_system_translator.initialize()
 
     # noinspection PyMissingOrEmptyDocstring
     @property

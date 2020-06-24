@@ -71,8 +71,8 @@ class TimeMeasure:
         :param name: the name of the measure/timestamp
         :type name: Any
         """
-        self.timestamps.append(self.time_function())
         self.stamps_by_name[name] = len(self.timestamps)
+        self.timestamps.append(self.time_function())
 
     def time_between_timestamps(self, begin, end):
         """
@@ -90,4 +90,4 @@ class TimeMeasure:
         return self.timestamps[end_index] - self.timestamps[begin_index]
 
     def __repr__(self):
-        return "{}s".format(self.timestamps[-1] - self.timestamps[0])
+        return "{:.3f}s".format(self.timestamps[-1] - self.timestamps[0])

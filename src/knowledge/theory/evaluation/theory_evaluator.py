@@ -9,8 +9,6 @@ from src.knowledge.examples import ExamplesInferences, Examples
 from src.knowledge.program import NeuralLogProgram
 from src.knowledge.theory.evaluation.metric.theory_metric import TheoryMetric
 from src.language.language import HornClause
-from src.structure_learning.structure_learning_system import \
-    StructureLearningSystem
 from src.util import Initializable
 
 

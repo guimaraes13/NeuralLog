@@ -17,8 +17,7 @@ from src.language.equivalent_clauses import EquivalentClauseAtom, \
     EquivalentHornClause
 from src.language.language import KnowledgeException, Atom, Predicate, \
     HornClause, Term, Number, Literal
-from src.structure_learning.structure_learning_system import \
-    StructureLearningSystem, build_null_atom
+import src.structure_learning.structure_learning_system as sls
 from src.util import Initializable, InitializationException, OrderedSet
 from src.util.clause_utils import apply_substitution, to_variable_atom, \
     may_rule_be_safe, get_non_negated_literals_with_head_variable, \
@@ -52,7 +51,7 @@ def relevant_breadth_first_search(terms, relevant_depth,
     relevant
     :type relevant_depth: int
     :param learning_system: the learning system
-    :type learning_system: StructureLearningSystem
+    :type learning_system: sls.StructureLearningSystem
     :param safe_stop: if `True`, the search stops when all the atoms of a
     distance are added and those atoms, collectively, contains all `terms`
     :type safe_stop: bool
@@ -130,7 +129,7 @@ def get_null_example(knowledge_base, predicate):
     """
     null_atom = cached_null_atoms.get(predicate)
     if null_atom is None:
-        null_atom = build_null_atom(knowledge_base, predicate)
+        null_atom = sls.build_null_atom(knowledge_base, predicate)
         cached_null_atoms[predicate] = null_atom
 
     return null_atom
@@ -324,7 +323,7 @@ class RevisionOperator(Initializable):
         Creates a revision operator.
 
         :param learning_system: the learning system
-        :type learning_system: StructureLearningSystem
+        :type learning_system: sls.StructureLearningSystem
         :param theory_metric: the theory metric
         :type theory_metric: TheoryMetric
         :param clause_modifiers: a clause modifier, a list of clause modifiers
@@ -418,7 +417,7 @@ class BottomClauseBoundedRule(RevisionOperator):
         Creates a Bottom Clause Bounded Rule operator.
 
         :param learning_system: the learning system
-        :type learning_system: StructureLearningSystem
+        :type learning_system: sls.StructureLearningSystem
         :param theory_metric: the theory metric
         :type theory_metric: TheoryMetric
         :param variable_generator: the variable generator
@@ -877,7 +876,7 @@ class CombinedBottomClauseBreadthSearch(CombinedBottomClauseBoundedRule):
         (3) there are no more candidates to test
         :type strict_to_maximum_size: bool
         :param learning_system: the learning system
-        :type learning_system: StructureLearningSystem
+        :type learning_system: sls.StructureLearningSystem
         :param theory_metric: the theory metric
         :type theory_metric: TheoryMetric
         :param variable_generator: the variable generator

@@ -8,7 +8,8 @@ from abc import abstractmethod
 from src.knowledge.examples import Examples
 from src.knowledge.theory.manager.revision.revision_examples import \
     RevisionExamples
-from src.knowledge.theory.manager.revision.sample_selector import SampleSelector
+from src.knowledge.theory.manager.revision.sample_selector import \
+    SampleSelector, AllRelevantSampleSelect
 from src.language.language import Atom
 from src.structure_learning.structure_learning_system import \
     StructureLearningSystem
@@ -36,8 +37,14 @@ class IncomingExampleManager(Initializable):
         self.sample_selector = sample_selector
 
     # noinspection PyMissingOrEmptyDocstring
+    def required_fields(self):
+        return ["learning_system"]
+
+    # noinspection PyMissingOrEmptyDocstring
     def initialize(self):
         super().initialize()
+        if self.sample_selector is None:
+            self.sample_selector = AllRelevantSampleSelect()
         self.sample_selector.learning_system = self.learning_system
         self.sample_selector.initialize()
 
@@ -60,10 +67,6 @@ class IncomingExampleManager(Initializable):
         :rtype: Examples
         """
         pass
-
-    # noinspection PyMissingOrEmptyDocstring
-    def required_fields(self):
-        return ["learning_system", "sample_selector"]
 
 
 class ReviseAllIncomingExample(IncomingExampleManager):

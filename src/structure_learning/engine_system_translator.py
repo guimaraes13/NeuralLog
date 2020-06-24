@@ -10,12 +10,12 @@ from typing import Optional, List, Set
 
 import numpy as np
 
+import src.structure_learning.structure_learning_system as sls
 from src.knowledge.examples import Examples, ExamplesInferences
 from src.knowledge.program import NeuralLogProgram, print_neural_log_program
 from src.language.language import Atom, Term
 from src.network.network import NeuralLogNetwork
 from src.network.trainer import Trainer
-from src.structure_learning.structure_learning_system import NULL_ENTITY
 from src.util import Initializable
 from src.util.file import read_logic_program_from_file
 
@@ -71,7 +71,7 @@ def convert_predictions(model, dataset):
             # Iterate over predicates
             predicate, inverted = model.predicates[i]
             null_index = neural_program.get_index_of_constant(
-                predicate, -1, NULL_ENTITY)
+                predicate, -1, sls.NULL_ENTITY)
             if inverted:
                 continue
             row_scores = y_scores[i]
@@ -115,7 +115,7 @@ def convert_predictions(model, dataset):
                     inferences.add_inference(atom)
                 else:
                     null_index = neural_program.get_constant_by_index(
-                        predicate, -1, NULL_ENTITY)
+                        predicate, -1, sls.NULL_ENTITY)
                     null_score = float(y_score[null_index])
                     for index in range(len(y_score)):
                         atom_score = float(y_score[index])
@@ -144,7 +144,7 @@ class EngineSystemTranslator(Initializable):
     # noinspection PyMissingOrEmptyDocstring
     @property
     def knowledge_base(self):
-        return self._knowledge_base
+        return getattr(self, "_knowledge_base", None)
 
     @knowledge_base.setter
     def knowledge_base(self, value):
@@ -153,7 +153,7 @@ class EngineSystemTranslator(Initializable):
     # noinspection PyMissingOrEmptyDocstring
     @property
     def theory(self):
-        return self._theory
+        return getattr(self, "_theory", None)
 
     @theory.setter
     def theory(self, value):
@@ -275,14 +275,14 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
 
     # noinspection PyMissingOrEmptyDocstring
     @EngineSystemTranslator.knowledge_base.setter
-    def knowledge_base(self, value):
-        super().knowledge_base = value
+    def knowledge_base(self, value: NeuralLogProgram):
+        self._knowledge_base = value.copy()
         self._build_model()
 
     # noinspection PyMissingOrEmptyDocstring
     @EngineSystemTranslator.theory.setter
     def theory(self, value):
-        super().theory = value
+        self._theory = value
         self._build_model()
 
     # noinspection PyMissingOrEmptyDocstring
@@ -291,13 +291,11 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
 
     # noinspection PyMissingOrEmptyDocstring
     def initialize(self):
-        program = self.knowledge_base.copy()
-        for clauses in self.theory.clauses_by_predicate.values():
-            program.add_clauses(clauses)
-        program.build_program()
         self._build_model()
 
     def _build_model(self):
+        if not self.knowledge_base or not self.theory:
+            return
         program = self.knowledge_base.copy()
         append_theory(program, self.theory)
         self.saved_trainer = Trainer(program, self.output_path)
@@ -372,7 +370,7 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
                 terms = self.knowledge_base.iterable_constants_per_term.get(
                     (predicate, i), dict()).values()
                 possible_terms.append(terms)
-            possible_terms.append((NULL_ENTITY,))
+            possible_terms.append((sls.NULL_ENTITY,))
 
             for terms in permute_terms(*possible_terms):
                 atom = Atom(predicate, *terms, weight=0.0)

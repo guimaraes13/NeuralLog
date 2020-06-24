@@ -518,7 +518,7 @@ class NeuralLogParser:
         Gets the clauses parsed by the parser.
 
         :return: the parsed clauses
-        :rtype: collections.Iterable[Clause]
+        :rtype: collections.Collection[Clause]
         """
         return self.clauses[0]
 

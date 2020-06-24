@@ -835,7 +835,7 @@ class AtomClause(Clause):
     def key(self):
         return self.atom.key()
 
-    def __str__(self):
+    def __repr__(self):
         return self.atom.__str__() + END_SIGN
 
     def simple_key(self):

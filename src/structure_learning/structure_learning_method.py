@@ -55,7 +55,7 @@ def read_logic_file(filepath):
     :param filepath: the filepath
     :type filepath: str
     :return: the parsed clauses
-    :rtype: collections.Iterable[Clause]
+    :rtype: collections.Collection[Clause]
     """
     logger.info("Reading file:\t%s", filepath)
     start_func = performance_time()
@@ -96,16 +96,16 @@ class StructureLearningMethod(Initializable):
 
     def __init__(self,
                  knowledge_base_file_paths,
-                 theory_file_paths,
                  example_file_paths,
-                 output_directory):
+                 output_directory,
+                 theory_file_paths=()):
         """
         Creates an structure learning method.
 
         :param knowledge_base_file_paths: the path of the knowledge base files
         :type knowledge_base_file_paths: list[str]
         :param theory_file_paths: the path of the theory files
-        :type theory_file_paths: list[str]
+        :type theory_file_paths: collections.Iterable
         :param example_file_paths: the path of example files
         :type example_file_paths: list[str]
         :param output_directory: the output directory
@@ -114,7 +114,7 @@ class StructureLearningMethod(Initializable):
         self.time_measure = TimeMeasure()
         self.time_measure.add_measure(RunTimestamps.BEGIN)
         self.knowledge_base_file_paths = knowledge_base_file_paths
-        self.theory_file_paths = theory_file_paths
+        self.theory_file_paths = list(theory_file_paths)
         self.example_file_paths = example_file_paths
         self.output_directory = output_directory
 
@@ -133,7 +133,6 @@ class BatchStructureLearning(StructureLearningMethod):
 
     def __init__(self,
                  knowledge_base_file_paths,
-                 theory_file_paths,
                  example_file_paths,
                  test_file_paths,
                  output_directory,
@@ -147,7 +146,9 @@ class BatchStructureLearning(StructureLearningMethod):
                  theory_metrics,
                  revision_operator_selector,
                  revision_operator_evaluators,
-                 pass_all_examples_at_once,
+                 theory_file_paths=(),
+                 clause_modifiers=(),
+                 pass_all_examples_at_once=False,
                  train_parameters_on_remaining_examples=False
                  ):
         """
@@ -157,7 +158,7 @@ class BatchStructureLearning(StructureLearningMethod):
         :param knowledge_base_file_paths: the path of the knowledge base files
         :type knowledge_base_file_paths: list[str]
         :param theory_file_paths: the path of the theory files
-        :type theory_file_paths: list[str]
+        :type theory_file_paths: collections.Iterable
         :param example_file_paths: the path of example files
         :type example_file_paths: list[str]
         :param test_file_paths: the path of test files
@@ -185,6 +186,8 @@ class BatchStructureLearning(StructureLearningMethod):
         :type revision_operator_selector: RevisionOperatorSelector
         :param revision_operator_evaluators: the revision operator evaluators
         :type revision_operator_evaluators: list[RevisionOperatorEvaluator]
+        :param clause_modifiers: a iterable of clause modifiers
+        :type clause_modifiers: collections.Iterable[ClauseModifier]
         :param pass_all_examples_at_once: if `True`, all the examples will be
         passed to be revised at once; otherwise, will be passed a batch at a
         time
@@ -195,9 +198,9 @@ class BatchStructureLearning(StructureLearningMethod):
         """
         super(BatchStructureLearning, self).__init__(
             knowledge_base_file_paths,
-            theory_file_paths,
             example_file_paths,
-            output_directory
+            output_directory,
+            theory_file_paths
         )
         self.test_file_paths = test_file_paths
         self.load_pre_trained_parameter = load_pre_trained_parameter
@@ -210,23 +213,10 @@ class BatchStructureLearning(StructureLearningMethod):
         self.theory_metrics = theory_metrics
         self.revision_operator_selector = revision_operator_selector
         self.revision_operator_evaluators = revision_operator_evaluators
-        self.clause_modifiers: List[ClauseModifier] = []
+        self.clause_modifiers: List[ClauseModifier] = list(clause_modifiers)
         self.pass_all_examples_at_once = pass_all_examples_at_once
         self.train_parameters_on_remaining_examples = \
             train_parameters_on_remaining_examples
-
-    # noinspection PyMissingOrEmptyDocstring,PyAttributeOutsideInit
-    def initialize(self):
-        super().initialize()
-        self.time_measure.add_measure(RunTimestamps.BEGIN_INITIALIZE)
-        super().initialize()
-        self.build()
-        self.time_measure.add_measure(RunTimestamps.END_INITIALIZE)
-        logger.info("%s in \t%s",
-                    RunTimestamps.END_INITIALIZE.value,
-                    self.time_measure.timestamps(
-                        RunTimestamps.BEGIN_READ_THEORY,
-                        RunTimestamps.END_READ_THEORY))
 
     # noinspection PyMissingOrEmptyDocstring
     def required_fields(self):
@@ -237,6 +227,19 @@ class BatchStructureLearning(StructureLearningMethod):
             fields.append(field)
         return fields
 
+    # noinspection PyMissingOrEmptyDocstring,PyAttributeOutsideInit
+    def initialize(self):
+        super().initialize()
+        self.time_measure = TimeMeasure()
+        self.time_measure.add_measure(RunTimestamps.BEGIN_INITIALIZE)
+        self.build()
+        self.time_measure.add_measure(RunTimestamps.END_INITIALIZE)
+        logger.info("%s in \t%.3fs",
+                    RunTimestamps.END_INITIALIZE.value,
+                    self.time_measure.time_between_timestamps(
+                        RunTimestamps.BEGIN_READ_THEORY,
+                        RunTimestamps.END_READ_THEORY))
+
     def build(self):
         """
         Builds the learning method.
@@ -244,8 +247,6 @@ class BatchStructureLearning(StructureLearningMethod):
         self.build_knowledge_base()
         self.build_theory()
         self.build_examples()
-        self.knowledge_base.build_program()
-        self.theory.build_program()
         self.build_run_statistics()
         self.build_engine_system_translator()
         self.build_learning_system()
@@ -261,11 +262,13 @@ class BatchStructureLearning(StructureLearningMethod):
         for filepath in self.knowledge_base_file_paths:
             clauses = read_logic_file(filepath)
             self.knowledge_base.add_clauses(clauses)
+        self.knowledge_base.build_program()
         self.time_measure.add_measure(RunTimestamps.END_READ_KNOWLEDGE_BASE)
-        logger.info("%s in \t%s", RunTimestamps.END_READ_KNOWLEDGE_BASE.value,
-                    self.time_measure.timestamps(
-                        RunTimestamps.BEGIN_READ_KNOWLEDGE_BASE,
-                        RunTimestamps.END_READ_KNOWLEDGE_BASE))
+        logger.info(
+            "%s in \t%.3fs", RunTimestamps.END_READ_KNOWLEDGE_BASE.value,
+            self.time_measure.time_between_timestamps(
+                RunTimestamps.BEGIN_READ_KNOWLEDGE_BASE,
+                RunTimestamps.END_READ_KNOWLEDGE_BASE))
 
     # noinspection PyAttributeOutsideInit,DuplicatedCode
     def build_theory(self):
@@ -275,12 +278,13 @@ class BatchStructureLearning(StructureLearningMethod):
         logger.info(RunTimestamps.BEGIN_READ_THEORY.value)
         self.time_measure.add_measure(RunTimestamps.BEGIN_READ_THEORY)
         self.theory = NeuralLogProgram()
-        for filepath in self.theory_file_paths:
-            clauses = read_logic_file(filepath)
-            self.theory.add_clauses(clauses)
+        if self.theory_file_paths:
+            for filepath in self.theory_file_paths:
+                clauses = read_logic_file(filepath)
+                self.theory.add_clauses(clauses)
         self.time_measure.add_measure(RunTimestamps.END_READ_THEORY)
-        logger.info("%s in \t%s", RunTimestamps.END_READ_THEORY.value,
-                    self.time_measure.timestamps(
+        logger.info("%s in \t%.3fs", RunTimestamps.END_READ_THEORY.value,
+                    self.time_measure.time_between_timestamps(
                         RunTimestamps.BEGIN_READ_THEORY,
                         RunTimestamps.END_READ_THEORY))
 
@@ -290,16 +294,22 @@ class BatchStructureLearning(StructureLearningMethod):
         """
         logger.info(RunTimestamps.BEGIN_READ_EXAMPLES.name)
         self.time_measure.add_measure(RunTimestamps.BEGIN_READ_EXAMPLES)
+        train_examples = 0
+        test_examples = 0
         for filepath in self.example_file_paths:
             clauses = read_logic_file(filepath)
             self.knowledge_base.add_clauses(clauses, example_set=TRAIN_SET_NAME)
+            train_examples += len(clauses)
         for filepath in self.test_file_paths:
             clauses = read_logic_file(filepath)
             self.knowledge_base.add_clauses(
                 clauses, example_set=VALIDATION_SET_NAME)
+            test_examples += len(clauses)
         self.time_measure.add_measure(RunTimestamps.END_READ_EXAMPLES)
-        logger.info("%s in \t%s", RunTimestamps.END_READ_EXAMPLES.value,
-                    self.time_measure.timestamps(
+        logger.info("Total number of train examples:\t%d", train_examples)
+        logger.info("Total number of test examples:\t%d", test_examples)
+        logger.info("%s in \t%.3fs", RunTimestamps.END_READ_EXAMPLES.value,
+                    self.time_measure.time_between_timestamps(
                         RunTimestamps.BEGIN_READ_EXAMPLES,
                         RunTimestamps.END_READ_EXAMPLES))
 
@@ -313,10 +323,12 @@ class BatchStructureLearning(StructureLearningMethod):
             self.knowledge_base.facts_by_predicate.values()))
         number_of_train = sum(map(
             lambda x: len(x),
-            self.knowledge_base.examples.get(TRAIN_SET_NAME, {0: []}).values()))
+            self.knowledge_base.examples.get(
+                TRAIN_SET_NAME, {0: []}).values()))
         number_of_test = sum(map(
             lambda x: len(x),
-            self.knowledge_base.examples.get(TRAIN_SET_NAME, {0: []}).values()))
+            self.knowledge_base.examples.get(
+                VALIDATION_SET_NAME, {0: []}).values()))
         self.run_statistics = \
             RunStatistics(number_of_facts, number_of_train, number_of_test)
 
@@ -327,16 +339,14 @@ class BatchStructureLearning(StructureLearningMethod):
         logger.info(RunTimestamps.BEGIN_BUILD_ENGINE_TRANSLATOR.name)
         self.time_measure.add_measure(
             RunTimestamps.BEGIN_BUILD_ENGINE_TRANSLATOR)
-        program = self.knowledge_base.copy()
-        for clauses in program.clauses_by_predicate.values():
-            program.add_clauses(clauses)
-        program.build_program()
-        self.engine_system_translator.program = program
-        self.engine_system_translator.initialize()
+        self.engine_system_translator.output_path = self.output_directory
+        # self.engine_system_translator.knowledge_base = self.knowledge_base
+        # self.engine_system_translator.theory = self.theory
+        # self.engine_system_translator.initialize()
         self.time_measure.add_measure(RunTimestamps.END_BUILD_ENGINE_TRANSLATOR)
-        logger.info("%s in \t%s",
+        logger.info("%s in \t%.3fs",
                     RunTimestamps.END_BUILD_ENGINE_TRANSLATOR.value,
-                    self.time_measure.timestamps(
+                    self.time_measure.time_between_timestamps(
                         RunTimestamps.BEGIN_BUILD_ENGINE_TRANSLATOR,
                         RunTimestamps.END_BUILD_ENGINE_TRANSLATOR))
 
@@ -363,16 +373,19 @@ class BatchStructureLearning(StructureLearningMethod):
         """
         Builds the theory metrics.
         """
-        if not self.theory_metrics:
+        if not hasattr(self, "theory_metrics") or not self.theory_metrics:
             self.theory_evaluator = default_theory_metrics()
 
     def build_clause_modifiers(self):
         """
         Builds the clause modifiers.
         """
-        for clause_modifier in self.clause_modifiers:
-            clause_modifier.learning_system = self.learning_system
-            clause_modifier.initialize()
+        if not hasattr(self, "clause_modifiers"):
+            self.clause_modifiers = []
+        else:
+            for clause_modifier in self.clause_modifiers:
+                clause_modifier.learning_system = self.learning_system
+                clause_modifier.initialize()
 
     def build_operator_selector(self):
         """
@@ -380,7 +393,8 @@ class BatchStructureLearning(StructureLearningMethod):
         """
         if self.revision_operator_selector is None:
             self.revision_operator_selector = SelectFirstRevisionOperator()
-        if self.revision_operator_selector.operator_evaluators is None:
+        if not hasattr(self.revision_operator_selector, "operator_evaluators") \
+                or self.revision_operator_selector.operator_evaluators is None:
             self.revision_operator_selector.operator_evaluators = \
                 self.build_operators()
 
@@ -464,8 +478,8 @@ class BatchStructureLearning(StructureLearningMethod):
         self.time_measure.add_measure(RunTimestamps.BEGIN_TRAIN)
         self.revise_examples()
         self.train_remaining_examples()
-        logger.info("%s in \t%s", RunTimestamps.END_TRAIN,
-                    self.time_measure.timestamps(
+        logger.info("%s in \t%.3fs", RunTimestamps.END_TRAIN,
+                    self.time_measure.time_between_timestamps(
                         RunTimestamps.BEGIN_TRAIN,
                         RunTimestamps.END_TRAIN))
 
@@ -566,11 +580,11 @@ class BatchStructureLearning(StructureLearningMethod):
         total_time = self.time_measure.time_between_timestamps(
             RunTimestamps.BEGIN, RunTimestamps.END)
 
-        logger.warning("Total initialization time:\t%fs", initialize_time)
-        logger.warning("Total training time:\t\t%fs", training_time)
-        logger.warning("Total evaluation time:\t\t%fs", evaluation_time)
-        logger.warning("Total output time:\t\t\t%fs", output_time)
-        logger.warning("Total elapsed time:\t\t\t%fs", total_time)
+        logger.warning("Total initialization time:\t%.3fs", initialize_time)
+        logger.warning("Total training time:\t\t%.3fs", training_time)
+        logger.warning("Total evaluation time:\t\t%.3fs", evaluation_time)
+        logger.warning("Total output time:\t\t\t%.3fs", output_time)
+        logger.warning("Total elapsed time:\t\t\t%.3fs", total_time)
 
     def __repr__(self):
         description = \

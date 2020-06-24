@@ -5,16 +5,14 @@ import logging
 
 from src.knowledge.theory.evaluation.metric.theory_metric import TheoryMetric, \
     RocCurveMetric
-from src.knowledge.theory.manager.revision.revision_examples import \
-    RevisionExamples
+import src.knowledge.theory.manager.revision.revision_examples as revision
 from src.knowledge.theory.manager.revision.revision_manager import \
     RevisionManager
 from src.knowledge.theory.manager.revision.revision_operator_evaluator import \
     RevisionOperatorEvaluator
 from src.knowledge.theory.manager.revision.revision_operator_selector import \
     RevisionOperatorSelector
-from src.structure_learning.structure_learning_system import \
-    StructureLearningSystem
+import src.structure_learning.structure_learning_system as sls
 from src.util import Initializable, time_measure
 
 THEORY_CONTENT_MESSAGE = "\n------------------ THEORY -----------------\n%s" \
@@ -39,7 +37,7 @@ class TheoryRevisionManager(Initializable):
         Creates a theory revision manager.
 
         :param learning_system: the learning system
-        :type learning_system: StructureLearningSystem
+        :type learning_system: sls.StructureLearningSystem
         :param revision_manager: the revision manager
         :type revision_manager: RevisionManager
         :param theory_metric: the metric to optimize
@@ -71,8 +69,8 @@ class TheoryRevisionManager(Initializable):
         Method to trigger the revision of the theory.
 
         :param revision_examples: the revision examples
-        :type revision_examples:
-            RevisionExamples or collections.Iterable[RevisionExamples]
+        :type revision_examples: revision.RevisionExamples or
+            collections.Iterable[revision.RevisionExamples]
         """
         self.revision_manager.revise(revision_examples)
 
@@ -85,7 +83,7 @@ class TheoryRevisionManager(Initializable):
         :param operator_selector: the operator selector
         :type operator_selector: RevisionOperatorSelector
         :param examples: the revision examples
-        :type examples: RevisionExamples
+        :type examples: revision.RevisionExamples
         :raise TheoryRevisionException: if an error occur during the revision
         of the theory
         :return: `True`, if the call result in an actual change of the
@@ -111,7 +109,7 @@ class TheoryRevisionManager(Initializable):
         Evaluates the current theory, based on the examples.
 
         :param examples: the examples
-        :type examples: RevisionExamples
+        :type examples: revision.RevisionExamples
         :return: the evaluation of the theory
         :rtype: float
         """
@@ -129,7 +127,7 @@ class TheoryRevisionManager(Initializable):
         :param operator_evaluator: the operator evaluator
         :type operator_evaluator: RevisionOperatorEvaluator
         :param examples: the examples
-        :type examples: RevisionExamples
+        :type examples: revision.RevisionExamples
         :param improvement_threshold: the improvement threshold
         :type improvement_threshold: float
         :return: `True`, if the call result in an actual change of the

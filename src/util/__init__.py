@@ -188,6 +188,8 @@ class InitializationException(Exception):
         super().__init__(message)
 
 
+# IMPROVE: Try a way of calling the __init__ method of the objects created from
+#  the yaml
 class Initializable(ABC):
     """
     Interface to allow object to be initialized.
@@ -200,7 +202,7 @@ class Initializable(ABC):
         :raise InitializationException: if an error occurs during the
         initialization of the object
         """
-        logger.debug("Initializing\t%s", self)
+        logger.debug("Initializing:\t%s", self.__class__.__name__)
         fields = []
         required_fields = self.required_fields()
         if required_fields is None:
