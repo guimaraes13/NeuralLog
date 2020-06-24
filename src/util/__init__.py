@@ -208,7 +208,7 @@ class Initializable(ABC):
 
         for field in required_fields:
             if not hasattr(self, field) or getattr(self, field) is None:
-                fields.append("learning_system")
+                fields.append(field)
 
         if len(fields) > 0:
             raise unset_fields_error(fields, self)

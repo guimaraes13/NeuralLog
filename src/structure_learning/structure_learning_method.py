@@ -348,8 +348,7 @@ class BatchStructureLearning(StructureLearningMethod):
                     StructureLearningSystem.__class__.__name__)
         # noinspection PyAttributeOutsideInit
         self.learning_system = StructureLearningSystem(
-            self.knowledge_base, self.theory, Examples(),
-            self.engine_system_translator)
+            self.knowledge_base, self.theory, self.engine_system_translator)
         self.build_theory_metrics()
         self.build_clause_modifiers()
         self.build_operator_selector()

@@ -5,7 +5,7 @@ import itertools
 import logging
 from abc import abstractmethod
 from collections import Collection, deque
-from typing import Dict, Set, List, Deque
+from typing import Dict, Set, List, Deque, TypeVar
 
 from src.knowledge.examples import Examples, ExampleIterator, ExamplesInferences
 from src.knowledge.program import NeuralLogProgram
@@ -271,9 +271,21 @@ def add_variable_substitutions(atom, variable_map, variables):
             variable_map[atom.terms[i]] = variables[i]
 
 
+T = TypeVar('T')
+
+
 # noinspection PyMissingOrEmptyDocstring
 def my_cmp_to_key(my_cmp, key):
-    """Convert a cmp= function into a key= function"""
+    """
+    Convert a `my_cmp` function into a `key` function.
+
+    :param my_cmp: the comparator function
+    :type my_cmp: Callable[[T, T], int]
+    :param key: a function to extract the key from the object
+    :type key: Callable[[Any], T]
+    :return: a class to represent the object
+    :rtype: Callable
+    """
 
     class K(object):
         __slots__ = ['obj']

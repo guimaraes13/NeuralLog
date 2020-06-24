@@ -137,9 +137,36 @@ class EngineSystemTranslator(Initializable):
     """
 
     def __init__(self):
-        self.knowledge_base: Optional[NeuralLogProgram] = None
-        self.theory: Optional[NeuralLogProgram] = None
-        self.output_path: Optional[str] = None
+        self._knowledge_base: Optional[NeuralLogProgram] = None
+        self._theory: Optional[NeuralLogProgram] = None
+        self._output_path: Optional[str] = None
+
+    # noinspection PyMissingOrEmptyDocstring
+    @property
+    def knowledge_base(self):
+        return self._knowledge_base
+
+    @knowledge_base.setter
+    def knowledge_base(self, value):
+        self._knowledge_base = value
+
+    # noinspection PyMissingOrEmptyDocstring
+    @property
+    def theory(self):
+        return self._theory
+
+    @theory.setter
+    def theory(self, value):
+        self._theory = value
+
+    # noinspection PyMissingOrEmptyDocstring
+    @property
+    def output_path(self):
+        return self._output_path
+
+    @output_path.setter
+    def output_path(self, value):
+        self._output_path = value
 
     @abstractmethod
     def infer_examples(self, examples, retrain=False, theory=None):
@@ -247,6 +274,18 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
         self.current_trainer: Optional[Trainer] = None
 
     # noinspection PyMissingOrEmptyDocstring
+    @EngineSystemTranslator.knowledge_base.setter
+    def knowledge_base(self, value):
+        super().knowledge_base = value
+        self._build_model()
+
+    # noinspection PyMissingOrEmptyDocstring
+    @EngineSystemTranslator.theory.setter
+    def theory(self, value):
+        super().theory = value
+        self._build_model()
+
+    # noinspection PyMissingOrEmptyDocstring
     def required_fields(self):
         return []
 
@@ -273,6 +312,7 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
         dataset = trainer.build_dataset()
         dataset = dataset.get_dataset(TEMPORARY_SET_NAME)
         if retrain:
+            trainer.compile_module()
             trainer.fit(dataset)
 
         return convert_predictions(trainer.model, dataset)
@@ -298,7 +338,6 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
         trainer.init_model()
         trainer.model.build_layers(
             map(lambda x: (x, False), examples.keys()))
-        trainer.compile_module()
         return trainer
 
     # noinspection PyMissingOrEmptyDocstring
@@ -345,6 +384,7 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
         # IMPROVE: check if the program is up to date
         # IMPROVE: clean the examples after training
         trainer = self.get_trainer(training_examples)
+        trainer.compile_module()
         dataset = trainer.build_dataset()
         dataset = dataset.get_dataset(TEMPORARY_SET_NAME)
         trainer.fit(dataset)

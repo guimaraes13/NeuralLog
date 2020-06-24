@@ -767,6 +767,8 @@ class NeuralLogProgram:
         # del self._last_atom_for_predicate
         # self.build_program()
 
+    # IMPROVE: keep track if the knowledge base is up-to-date in order to avoid
+    #  rebuilding, whenever possible
     def build_program(self):
         """
         Builds the program after all the clauses had been added.

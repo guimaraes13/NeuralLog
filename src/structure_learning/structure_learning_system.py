@@ -13,8 +13,6 @@ from src.knowledge.theory.manager.theory_revision_manager import \
 from src.language.language import get_term_from_string, Atom, Predicate, Term
 from src.structure_learning.engine_system_translator import \
     EngineSystemTranslator
-# TODO: add __null__ example for each predicate
-#    be aware of the type (categorical or numeric) of the predicate's terms.
 from src.util import Initializable
 
 NULL_ENTITY = get_term_from_string("'__NULL__'")
@@ -43,14 +41,25 @@ def build_null_atom(knowledge_base, predicate):
     return Atom(predicate, *terms, weight=0.0)
 
 
-# TODO: finish the learning system
+def add_null_atoms(knowledge_base):
+    """
+    Adds the null atoms to the knowledge base.
+
+    :param knowledge_base: the knowledge base
+    :type knowledge_base: NeuralLogProgram
+    """
+    for predicate in knowledge_base.predicates:
+        null_atom = build_null_atom(knowledge_base, predicate)
+        knowledge_base.add_fact(null_atom, report_replacement=False)
+    knowledge_base.build_program()
+
+
 class StructureLearningSystem(Initializable):
     """
     Represents the core of the structure learning system.
     """
 
-    def __init__(self, knowledge_base, theory, examples,
-                 engine_system_translator,
+    def __init__(self, knowledge_base, theory, engine_system_translator,
                  theory_revision_manager=None, theory_evaluator=None,
                  incoming_example_manager=None):
         """
@@ -60,8 +69,6 @@ class StructureLearningSystem(Initializable):
         :type knowledge_base: NeuralLogProgram
         :param theory: the theory
         :type theory: NeuralLogProgram
-        :param examples: the examples
-        :type examples: Examples
         :param engine_system_translator: the engine system translator
         :type engine_system_translator: EngineSystemTranslator
         :param theory_revision_manager: the theory revision manager
@@ -71,28 +78,45 @@ class StructureLearningSystem(Initializable):
         :param incoming_example_manager: the incoming example manager
         :type incoming_example_manager: IncomingExampleManager or None
         """
-        self.knowledge_base = knowledge_base
-        "The knowledge base"
-        self._theory = theory
-        "The theory"
-        self.examples = examples
-        "The examples"
-
         self.engine_system_translator = engine_system_translator
         "The engine system translator"
 
+        self.knowledge_base = knowledge_base
+        "The knowledge base"
+
+        self.theory = theory
+        "The theory"
+
         self.theory_revision_manager = theory_revision_manager
         "The theory revision manager"
+
         self.theory_evaluator = theory_evaluator
         "The theory evaluator"
 
         self.incoming_example_manager = incoming_example_manager
         "The incoming example manager"
 
-    # TODO: implement
     # noinspection PyMissingOrEmptyDocstring
     def required_fields(self):
-        pass
+        return [
+            "knowledge_base", "engine_system_translator", "theory_evaluator",
+            "theory_revision_manager", "incoming_example_manager"
+        ]
+
+    # noinspection PyMissingOrEmptyDocstring
+    def initialize(self):
+        super().initialize()
+
+    # noinspection PyMissingOrEmptyDocstring
+    @property
+    def knowledge_base(self):
+        return self._knowledge_base
+
+    @knowledge_base.setter
+    def knowledge_base(self, value: NeuralLogProgram):
+        self._knowledge_base = value.copy()
+        add_null_atoms(self._knowledge_base)
+        self.engine_system_translator.knowledge_base = value
 
     # noinspection PyMissingOrEmptyDocstring
     @property
@@ -102,7 +126,7 @@ class StructureLearningSystem(Initializable):
     @theory.setter
     def theory(self, value):
         self._theory = value
-        # TODO: update the theory of the engine system translator
+        self.engine_system_translator.theory = value
 
     def revise_theory(self, revision_examples):
         """
