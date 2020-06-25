@@ -3,9 +3,9 @@ Modifies proposed clauses.
 """
 from abc import abstractmethod
 
+import src.structure_learning.structure_learning_system as sls
 from src.knowledge.examples import Examples
 from src.language.language import HornClause
-import src.structure_learning.structure_learning_system as sls
 from src.util import Initializable
 
 
@@ -22,6 +22,10 @@ class ClauseModifier(Initializable):
         :type learning_system: sls.StructureLearningSystem
         """
         self.learning_system = learning_system
+
+    # noinspection PyMissingOrEmptyDocstring
+    def required_fields(self):
+        return ["learning_system"]
 
     @abstractmethod
     def modify_clause(self, clause, examples):

@@ -7,6 +7,7 @@ from abc import abstractmethod
 from collections import Collection, deque
 from typing import Dict, Set, List, Deque, TypeVar
 
+import src.structure_learning.structure_learning_system as sls
 from src.knowledge.examples import Examples, ExampleIterator, ExamplesInferences
 from src.knowledge.program import NeuralLogProgram
 from src.knowledge.theory import TheoryRevisionException
@@ -17,7 +18,6 @@ from src.language.equivalent_clauses import EquivalentClauseAtom, \
     EquivalentHornClause
 from src.language.language import KnowledgeException, Atom, Predicate, \
     HornClause, Term, Number, Literal
-import src.structure_learning.structure_learning_system as sls
 from src.util import Initializable, InitializationException, OrderedSet
 from src.util.clause_utils import apply_substitution, to_variable_atom, \
     may_rule_be_safe, get_non_negated_literals_with_head_variable, \
@@ -317,6 +317,8 @@ class RevisionOperator(Initializable):
     Operator to revise the theory.
     """
 
+    OPTIONAL_FIELDS = {"clause_modifiers": None}
+
     def __init__(self, learning_system=None, theory_metric=None,
                  clause_modifiers=None):
         """
@@ -402,17 +404,29 @@ class BottomClauseBoundedRule(RevisionOperator):
     Conference on Intelligent Systems (BRACIS), Natal, 2015, pp. 240-245.
     """
 
+    OPTIONAL_FIELDS = {
+        "variable_generator": None,
+        "relevant_depth": 0,
+        "refine": False,
+        "maximum_side_way_movements": -1,
+        "improvement_threshold": 0.0,
+        "generic": True,
+        "evaluation_timeout": 300,
+        "number_of_process": 1
+    }
+
     def __init__(self,
                  learning_system=None,
                  theory_metric=None,
+                 clause_modifiers=None,
                  variable_generator=None,
-                 relevant_depth=0,
-                 refine=False,
-                 maximum_side_way_movements=-1,
-                 improvement_threshold=0.0,
-                 generic=True,
-                 evaluation_timeout=300,
-                 number_of_process=1):
+                 relevant_depth=None,
+                 refine=None,
+                 maximum_side_way_movements=None,
+                 improvement_threshold=None,
+                 generic=None,
+                 evaluation_timeout=None,
+                 number_of_process=None):
         """
         Creates a Bottom Clause Bounded Rule operator.
 
@@ -420,24 +434,28 @@ class BottomClauseBoundedRule(RevisionOperator):
         :type learning_system: sls.StructureLearningSystem
         :param theory_metric: the theory metric
         :type theory_metric: TheoryMetric
+        :param clause_modifiers: a clause modifier, a list of clause modifiers
+        or none
+        :type clause_modifiers: ClauseModifier or Collection[ClauseModifier]
+        or None
         :param variable_generator: the variable generator
-        :type variable_generator: VariableGenerator
+        :type variable_generator: Optional[VariableGenerator]
         :param relevant_depth: the relevant depth
-        :type relevant_depth: int
+        :type relevant_depth: Optional[int]
         :param refine: if it is to refine the rules
-        :type refine: bool
+        :type refine: Optional[bool]
         :param maximum_side_way_movements: the maximum side way movements
-        :type maximum_side_way_movements: int
+        :type maximum_side_way_movements: Optional[int]
         :param improvement_threshold: the improvement threshold
-        :type improvement_threshold: float
+        :type improvement_threshold: Optional[float]
         :param generic: if it is to return the most generic rule
-        :type generic: bool
+        :type generic: Optional[bool]
         :param evaluation_timeout: the evaluation timeout, in seconds
-        :type evaluation_timeout: int
+        :type evaluation_timeout: Optional[int]
         :param number_of_process: the number of parallel process
-        :type number_of_process: int
+        :type number_of_process: Optional[int]
         """
-        super().__init__(learning_system, theory_metric)
+        super().__init__(learning_system, theory_metric, clause_modifiers)
 
         self.variable_generator = variable_generator
         "The variable name generator."
@@ -460,12 +478,16 @@ class BottomClauseBoundedRule(RevisionOperator):
         
         If it is negative, atoms at any depth will be considered.  
         """
+        if relevant_depth is None:
+            self.relevant_depth = self.OPTIONAL_FIELDS["relevant_depth"]
 
         self.refine = refine
         """
         It specifies if the rule must be reined by adding literals to it,
         in order to try to improve the rule.
         """
+        if refine is None:
+            self.refine = self.OPTIONAL_FIELDS["refine"]
 
         self.maximum_side_way_movements = maximum_side_way_movements
         """
@@ -480,6 +502,9 @@ class BottomClauseBoundedRule(RevisionOperator):
         wall possible literals will be tried, since it does not degrade the 
         rule.
         """
+        if maximum_side_way_movements is None:
+            self.maximum_side_way_movements = \
+                self.OPTIONAL_FIELDS["maximum_side_way_movements"]
 
         self.improvement_threshold = improvement_threshold
         """
@@ -493,6 +518,9 @@ class BottomClauseBoundedRule(RevisionOperator):
         Use a threshold of `e` and a `maximum_side_way_movements` of `0` to 
         stop as soon as a rule does not improve more than `e`. 
         """
+        if improvement_threshold is None:
+            self.improvement_threshold = \
+                self.OPTIONAL_FIELDS["improvement_threshold"]
 
         self.generic = generic
         """
@@ -506,6 +534,8 @@ class BottomClauseBoundedRule(RevisionOperator):
         instead, this is, the rule whose body has the most number of literals 
         in it. 
         """
+        if generic is None:
+            self.generic = self.OPTIONAL_FIELDS["generic"]
 
         self.evaluation_timeout = evaluation_timeout
         """
@@ -514,6 +544,8 @@ class BottomClauseBoundedRule(RevisionOperator):
         
         By default, it is 300 seconds, or 5 minutes. 
         """
+        if evaluation_timeout is None:
+            self.evaluation_timeout = self.OPTIONAL_FIELDS["evaluation_timeout"]
 
         self.number_of_process = number_of_process
         """
@@ -522,6 +554,8 @@ class BottomClauseBoundedRule(RevisionOperator):
         
         The default is `1`.
         """
+        if number_of_process is None:
+            self.number_of_process = self.OPTIONAL_FIELDS["number_of_process"]
 
     # noinspection PyMissingOrEmptyDocstring
     def initialize(self):
@@ -858,50 +892,74 @@ class CombinedBottomClauseBreadthSearch(CombinedBottomClauseBoundedRule):
     clauses and the `n + 1` last clauses; returning the first `n` clauses.
     """
 
-    def __init__(
-            self, maximum_size=2, strict_to_maximum_size=False,
-            learning_system=None, theory_metric=None, variable_generator=None,
-            relevant_depth=0, refine=False, maximum_side_way_movements=-1,
-            improvement_threshold=0.0, generic=True, evaluation_timeout=300,
-            number_of_process=1):
+    OPTIONAL_FIELDS = CombinedBottomClauseBoundedRule.OPTIONAL_FIELDS
+    OPTIONAL_FIELDS.update({
+        "maximum_size": 2,
+        "strict_to_maximum_size": False
+    })
+
+    def __init__(self,
+                 learning_system=None,
+                 theory_metric=None,
+                 variable_generator=None,
+                 clause_modifiers=None,
+                 relevant_depth=0,
+                 refine=False,
+                 maximum_side_way_movements=-1,
+                 improvement_threshold=0.0,
+                 generic=True,
+                 evaluation_timeout=300,
+                 number_of_process=1,
+                 maximum_size=2,
+                 strict_to_maximum_size=False):
         """
         Creates a Combined Bottom Clause Breadth Search operator.
 
+        :param learning_system: the learning system
+        :type learning_system: sls.StructureLearningSystem
+        :param theory_metric: the theory metric
+        :type theory_metric: TheoryMetric
+        :param clause_modifiers: a clause modifier, a list of clause modifiers
+        or none
+        :type clause_modifiers: ClauseModifier or Collection[ClauseModifier]
+        or None
+        :param variable_generator: the variable generator
+        :type variable_generator: Optional[VariableGenerator]
+        :param relevant_depth: the relevant depth
+        :type relevant_depth: Optional[int]
+        :param refine: if it is to refine the rules
+        :type refine: Optional[bool]
+        :param maximum_side_way_movements: the maximum side way movements
+        :type maximum_side_way_movements: Optional[int]
+        :param improvement_threshold: the improvement threshold
+        :type improvement_threshold: Optional[float]
+        :param generic: if it is to return the most generic rule
+        :type generic: Optional[bool]
+        :param evaluation_timeout: the evaluation timeout, in seconds
+        :type evaluation_timeout: Optional[int]
+        :param number_of_process: the number of parallel process
+        :type number_of_process: Optional[int]
         :param maximum_size: the maximum size of the clauses.
-        :type maximum_size: int
+        :type maximum_size: Optional[int]
         :param strict_to_maximum_size: If `True`, it creates only rules of the
         maximum size. Otherwise, it looks for improvements until one of the
         three criteria is met: (1) the maximum size is reached; (2) the
         theory does not improve over `maximum_side_way_movements` iterations;
         (3) there are no more candidates to test
-        :type strict_to_maximum_size: bool
-        :param learning_system: the learning system
-        :type learning_system: sls.StructureLearningSystem
-        :param theory_metric: the theory metric
-        :type theory_metric: TheoryMetric
-        :param variable_generator: the variable generator
-        :type variable_generator: VariableGenerator
-        :param relevant_depth: the relevant depth
-        :type relevant_depth: int
-        :param refine: if it is to refine the rules
-        :type refine: bool
-        :param maximum_side_way_movements: the maximum side way movements
-        :type maximum_side_way_movements: int
-        :param improvement_threshold: the improvement threshold
-        :type improvement_threshold: float
-        :param generic: if it is to return the most generic rule
-        :type generic: bool
-        :param evaluation_timeout: the evaluation timeout, in seconds
-        :type evaluation_timeout: int
-        :param number_of_process: the number of parallel process
-        :type number_of_process: int
+        :type strict_to_maximum_size: Optional[bool]
         """
-        super().__init__(learning_system, theory_metric, variable_generator,
-                         relevant_depth, refine, maximum_side_way_movements,
-                         improvement_threshold, generic, evaluation_timeout,
-                         number_of_process)
-        self.strict_to_maximum_size = strict_to_maximum_size
+        super().__init__(learning_system, theory_metric, clause_modifiers,
+                         variable_generator, relevant_depth, refine,
+                         maximum_side_way_movements, improvement_threshold,
+                         generic, evaluation_timeout, number_of_process)
         self.maximum_size = maximum_size
+        if maximum_size is None:
+            self.maximum_size = self.OPTIONAL_FIELDS["maximum_size"]
+
+        self.strict_to_maximum_size = strict_to_maximum_size
+        if strict_to_maximum_size is None:
+            self.strict_to_maximum_size = \
+                self.OPTIONAL_FIELDS["strict_to_maximum_size"]
 
     # noinspection PyMissingOrEmptyDocstring
     def perform_operation_for_examples(self, targets, theory):

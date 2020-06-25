@@ -6,7 +6,7 @@ from abc import abstractmethod
 
 from src.structure_learning.structure_learning_system import \
     StructureLearningSystem
-from src.util import Initializable, unset_fields_error, reset_field_error
+from src.util import Initializable, reset_field_error
 
 
 class SampleSelector(Initializable):
@@ -25,9 +25,8 @@ class SampleSelector(Initializable):
         self._learning_system = learning_system
 
     # noinspection PyMissingOrEmptyDocstring
-    def initialize(self):
-        if self.learning_system is None:
-            raise unset_fields_error("learning_system", self)
+    def required_fields(self):
+        return ["learning_system"]
 
     @abstractmethod
     def is_all_relevant(self):
@@ -100,4 +99,4 @@ class AllRelevantSampleSelect(SampleSelector):
 
     # noinspection PyMissingOrEmptyDocstring
     def required_fields(self):
-        return None
+        return []

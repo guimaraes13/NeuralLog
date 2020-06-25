@@ -24,6 +24,8 @@ class IncomingExampleManager(Initializable):
     learning system to revise the theory, whenever it judges its is necessary.
     """
 
+    OPTIONAL_FIELDS = {"sample_selector": None}
+
     def __init__(self, learning_system=None, sample_selector=None):
         """
         Creates the a IncomingExampleManager.

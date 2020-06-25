@@ -23,16 +23,23 @@ class TheoryMetric(Initializable):
     Class to define the theory metric.
     """
 
-    def __init__(self, parameters_retrain=False):
+    OPTIONAL_FIELDS = {
+        "default_value": 0.0,
+        "parameters_retrain": False
+    }
+
+    def __init__(self, parameters_retrain=None):
         """
         Creates a theory metric.
 
         :param parameters_retrain: if `True`, the parameters will be trained
         before each candidate evaluation on this metric.
-        :type parameters_retrain: bool
+        :type parameters_retrain: Optional[bool]
         """
-        self.default_value = 0.0
+        self.default_value = self.OPTIONAL_FIELDS["default_value"]
         self.parameters_retrain = parameters_retrain
+        if parameters_retrain is None:
+            self.parameters_retrain = self.OPTIONAL_FIELDS["parameters_retrain"]
 
     @abstractmethod
     def compute_metric(self, examples, inferred_values):
@@ -172,12 +179,18 @@ class AccumulatorMetric(TheoryMetric, Generic[J, K]):
     K: The type of the value that is accumulated to the initial value.
     """
 
+    OPTIONAL_FIELDS = TheoryMetric.OPTIONAL_FIELDS
+    OPTIONAL_FIELDS.update({
+        "ABSENT_PREDICTION_VALUE": 0.0
+    })
+
     def __init__(self):
         """
         Creates an accumulator metric.
         """
         super().__init__()
-        self.ABSENT_PREDICTION_VALUE = 0.0
+        self.ABSENT_PREDICTION_VALUE = \
+            self.OPTIONAL_FIELDS["ABSENT_PREDICTION_VALUE"]
 
     # noinspection PyMissingOrEmptyDocstring
     def compute_metric(self, examples, inferred_values):
@@ -272,12 +285,18 @@ class ListAccumulator(AccumulatorMetric[Tuple[List[float], List[float]],
     compute curve metrics.
     """
 
+    OPTIONAL_FIELDS = AccumulatorMetric.OPTIONAL_FIELDS
+    OPTIONAL_FIELDS.update({
+        "ABSENT_PREDICTION_VALUE": -sys.float_info.max
+    })
+
     def __init__(self):
         """
         Creates a list accumulator.
         """
         super().__init__()
-        self.ABSENT_PREDICTION_VALUE = -sys.float_info.max
+        self.ABSENT_PREDICTION_VALUE = \
+            self.OPTIONAL_FIELDS["ABSENT_PREDICTION_VALUE"]
         "Value to be used in the absence of the prediction of an example."
 
     # noinspection PyMissingOrEmptyDocstring
@@ -411,12 +430,17 @@ class LogLikelihoodMetric(LikelihoodMetric):
     the complement of the probability of the example is used, instead.
     """
 
+    OPTIONAL_FIELDS = LikelihoodMetric.OPTIONAL_FIELDS
+    OPTIONAL_FIELDS.update({
+        "default_value": -sys.float_info.max
+    })
+
     def __init__(self):
         """
         Creates a log likelihood metric.
         """
         super().__init__()
-        self.default_value = -sys.float_info.max
+        self.default_value = self.OPTIONAL_FIELDS["default_value"]
 
     # noinspection PyMissingOrEmptyDocstring
     def get_range(self):

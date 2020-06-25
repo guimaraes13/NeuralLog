@@ -195,6 +195,8 @@ class Initializable(ABC):
     Interface to allow object to be initialized.
     """
 
+    OPTIONAL_FIELDS = {}
+
     def initialize(self):
         """
         Initializes the object.
@@ -203,6 +205,7 @@ class Initializable(ABC):
         initialization of the object
         """
         logger.debug("Initializing:\t%s", self.__class__.__name__)
+        self._initialize_fields()
         fields = []
         required_fields = self.required_fields()
         if required_fields is None:
@@ -215,6 +218,17 @@ class Initializable(ABC):
         if len(fields) > 0:
             raise unset_fields_error(fields, self)
 
+    def _initialize_fields(self):
+        """
+        Initialize the fields. Since the `__init__` method of a class is not
+        called when it is constructed by the pyyaml library, this method
+        gives an opportunity to initiate the fields of the classes, mainly
+        the ones that are optional and have default values.
+        """
+        for key, value in self.OPTIONAL_FIELDS.items():
+            if not hasattr(self, key):
+                setattr(self, key, value)
+
     @abstractmethod
     def required_fields(self):
         """
@@ -223,7 +237,7 @@ class Initializable(ABC):
         :return: the list of required fields
         :rtype: list[str]
         """
-        pass
+        return []
 
     def __setattr__(self, name: str, value: Any):
         required_fields = self.required_fields()

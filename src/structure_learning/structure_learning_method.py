@@ -10,13 +10,11 @@ from typing import List
 import yaml
 
 from src.knowledge.examples import Examples, ExampleIterator, LimitedIterator
-from src.knowledge.manager.example_manager import IncomingExampleManager, \
-    ReviseAllIncomingExample
+from src.knowledge.manager.example_manager import ReviseAllIncomingExample
 from src.knowledge.program import NeuralLogProgram
 from src.knowledge.theory.evaluation.metric.theory_metric import TheoryMetric, \
     RocCurveMetric, PrecisionRecallCurveMetric, LogLikelihoodMetric
 from src.knowledge.theory.evaluation.theory_evaluator import TheoryEvaluator
-from src.knowledge.theory.manager.revision.clause_modifier import ClauseModifier
 from src.knowledge.theory.manager.revision.operator.revision_operator import \
     BottomClauseBoundedRule
 from src.knowledge.theory.manager.revision.revision_manager import \
@@ -24,7 +22,7 @@ from src.knowledge.theory.manager.revision.revision_manager import \
 from src.knowledge.theory.manager.revision.revision_operator_evaluator import \
     RevisionOperatorEvaluator
 from src.knowledge.theory.manager.revision.revision_operator_selector import \
-    RevisionOperatorSelector, SelectFirstRevisionOperator
+    SelectFirstRevisionOperator
 from src.knowledge.theory.manager.revision.sample_selector import \
     AllRelevantSampleSelect
 from src.knowledge.theory.manager.theory_revision_manager import \
@@ -94,18 +92,20 @@ class StructureLearningMethod(Initializable):
     Class to perform the structure learning.
     """
 
+    OPTIONAL_FIELDS = {"theory_file_paths": ()}
+
     def __init__(self,
                  knowledge_base_file_paths,
                  example_file_paths,
                  output_directory,
-                 theory_file_paths=()):
+                 theory_file_paths=None):
         """
         Creates an structure learning method.
 
         :param knowledge_base_file_paths: the path of the knowledge base files
         :type knowledge_base_file_paths: list[str]
         :param theory_file_paths: the path of the theory files
-        :type theory_file_paths: collections.Iterable
+        :type theory_file_paths: Optional[collections.Iterable[str]]
         :param example_file_paths: the path of example files
         :type example_file_paths: list[str]
         :param output_directory: the output directory
@@ -114,9 +114,18 @@ class StructureLearningMethod(Initializable):
         self.time_measure = TimeMeasure()
         self.time_measure.add_measure(RunTimestamps.BEGIN)
         self.knowledge_base_file_paths = knowledge_base_file_paths
-        self.theory_file_paths = list(theory_file_paths)
+        if not theory_file_paths:
+            self.theory_file_paths = \
+                list(self.OPTIONAL_FIELDS["theory_file_paths"])
         self.example_file_paths = example_file_paths
         self.output_directory = output_directory
+
+    # noinspection PyMissingOrEmptyDocstring
+    def required_fields(self):
+        return [
+            "knowledge_base_file_paths", "example_file_paths",
+            "output_directory"
+        ]
 
     @abstractmethod
     def run(self):
@@ -131,70 +140,88 @@ class BatchStructureLearning(StructureLearningMethod):
     Class to learn the logic program from a batch of examples.
     """
 
+    OPTIONAL_FIELDS = {
+        "theory_file_paths": (),
+        "test_file_paths": (),
+        "load_pre_trained_parameter": False,
+        "examples_batch_size": 1,
+        "pass_all_examples_at_once": False,
+        "train_parameters_on_remaining_examples": False,
+        "theory_revision_manager": None,
+        "theory_evaluator": None,
+        "incoming_example_manager": None,
+        "revision_manager": None,
+        "theory_metrics": None,
+        "revision_operator_selector": None,
+        "revision_operator_evaluators": None,
+        "clause_modifiers": None,
+    }
+
     def __init__(self,
                  knowledge_base_file_paths,
                  example_file_paths,
-                 test_file_paths,
                  output_directory,
-                 load_pre_trained_parameter,
-                 examples_batch_size,
                  engine_system_translator,
-                 theory_revision_manager,
-                 theory_evaluator,
-                 incoming_example_manager,
-                 revision_manager,
-                 theory_metrics,
-                 revision_operator_selector,
-                 revision_operator_evaluators,
-                 theory_file_paths=(),
-                 clause_modifiers=(),
-                 pass_all_examples_at_once=False,
-                 train_parameters_on_remaining_examples=False
+                 theory_file_paths=None,
+                 test_file_paths=None,
+                 load_pre_trained_parameter=None,
+                 examples_batch_size=None,
+                 pass_all_examples_at_once=None,
+                 train_parameters_on_remaining_examples=None,
+                 theory_revision_manager=None,
+                 theory_evaluator=None,
+                 incoming_example_manager=None,
+                 revision_manager=None,
+                 theory_metrics=None,
+                 revision_operator_selector=None,
+                 revision_operator_evaluators=None,
+                 clause_modifiers=None,
                  ):
         """
         Creates a batch structure learning method.
 
-        :type train_parameters_on_remaining_examples: bool
         :param knowledge_base_file_paths: the path of the knowledge base files
         :type knowledge_base_file_paths: list[str]
-        :param theory_file_paths: the path of the theory files
-        :type theory_file_paths: collections.Iterable
         :param example_file_paths: the path of example files
         :type example_file_paths: list[str]
-        :param test_file_paths: the path of test files
-        :type test_file_paths: list[str]
         :param output_directory: the output directory
         :type output_directory: str
-        :param load_pre_trained_parameter: if it is to load the pre-trained
-        parameters
-        :type load_pre_trained_parameter: bool
-        :param examples_batch_size: the example batch size
-        :type examples_batch_size: int
         :param engine_system_translator: the engine system translator
         :type engine_system_translator: EngineSystemTranslator
-        :param theory_revision_manager: the theory revision manager
-        :type theory_revision_manager: TheoryRevisionManager
-        :param theory_evaluator: the theory evaluator
-        :type theory_evaluator: TheoryEvaluator
-        :param incoming_example_manager: the incoming example manager
-        :type incoming_example_manager: IncomingExampleManager
-        :param revision_manager: the revision manager
-        :type revision_manager: RevisionManager
-        :param theory_metrics: the theory metrics
-        :type theory_metrics: list[TheoryMetric]
-        :param revision_operator_selector: the revision operator selector
-        :type revision_operator_selector: RevisionOperatorSelector
-        :param revision_operator_evaluators: the revision operator evaluators
-        :type revision_operator_evaluators: list[RevisionOperatorEvaluator]
-        :param clause_modifiers: a iterable of clause modifiers
-        :type clause_modifiers: collections.Iterable[ClauseModifier]
+        :param theory_file_paths: the path of the theory files
+        :type theory_file_paths: Optional[collections.Iterable[str]]
+        :param test_file_paths: the path of test files
+        :type test_file_paths: Optional[list[str]]
+        :param load_pre_trained_parameter: if it is to load the pre-trained
+        parameters
+        :type load_pre_trained_parameter: Optional[bool]
+        :param examples_batch_size: the example batch size
+        :type examples_batch_size: Optional[int]
         :param pass_all_examples_at_once: if `True`, all the examples will be
         passed to be revised at once; otherwise, will be passed a batch at a
         time
-        :type pass_all_examples_at_once: bool
+        :type pass_all_examples_at_once: Optional[bool]
         :param train_parameters_on_remaining_examples: if `True`, it trains the
         parameters of the engine system translator on the remaining examples
         that were not used on the revision.
+        :type train_parameters_on_remaining_examples: Optional[bool]
+        :param theory_revision_manager: the theory revision manager
+        :type theory_revision_manager: Optional[TheoryRevisionManager]
+        :param theory_evaluator: the theory evaluator
+        :type theory_evaluator: Optional[TheoryEvaluator]
+        :param incoming_example_manager: the incoming example manager
+        :type incoming_example_manager: Optional[IncomingExampleManager]
+        :param revision_manager: the revision manager
+        :type revision_manager: Optional[RevisionManager]
+        :param theory_metrics: the theory metrics
+        :type theory_metrics: Optional[List[TheoryMetric]]
+        :param revision_operator_selector: the revision operator selector
+        :type revision_operator_selector: Optional[RevisionOperatorSelector]
+        :param revision_operator_evaluators: the revision operator evaluators
+        :type revision_operator_evaluators:
+            Optional[List[RevisionOperatorEvaluator]]
+        :param clause_modifiers: a iterable of clause modifiers
+        :type clause_modifiers: Optional[collections.Iterable[ClauseModifier]]
         """
         super(BatchStructureLearning, self).__init__(
             knowledge_base_file_paths,
@@ -202,10 +229,39 @@ class BatchStructureLearning(StructureLearningMethod):
             output_directory,
             theory_file_paths
         )
-        self.test_file_paths = test_file_paths
-        self.load_pre_trained_parameter = load_pre_trained_parameter
-        self.examples_batch_size = examples_batch_size
+
         self.engine_system_translator = engine_system_translator
+
+        self.theory_file_paths = theory_file_paths
+        if not theory_file_paths:
+            self.theory_file_paths = \
+                list(self.OPTIONAL_FIELDS["theory_file_paths"])
+
+        self.test_file_paths = test_file_paths
+        if not test_file_paths:
+            self.test_file_paths = self.OPTIONAL_FIELDS["test_file_paths"]
+
+        self.load_pre_trained_parameter = load_pre_trained_parameter
+        if not load_pre_trained_parameter:
+            self.load_pre_trained_parameter = \
+                self.OPTIONAL_FIELDS["load_pre_trained_parameter"]
+
+        self.examples_batch_size = examples_batch_size
+        if not examples_batch_size:
+            self.examples_batch_size = \
+                self.OPTIONAL_FIELDS["examples_batch_size"]
+
+        self.pass_all_examples_at_once = pass_all_examples_at_once
+        if not pass_all_examples_at_once:
+            self.pass_all_examples_at_once = \
+                self.OPTIONAL_FIELDS["pass_all_examples_at_once"]
+
+        self.train_parameters_on_remaining_examples = \
+            train_parameters_on_remaining_examples
+        if not train_parameters_on_remaining_examples:
+            self.train_parameters_on_remaining_examples = \
+                self.OPTIONAL_FIELDS["train_parameters_on_remaining_examples"]
+
         self.theory_revision_manager = theory_revision_manager
         self.theory_evaluator = theory_evaluator
         self.incoming_example_manager = incoming_example_manager
@@ -213,19 +269,11 @@ class BatchStructureLearning(StructureLearningMethod):
         self.theory_metrics = theory_metrics
         self.revision_operator_selector = revision_operator_selector
         self.revision_operator_evaluators = revision_operator_evaluators
-        self.clause_modifiers: List[ClauseModifier] = list(clause_modifiers)
-        self.pass_all_examples_at_once = pass_all_examples_at_once
-        self.train_parameters_on_remaining_examples = \
-            train_parameters_on_remaining_examples
+        self.clause_modifiers = clause_modifiers
 
     # noinspection PyMissingOrEmptyDocstring
     def required_fields(self):
-        fields = []
-        for field in self.__dict__.keys():
-            if field.endswith("paths"):
-                continue
-            fields.append(field)
-        return fields
+        return super().required_fields() + ["engine_system_translator"]
 
     # noinspection PyMissingOrEmptyDocstring,PyAttributeOutsideInit
     def initialize(self):
@@ -373,14 +421,14 @@ class BatchStructureLearning(StructureLearningMethod):
         """
         Builds the theory metrics.
         """
-        if not hasattr(self, "theory_metrics") or not self.theory_metrics:
+        if not self.theory_metrics:
             self.theory_evaluator = default_theory_metrics()
 
     def build_clause_modifiers(self):
         """
         Builds the clause modifiers.
         """
-        if not hasattr(self, "clause_modifiers"):
+        if self.clause_modifiers is None:
             self.clause_modifiers = []
         else:
             for clause_modifier in self.clause_modifiers:
@@ -406,13 +454,14 @@ class BatchStructureLearning(StructureLearningMethod):
         :rtype: List[RevisionOperatorEvaluator]
         """
         if not self.revision_operator_evaluators:
-            operator_evaluator = default_revision_operator()
+            self.revision_operator_evaluators = default_revision_operator()
         else:
-            operator_evaluator = list(self.revision_operator_evaluators)
-        for operator in operator_evaluator:
+            self.revision_operator_evaluators = \
+                list(self.revision_operator_evaluators)
+        for operator in self.revision_operator_evaluators:
             operator.learning_system = self.learning_system
             operator.clause_modifiers = self.clause_modifiers
-        return operator_evaluator
+        return self.revision_operator_evaluators
 
     def build_incoming_example_manager(self):
         """
@@ -421,9 +470,8 @@ class BatchStructureLearning(StructureLearningMethod):
         # IMPROVE: change the AllRelevantSampleSelect to IndependentSampleSelect
         if self.incoming_example_manager is None:
             self.incoming_example_manager = ReviseAllIncomingExample(
-                self.learning_system, AllRelevantSampleSelect())
-        else:
-            self.incoming_example_manager.learning_system = self.learning_system
+                sample_selector=AllRelevantSampleSelect())
+        self.incoming_example_manager.learning_system = self.learning_system
         self.learning_system.incoming_example_manager = \
             self.incoming_example_manager
 

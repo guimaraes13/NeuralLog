@@ -3,16 +3,16 @@ Manages the revision of the theory.
 """
 import logging
 
+import src.knowledge.theory.manager.revision.revision_examples as revision
+import src.structure_learning.structure_learning_system as sls
 from src.knowledge.theory.evaluation.metric.theory_metric import TheoryMetric, \
     RocCurveMetric
-import src.knowledge.theory.manager.revision.revision_examples as revision
 from src.knowledge.theory.manager.revision.revision_manager import \
     RevisionManager
 from src.knowledge.theory.manager.revision.revision_operator_evaluator import \
     RevisionOperatorEvaluator
 from src.knowledge.theory.manager.revision.revision_operator_selector import \
     RevisionOperatorSelector
-import src.structure_learning.structure_learning_system as sls
 from src.util import Initializable, time_measure
 
 THEORY_CONTENT_MESSAGE = "\n------------------ THEORY -----------------\n%s" \
@@ -31,8 +31,14 @@ class TheoryRevisionManager(Initializable):
     current theory of the system.
     """
 
+    OPTIONAL_FIELDS = {
+        "train_using_all_examples": True,
+        "last_theory_change": 0.0,
+        "theory_evaluation": 0.0
+    }
+
     def __init__(self, learning_system=None, revision_manager=None,
-                 theory_metric=None, train_using_all_examples=True):
+                 theory_metric=None, train_using_all_examples=None):
         """
         Creates a theory revision manager.
 
@@ -45,14 +51,17 @@ class TheoryRevisionManager(Initializable):
         :param train_using_all_examples: if `True`, the model will use all
         the available examples, in the revision examples, for training/learning;
         otherwise, only the relevant examples will be used
-        :type train_using_all_examples: bool
+        :type train_using_all_examples: Optional[bool]
         """
         self.learning_system = learning_system
         self.revision_manager = revision_manager
         self.theory_metric = theory_metric
         self.train_using_all_examples = train_using_all_examples
-        self.last_theory_change = 0.0
-        self.theory_evaluation = 0.0
+        if train_using_all_examples is None:
+            self.train_using_all_examples = \
+                self.OPTIONAL_FIELDS["train_using_all_examples"]
+        self.last_theory_change = self.OPTIONAL_FIELDS["last_theory_change"]
+        self.theory_evaluation = self.OPTIONAL_FIELDS["theory_evaluation"]
 
     # noinspection PyMissingOrEmptyDocstring
     def initialize(self):

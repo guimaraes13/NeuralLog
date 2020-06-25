@@ -17,6 +17,7 @@ EXAMPLES_2 = "kinship_examples_2.pl"
 
 class TestStructureLearning(unittest.TestCase):
 
+    # noinspection PyMissingOrEmptyDocstring
     @classmethod
     def setUpClass(cls) -> None:
         configure_log(LOG_FORMAT, level=logging.DEBUG)
@@ -25,4 +26,6 @@ class TestStructureLearning(unittest.TestCase):
 
     def test_structure_learning(self):
         self.learning_method.initialize()
-        self.learning_method.run()
+        # print(self.learning_method.pass_all_examples_at_once)
+        # print(self.learning_method.train_parameters_on_remaining_examples)
+        # self.learning_method.run()
