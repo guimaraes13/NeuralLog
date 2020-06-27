@@ -635,6 +635,8 @@ class LayerFactory:
                         rows, columns = [0], [0]
                     else:
                         rows, columns = value.nonzero()
+                        if len(data) > len(rows):
+                            data = data[data != 0]
                     if len(shape) == 1:
                         tensor = tf.SparseTensor(
                             indices=list(map(lambda x: list(x), zip(rows))),
@@ -796,9 +798,8 @@ class LayerFactory:
             if atom.provenance is not None:
                 logger.warning(
                     "Warning: there is no fact matching the atom "
-                    "%s at line %d:%d, weight replaced by %d.",
-                    atom, atom.provenance.start_line,
-                    atom.provenance.start_column, weight)
+                    "%s %s, weight replaced by %d.",
+                    atom, atom.provenance, weight)
             else:
                 logger.warning(
                     "Warning: there is no fact matching the atom "
@@ -915,9 +916,8 @@ class LayerFactory:
                     "Warning: attribute predicate with same variable in both "
                     "positions. Since the set of entities and the set of "
                     "numeric values are disjoint, it will return zero weight "
-                    "for any entry for atom: %s at %d:%d.",
-                    atom, atom.provenance.start_line,
-                    atom.provenance.start_column)
+                    "for any entry for atom: %s %s.",
+                    atom, atom.provenance)
             weight = csr_matrix((shape[0], 1), dtype=np.float32)
             w_tensor = self._matrix_to_constant(atom, weight.todense(),
                                                 shape=shape,

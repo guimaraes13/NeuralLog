@@ -16,7 +16,7 @@ from src.language.language import Number, TermType, Predicate, Atom, \
     HornClause, Term, AtomClause, ClauseMalformedException, \
     PredicateTypeError, \
     UnsupportedMatrixRepresentation, Literal, \
-    get_constant_from_string, KnowledgeException
+    get_constant_from_string, KnowledgeException, get_variable_atom
 
 TRUE_PREDICATE = "true"
 FALSE_PREDICATE = "false"
@@ -269,10 +269,9 @@ class TooManyArguments(KnowledgeException):
         :type found: int
         """
         super().__init__(
-            "Too many arguments found for {} at line {} in file {}. "
+            "Too many arguments found for {} {}. "
             "Found {} arguments, the maximum number of arguments "
-            "allowed is {}.".format(clause, clause.provenance.start_line,
-                                    clause.provenance.filename, found,
+            "allowed is {}.".format(clause, clause.provenance, found,
                                     MAX_NUMBER_OF_ARGUMENTS))
 
 
@@ -766,22 +765,24 @@ class NeuralLogProgram:
         self._cached_atoms_by_term: Dict[Term, Set[Atom]] = dict()
         self._cached_neighbours_by_term: Dict[Term, Set[Term]] = dict()
 
+        self.is_up_to_date = False
         # self.add_clauses(clauses)
         # del self._last_atom_for_predicate
         # self.build_program()
 
-    # IMPROVE: keep track if the knowledge base is up-to-date in order to avoid
-    #  rebuilding, whenever possible
     def build_program(self):
         """
         Builds the program after all the clauses had been added.
         """
+        if self.is_up_to_date:
+            return
         self.add_fact(Atom(Predicate(FALSE_PREDICATE), weight=0.0), False)
         self.add_fact(Atom(Predicate(TRUE_PREDICATE), weight=1.0), False)
         self._expand_clauses()
         self._add_specific_parameter("avoid_constant")
         self._get_constants()
         self._add_parameters()
+        self.is_up_to_date = True
 
     def add_clauses(self, clauses, *args, **kwargs):
         """
@@ -795,6 +796,7 @@ class NeuralLogProgram:
         for clause in clauses:
             if isinstance(clause, AtomClause):
                 if self._is_builtin_predicate(clause.atom.predicate):
+                    self.is_up_to_date = False
                     self._process_builtin_clause(clause, *args, **kwargs)
                     continue
 
@@ -807,6 +809,7 @@ class NeuralLogProgram:
                     self._add_predicate(atom)
                 self.clauses_by_predicate.setdefault(clause.head.predicate,
                                                      list()).append(clause)
+                self.is_up_to_date = False
             else:
                 raise ClauseMalformedException(clause)
 
@@ -838,25 +841,23 @@ class NeuralLogProgram:
         old_atom = fact_dict.get(atom.simple_key(), None)
         if report_replacement and old_atom is not None:
             if old_atom.provenance is not None and atom.provenance is not None:
-                logger.warning("Warning: atom %s defined at line %d "
-                               "replaced by Atom %s defined at line %d.",
-                               old_atom, old_atom.provenance.start_line,
-                               atom, atom.provenance.start_line)
+                logger.warning("Warning: atom %s, %s, "
+                               "replaced by Atom %s, %s.",
+                               old_atom, old_atom.provenance,
+                               atom, atom.provenance)
             elif atom.provenance is None:
-                logger.warning("Warning: atom %s defined at line %d "
-                               "replaced by Atom %s.",
-                               old_atom, old_atom.provenance.start_line, atom)
+                logger.warning("Warning: atom %s, %s, replaced by Atom %s.",
+                               old_atom, old_atom.provenance, atom)
             elif old_atom.provenance is None:
-                logger.warning("Warning: atom %s replaced by Atom %s defined at"
-                               " line %d.", old_atom,
-                               atom, atom.provenance.start_line)
+                logger.warning("Warning: atom %s replaced by Atom %s, %s.",
+                               old_atom, atom, atom.provenance)
             else:
                 logger.warning("Warning: atom %s replaced by Atom %s",
                                old_atom, atom)
-
         fact_dict[atom.simple_key()] = atom
         self._update_atoms_by_term(atom)
         self.logic_predicates.add(atom.predicate)
+        self.is_up_to_date = atom == old_atom
 
     def _update_atoms_by_term(self, atom):
         """
@@ -1022,6 +1023,19 @@ class NeuralLogProgram:
                 for literal in clause.body:
                     self._find_term_type(literal, term_types)
                 type_sets += list(term_types.values())
+        examples_predicates = set()
+        for examples in self.examples.values():
+            examples_predicates.update(examples.keys())
+        for mega_examples in self.mega_examples.values():
+            for examples in mega_examples.values():
+                examples_predicates.update(examples.keys())
+        for predicate in examples_predicates:
+            if predicate in self.clauses_by_predicate:
+                continue
+            atom = get_variable_atom(predicate)
+            term_types = dict()
+            self._find_term_type(atom, term_types)
+            type_sets += list(term_types.values())
         return _join_sets_with_common_elements(type_sets)
 
     def _find_term_type(self, atom, term_types):
@@ -1144,6 +1158,8 @@ class NeuralLogProgram:
         :return: the index of the constant
         :rtype: int
         """
+        if term_index < 0:
+            term_index = predicate.arity + term_index
         # noinspection PyTypeChecker
         return self.iterable_constants_per_term[
             (predicate, term_index)].inverse.get(constant, None)
@@ -1473,6 +1489,8 @@ class NeuralLogProgram:
 
         example_set = kwargs.get("example_set", NO_EXAMPLE_SET)
         self.add_example(atom, example_set)
+        self._add_predicate(atom)
+        self.logic_predicates.add(atom.predicate)
 
     def add_examples(
             self, examples, example_set=NO_EXAMPLE_SET, log_override=True):
@@ -1508,13 +1526,9 @@ class NeuralLogProgram:
         if log_override:
             old_atom = example_dict.get(key, None)
             if old_atom is not None:
-                logger.warning("Warning: example %s defined in file %s at line "
-                               "%d replaced by Example %s defined in file %s "
-                               "at  line %d.",
-                               old_atom, old_atom.provenance.filename,
-                               old_atom.provenance.start_line,
-                               atom, atom.provenance.filename,
-                               atom.provenance.start_line)
+                logger.warning("Warning: example %s, %s, replaced by example "
+                               "%s, %s.", old_atom, old_atom.provenance,
+                               atom, atom.provenance)
         example_dict[key] = atom
 
     # noinspection PyUnusedLocal,DuplicatedCode
@@ -1540,6 +1554,8 @@ class NeuralLogProgram:
         example_dict = example_dict.setdefault(example_id, OrderedDict())
         example_dict = example_dict.setdefault(atom.predicate, [])
         example_dict.append(atom)
+        self._add_predicate(atom)
+        self.logic_predicates.add(atom.predicate)
 
     # noinspection PyUnusedLocal
     @builtin("learn")
@@ -1722,6 +1738,8 @@ class NeuralLogProgram:
         program._parameters_to_add = list(self._parameters_to_add)
         program._last_atom_for_predicate = dict(self._last_atom_for_predicate)
 
+        program.is_up_to_date = self.is_up_to_date
+
         return program
 
     def __repr__(self):
@@ -1729,9 +1747,9 @@ class NeuralLogProgram:
         for predicate in sorted(self.clauses_by_predicate.keys(),
                                 key=lambda x: x.__str__()):
             for clause in self.clauses_by_predicate[predicate]:
-                message += str(clause)
+                message += str(clause) + "\n"
 
-        return message
+        return message.strip()
 
     def get_atoms_with_term(self, term):
         """

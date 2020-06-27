@@ -27,6 +27,7 @@ SAVED_MODEL_FILE_NAME = "saved_model"
 
 TEMPORARY_SET_NAME = "__temporary_set__"
 ALL_TERMS_NAME = "__all_terms__"
+NULL_SET_NAME = "__null_set__"
 
 
 def append_theory(program, theory):
@@ -63,6 +64,8 @@ def convert_predictions(model, dataset):
     empty_entry = None
     for features, _ in dataset:
         y_scores = model.predict(features)
+        if y_scores is None:
+            continue
         if len(model.predicates) == 1:
             y_scores = [y_scores]
             if model.predicates[0][0].arity < 3:
@@ -71,17 +74,17 @@ def convert_predictions(model, dataset):
             # Iterate over predicates
             predicate, inverted = model.predicates[i]
             null_index = neural_program.get_index_of_constant(
-                predicate, -1, sls.NULL_ENTITY)
+                predicate, predicate.arity - 1, sls.NULL_ENTITY)
             if inverted:
                 continue
             row_scores = y_scores[i]
             if len(row_scores.shape) == 3:
                 row_scores = np.squeeze(row_scores, axis=1)
             initial_offset = sum(model.input_sizes[:i])
-            null_score = float(row_scores[null_index])
             for j in range(len(row_scores)):
                 # iterates over subjects
-                if predicate.arity == 1 and null_score >= float(row_scores[j]):
+                if predicate.arity == 1 and \
+                        float(row_scores[null_index]) >= float(row_scores[j]):
                     continue
                 y_score = row_scores[j]
                 x = []
@@ -114,8 +117,8 @@ def convert_predictions(model, dataset):
                     atom = Atom(predicate, subjects[0], weight=float(y_score))
                     inferences.add_inference(atom)
                 else:
-                    null_index = neural_program.get_constant_by_index(
-                        predicate, -1, sls.NULL_ENTITY)
+                    # null_index = neural_program.get_index_of_constant(
+                    #     predicate, -1, sls.NULL_ENTITY)
                     null_score = float(y_score[null_index])
                     for index in range(len(y_score)):
                         atom_score = float(y_score[index])
@@ -268,15 +271,19 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
     A engine system translator for the NeuralLog language.
     """
 
+    OPTIONAL_FIELDS = {"batch_size": 16}
+
     def __init__(self):
         super().__init__()
         self.saved_trainer: Optional[Trainer] = None
         self.current_trainer: Optional[Trainer] = None
+        self.batch_size = self.OPTIONAL_FIELDS["batch_size"]
 
     # noinspection PyMissingOrEmptyDocstring
     @EngineSystemTranslator.knowledge_base.setter
     def knowledge_base(self, value: NeuralLogProgram):
         self._knowledge_base = value.copy()
+        self.knowledge_base.parameters.setdefault("inverse_relations", False)
         self._build_model()
 
     # noinspection PyMissingOrEmptyDocstring
@@ -291,6 +298,7 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
 
     # noinspection PyMissingOrEmptyDocstring
     def initialize(self):
+        super().initialize()
         self._build_model()
 
     def _build_model(self):
@@ -302,13 +310,12 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
         self.saved_trainer.init_model()
         self.current_trainer = self.saved_trainer
 
-    # IMPROVE: avoid rebuilding the program and the network whenever possible
     # noinspection PyMissingOrEmptyDocstring
     def infer_examples(self, examples, retrain=False, theory=None):
         trainer = self.get_trainer(examples, theory)
 
         dataset = trainer.build_dataset()
-        dataset = dataset.get_dataset(TEMPORARY_SET_NAME)
+        dataset = dataset.get_dataset(TEMPORARY_SET_NAME, self.batch_size)
         if retrain:
             trainer.compile_module()
             trainer.fit(dataset)
@@ -328,14 +335,18 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
         """
         program = self.knowledge_base.copy()
         program.add_examples(examples, TEMPORARY_SET_NAME)
+        for predicate in examples:
+            null_atom = sls.build_null_atom(program, predicate)
+            program.add_example(null_atom, NULL_SET_NAME, False)
         if theory is None:
             theory = self.theory
         append_theory(program, theory)
         program.build_program()
-        trainer = Trainer(program, None)
+        trainer = Trainer(program, self.output_path)
         trainer.init_model()
         trainer.model.build_layers(
             map(lambda x: (x, False), examples.keys()))
+        trainer.read_parameters()
         return trainer
 
     # noinspection PyMissingOrEmptyDocstring
@@ -347,7 +358,10 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
     # noinspection PyMissingOrEmptyDocstring
     def inferred_relevant(self, terms):
         self._update_example_terms()
+        self.saved_trainer.read_parameters()
         dataset = self.saved_trainer.neural_dataset.get_dataset(ALL_TERMS_NAME)
+        if dataset is None:
+            return set()
         inferences = convert_predictions(self.saved_trainer.model, dataset)
         examples = self.knowledge_base.examples.get(ALL_TERMS_NAME, Examples())
         results = set()
@@ -379,13 +393,12 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
 
     # noinspection PyMissingOrEmptyDocstring
     def train_parameters(self, training_examples):
-        # IMPROVE: check if the program is up to date
-        # IMPROVE: clean the examples after training
         trainer = self.get_trainer(training_examples)
         trainer.compile_module()
-        dataset = trainer.build_dataset()
-        dataset = dataset.get_dataset(TEMPORARY_SET_NAME)
-        trainer.fit(dataset)
+        if trainer.model.has_trainable_parameters:
+            dataset = trainer.build_dataset()
+            dataset = dataset.get_dataset(TEMPORARY_SET_NAME)
+            trainer.fit(dataset)
         self.current_trainer = trainer
 
     # noinspection PyMissingOrEmptyDocstring
@@ -410,7 +423,7 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
     # noinspection PyMissingOrEmptyDocstring
     def load_parameters(self, working_directory):
         logger.debug(
-            "Saving the trained model from path:\t%s", working_directory)
+            "Loading the trained model from path:\t%s", working_directory)
         knowledge_base_path = \
             os.path.join(working_directory, KNOWLEDGE_BASE_FILE_NAME)
         theory_path = os.path.join(working_directory, THEORY_FILE_NAME)

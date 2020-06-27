@@ -2,7 +2,7 @@
 The metrics to evaluate the system on examples.
 """
 
-from typing import TypeVar, Generic, List, Tuple
+from typing import TypeVar, Generic, List, Tuple, Dict, Any
 
 import sklearn
 
@@ -23,8 +23,7 @@ class TheoryMetric(Initializable):
     Class to define the theory metric.
     """
 
-    OPTIONAL_FIELDS = {
-        "default_value": 0.0,
+    OPTIONAL_FIELDS: Dict[str, Any] = {
         "parameters_retrain": False
     }
 
@@ -36,10 +35,14 @@ class TheoryMetric(Initializable):
         before each candidate evaluation on this metric.
         :type parameters_retrain: Optional[bool]
         """
-        self.default_value = self.OPTIONAL_FIELDS["default_value"]
         self.parameters_retrain = parameters_retrain
         if parameters_retrain is None:
             self.parameters_retrain = self.OPTIONAL_FIELDS["parameters_retrain"]
+
+    # noinspection PyMissingOrEmptyDocstring
+    @property
+    def default_value(self):
+        return 0.0
 
     @abstractmethod
     def compute_metric(self, examples, inferred_values):
@@ -142,7 +145,7 @@ class TheoryMetric(Initializable):
         pass
 
     def __eq__(self, other):
-        if self == other:
+        if id(self) == id(other):
             return True
 
         if not isinstance(other, TheoryMetric):
@@ -151,8 +154,7 @@ class TheoryMetric(Initializable):
         if self.__class__.__name__ != other.__class__.__name__:
             return False
 
-        if self.parameters_retrain != \
-                other.parameters_retrain:
+        if self.parameters_retrain != other.parameters_retrain:
             return False
 
         return self.default_value == other.default_value
@@ -335,6 +337,19 @@ class ListAccumulator(AccumulatorMetric[Tuple[List[float], List[float]],
         pass
 
 
+def append_default_values(*results):
+    """
+    Appends a positive and a negative example to results in order to
+    avoid the error of the curve not being defined for only one class.
+
+    :param results: the true and predicted results
+    :type results: List
+    """
+    for result in results:
+        result.append(0.0)
+        result.append(1.0)
+
+
 class RocCurveMetric(ListAccumulator):
     """
     Computes the area under the ROC curve.
@@ -342,6 +357,7 @@ class RocCurveMetric(ListAccumulator):
 
     # noinspection PyMissingOrEmptyDocstring
     def calculate_result(self, result):
+        append_default_values(*result)
         return sklearn.metrics.roc_auc_score(*result)
 
     def __repr__(self):
@@ -355,8 +371,7 @@ class PrecisionRecallCurveMetric(ListAccumulator):
 
     # noinspection PyMissingOrEmptyDocstring
     def calculate_result(self, result):
-        precision, recall, _ = sklearn.metrics.precision_recall_curve(*result)
-        return sklearn.metrics.auc(precision, recall)
+        return sklearn.metrics.average_precision_score(*result)
 
     def __repr__(self):
         return "PR Curve"
@@ -406,6 +421,9 @@ class LikelihoodMetric(AccumulatorMetric[float, float]):
 
     # noinspection PyMissingOrEmptyDocstring
     def calculate_value(self, example, prediction):
+        if prediction is None:
+            prediction = 0.0
+        prediction = max(min(0.0, prediction), 1.0)
         if abs(example.weight - 1.0) > self.EPSILON:
             prediction = 1.0 - prediction
         return max(prediction, self.EPSILON)
@@ -430,17 +448,16 @@ class LogLikelihoodMetric(LikelihoodMetric):
     the complement of the probability of the example is used, instead.
     """
 
-    OPTIONAL_FIELDS = LikelihoodMetric.OPTIONAL_FIELDS
-    OPTIONAL_FIELDS.update({
-        "default_value": -sys.float_info.max
-    })
-
     def __init__(self):
         """
         Creates a log likelihood metric.
         """
         super().__init__()
-        self.default_value = self.OPTIONAL_FIELDS["default_value"]
+
+    # noinspection PyMissingOrEmptyDocstring
+    @property
+    def default_value(self):
+        return -sys.float_info.max
 
     # noinspection PyMissingOrEmptyDocstring
     def get_range(self):

@@ -3,6 +3,7 @@ Define the classes to represent the knowledge of the system.
 """
 
 import re
+from abc import ABC, abstractmethod
 from collections import Collection
 
 TRAINABLE_KEY = "$"
@@ -272,9 +273,19 @@ class BadArgumentException(KnowledgeException):
         super().__init__("Expected a number or a term, got {}.".format(value))
 
 
-class ClauseProvenance:
+class ClauseProvenance(ABC):
     """
     Represents the provenance of the clause in the input file.
+    """
+
+    @abstractmethod
+    def __repr__(self):
+        pass
+
+
+class FileDefinedClause(ClauseProvenance):
+    """
+    Represents the provenance of a clause defined in a file.
     """
 
     def __init__(self, start_line, filename):
@@ -289,10 +300,9 @@ class ClauseProvenance:
         self.start_line = start_line
         self.filename = filename
 
-    def __str__(self):
-        return "line {} in file {}".format(self.start_line, self.filename)
-
-    __repr__ = __str__
+    def __repr__(self):
+        return "defined at line {} in file {}".format(
+            self.start_line, self.filename)
 
 
 class UnsupportedMatrixRepresentation(Exception):
@@ -863,7 +873,7 @@ def format_horn_clause(head, body):
     :return: the formatted Horn clause
     :rtype: str
     """
-    body = Literal(Atom("true")) if body is None else body
+    body = Literal(Atom("true")) if not body else body
     return "{} {} {}{}".format(
         head, IMPLICATION_SIGN,
         ", ".join(map(lambda x: str(x), body)), END_SIGN)

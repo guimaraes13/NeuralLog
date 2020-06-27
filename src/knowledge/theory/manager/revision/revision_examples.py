@@ -120,7 +120,7 @@ class RevisionExamples:
         """
         Clears the values of the inferred examples.
         """
-        self.relevant_examples.clear()
+        self.inferred_values.clear()
         self.not_evaluated_examples.update(self.relevant_examples)
 
     def is_empty(self):

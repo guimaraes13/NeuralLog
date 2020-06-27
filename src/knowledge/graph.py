@@ -679,12 +679,11 @@ class RuleGraph:
             conflict_literal = self.is_path_valid(path)
             if conflict_literal is not None:
                 logger.warning(
-                    "Warning: path %s, found in clause %s defined in file %s "
-                    "at line %d was discarded since it passes through a "
-                    "literal in the opposite direction of a previously "
-                    "added path. The literal that caused the conflict was %s.",
-                    path, self.clause, self.clause.provenance.filename,
-                    self.clause.provenance.start_line, conflict_literal
+                    "Warning: path %s, found in clause %s %s was discarded "
+                    "since it passes through a literal in the opposite "
+                    "direction of a previously added path. The literal that "
+                    "caused the conflict was %s.",
+                    path, self.clause, self.clause.provenance, conflict_literal
                 )
                 continue
 

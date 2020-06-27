@@ -9,3 +9,4 @@ src/language/parser/ply/parser.out
 /src/test
 .DS_Store
 venv
+/test/structure_learning/data/

@@ -106,7 +106,15 @@ class StructureLearningSystem(Initializable):
     # noinspection PyMissingOrEmptyDocstring
     def initialize(self):
         super().initialize()
-        self.engine_system_translator.initialize()
+
+        self.theory_revision_manager.learning_system = self
+        self.theory_revision_manager.initialize()
+
+        self.theory_evaluator.learning_system = self
+        self.theory_evaluator.initialize()
+
+        self.incoming_example_manager.learning_system = self
+        self.incoming_example_manager.initialize()
 
     # noinspection PyMissingOrEmptyDocstring
     @property

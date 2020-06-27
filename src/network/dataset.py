@@ -568,6 +568,8 @@ class DefaultDataset(NeuralLogDataset):
         features, labels = self.build(example_set=example_set)
         # noinspection PyTypeChecker
         dataset_size = len(features[0])
+        if not dataset_size:
+            return None
         dataset = tf.data.Dataset.from_tensor_slices((features, labels))
         if shuffle:
             dataset = dataset.shuffle(dataset_size)

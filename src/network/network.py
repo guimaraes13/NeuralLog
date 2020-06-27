@@ -22,7 +22,8 @@ from src.network.network_functions import get_literal_function, \
     get_combining_function, FactLayer, \
     InvertedFactLayer, SpecificFactLayer, LiteralLayer, FunctionLayer, \
     AnyLiteralLayer, RuleLayer, ExtractUnaryLiteralLayer, DiagonalRuleLayer, \
-    EmptyLayer, get_literal_layer, GraphRuleLayer, NeuralLogLoss
+    EmptyLayer, get_literal_layer, GraphRuleLayer, NeuralLogLoss, \
+    SizedEmptyLayer
 
 # WARNING: Do not support literals with same variable in the head of rules.
 # WARNING: Do not support constants in the head of rules.
@@ -180,19 +181,11 @@ def log_equivalent_clause(current_clause, older_clause):
     if logger.isEnabledFor(logging.WARNING):
         if older_clause is None:
             return
-        start_line = current_clause.provenance.start_line
-        clause_filename = current_clause.provenance.filename
 
-        old_start_line = older_clause.provenance.start_line
-        old_clause_filename = older_clause.provenance.filename
         logger.warning(
-            "Warning: clause `%s`, defined in file: %s "
-            "at %d ignored. The clause has already been "
-            "defined in in file: %s at %d.",
-            current_clause, clause_filename,
-            start_line,
-            old_clause_filename,
-            old_start_line
+            "Warning: clause `%s`, %s, was ignored. The clause has already "
+            "been found, %s.",
+            current_clause, current_clause.provenance, older_clause.provenance
         )
 
 
@@ -408,7 +401,9 @@ class NeuralLogNetwork(keras.Model):
             self.predicates.append((predicate, inverted))
             self.predicate_layers.append(predicate_layer)
 
-        if len(self.predicate_layers) == 1:
+        if len(self.predicate_layers) == 0:
+            self.call = self.call_no_input
+        elif len(self.predicate_layers) == 1:
             self.call = self.call_single_input
         else:
             # noinspection PyAttributeOutsideInit
@@ -430,6 +425,10 @@ class NeuralLogNetwork(keras.Model):
         combining_function = self.program.get_parameter_value(
             "unary_literal_extraction_function", predicate)
         return get_combining_function(combining_function)
+
+    # noinspection PyMissingOrEmptyDocstring,PyUnusedLocal,PyMethodMayBeStatic
+    def call_no_input(self, inputs, training=None, mask=None):
+        return None
 
     # noinspection PyMissingOrEmptyDocstring,PyUnusedLocal
     def call_single_input(self, inputs, training=None, mask=None):
@@ -530,6 +529,17 @@ class NeuralLogNetwork(keras.Model):
                 inputs.append(rule)
         else:
             inputs = [self.empty_layer]
+
+        if len(inputs) == 0:
+            # There is not rules or facts for the literal.
+            # This case may only happen for input/target literals
+            name = "sized_empty_{}".format(
+                get_standardised_name(renamed_literal.__str__()))
+            size = (
+                self.program.get_constant_size(renamed_literal.predicate, 0),
+                self.program.get_constant_size(
+                    renamed_literal.predicate, renamed_literal.arity() - 1))
+            inputs = [SizedEmptyLayer(name, size[-1])]
 
         combining_func = self.get_literal_combining_function(renamed_literal)
         negation_function = None
@@ -815,6 +825,17 @@ class NeuralLogNetwork(keras.Model):
         combining_function = self.program.get_parameter_value(
             "invert_fact_function", literal.predicate)
         return get_combining_function(combining_function)
+
+    @property
+    def has_trainable_parameters(self):
+        """
+        Returns `True`, if the model has trainable parameters.
+
+        :return: `True`, if the model has trainable parameters; otherwise,
+        `False`
+        :rtype: bool
+        """
+        return bool(self.layer_factory.variable_cache)
 
     # noinspection PyTypeChecker
     def update_program(self, program=None):

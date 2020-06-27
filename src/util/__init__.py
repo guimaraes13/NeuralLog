@@ -19,10 +19,10 @@ class OrderedSet(set):
     _T = TypeVar('_T')
     _S = TypeVar('_S')
 
-    def __init__(self, iterable: Iterable[_T] = ...) -> None:
+    def __init__(self, *iterable: Iterable[_T]) -> None:
         super().__init__()
         self._list = []
-        self.update(iterable)
+        self.update(*iterable)
 
     def add(self, element: _T) -> None:
         if element not in self:
@@ -188,8 +188,6 @@ class InitializationException(Exception):
         super().__init__(message)
 
 
-# IMPROVE: Try a way of calling the __init__ method of the objects created from
-#  the yaml
 class Initializable(ABC):
     """
     Interface to allow object to be initialized.

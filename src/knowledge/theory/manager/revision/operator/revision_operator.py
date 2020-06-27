@@ -5,7 +5,7 @@ import itertools
 import logging
 from abc import abstractmethod
 from collections import Collection, deque
-from typing import Dict, Set, List, Deque, TypeVar
+from typing import Dict, Set, List, Deque, TypeVar, Any
 
 import src.structure_learning.structure_learning_system as sls
 from src.knowledge.examples import Examples, ExampleIterator, ExamplesInferences
@@ -17,7 +17,7 @@ from src.knowledge.theory.manager.revision.clause_modifier import ClauseModifier
 from src.language.equivalent_clauses import EquivalentClauseAtom, \
     EquivalentHornClause
 from src.language.language import KnowledgeException, Atom, Predicate, \
-    HornClause, Term, Number, Literal
+    HornClause, Term, Number, Literal, ClauseProvenance
 from src.util import Initializable, InitializationException, OrderedSet
 from src.util.clause_utils import apply_substitution, to_variable_atom, \
     may_rule_be_safe, get_non_negated_literals_with_head_variable, \
@@ -180,7 +180,7 @@ def build_minimal_safe_equivalent_clauses(bottom_clause):
     queue.append(EquivalentHornClause(bottom_clause.head))
     for _ in range(len(candidate_literals)):
         append_all_candidates_to_queue(queue, candidate_literals)
-        safe_clauses = set(map(lambda x: is_rule_safe(x), queue))
+        safe_clauses = set(filter(lambda x: is_rule_safe(x.horn_clause), queue))
         if safe_clauses:
             return safe_clauses
 
@@ -312,12 +312,37 @@ def my_cmp_to_key(my_cmp, key):
     return K
 
 
+class LearnedClause(ClauseProvenance):
+    """
+    Represents the provenance of a clause learned by a revision operator.
+    """
+
+    def __init__(self, creator):
+        self.creator = creator
+        self.modifiers = []
+
+    def add_modifier(self, modifier):
+        """
+        Adds the `modifier` to the list of modifiers.
+
+        :param modifier: the modifier
+        :type modifier: Any
+        """
+        self.modifiers.append(modifier)
+
+    def __repr__(self):
+        message = "create by {}".format(self.creator)
+        if self.modifiers:
+            message += " modifier by: {}".format(", ".join(self.modifiers))
+        return message
+
+
 class RevisionOperator(Initializable):
     """
     Operator to revise the theory.
     """
 
-    OPTIONAL_FIELDS = {"clause_modifiers": None}
+    OPTIONAL_FIELDS: Dict[str, Any] = {"clause_modifiers": None}
 
     def __init__(self, learning_system=None, theory_metric=None,
                  clause_modifiers=None):
@@ -344,6 +369,10 @@ class RevisionOperator(Initializable):
             self.clause_modifiers = []
         elif not isinstance(self.clause_modifiers, Collection):
             self.clause_modifiers = [self.clause_modifiers]
+        for clause_modifier in self.clause_modifiers:
+            clause_modifier.learning_system = self.learning_system
+            clause_modifier.initialize()
+        self.theory_metric.initialize()
 
     # noinspection PyMissingOrEmptyDocstring
     @property
@@ -394,6 +423,9 @@ class RevisionOperator(Initializable):
             horn_clause = clause_modifier.modify_clause(horn_clause, targets)
         return horn_clause
 
+    def __repr__(self):
+        return self.__class__.__name__
+
 
 class BottomClauseBoundedRule(RevisionOperator):
     """
@@ -404,16 +436,17 @@ class BottomClauseBoundedRule(RevisionOperator):
     Conference on Intelligent Systems (BRACIS), Natal, 2015, pp. 240-245.
     """
 
-    OPTIONAL_FIELDS = {
+    OPTIONAL_FIELDS = RevisionOperator.OPTIONAL_FIELDS
+    OPTIONAL_FIELDS.update({
         "variable_generator": None,
         "relevant_depth": 0,
         "refine": False,
-        "maximum_side_way_movements": -1,
+        "maximum_side_way_movements": 0,
         "improvement_threshold": 0.0,
         "generic": True,
         "evaluation_timeout": 300,
         "number_of_process": 1
-    }
+    })
 
     def __init__(self,
                  learning_system=None,
@@ -574,11 +607,15 @@ class BottomClauseBoundedRule(RevisionOperator):
         try:
             logger.info("Performing operation on\t%d examples.", targets.size())
             theory = self.learning_system.theory.copy()
-            self.add_null_examples(targets)
-            inferred_examples = self.learning_system.infer_examples(targets)
+            inferred_examples = None
             for example in ExampleIterator(targets):
-                self.perform_operation_for_example(
+                if inferred_examples is None:
+                    inferred_examples = self.learning_system.infer_examples(
+                        targets, theory)
+                updated = self.perform_operation_for_example(
                     example, theory, targets, inferred_examples)
+                if updated:
+                    inferred_examples = None
             return theory
         except KnowledgeException as e:
             raise TheoryRevisionException("Error when revising the theory.", e)
@@ -612,6 +649,8 @@ class BottomClauseBoundedRule(RevisionOperator):
         :type targets: Examples
         :param inferred_examples: the inferred value for the examples
         :type inferred_examples: ExamplesInferences
+        :return: `True`, if the theory has changed.
+        :rtype: bool
         """
         try:
             if not is_positive(example) or \
@@ -628,11 +667,14 @@ class BottomClauseBoundedRule(RevisionOperator):
             horn_clause = \
                 self.build_rule_from_bottom_clause(targets, bottom_clause)
             horn_clause = self.apply_clause_modifiers(horn_clause, targets)
-            theory.add_clauses(horn_clause)
+            horn_clause.provenance = LearnedClause(self)
+            theory.add_clauses([horn_clause])
             theory.build_program()
             logger.info("Rule appended to the theory:\t%s", horn_clause)
+            return True
         except (KnowledgeException, InitializationException):
             logger.exception("Error when revising the example, reason:")
+        return False
 
     def build_bottom_clause(self, example):
         """
@@ -648,13 +690,14 @@ class BottomClauseBoundedRule(RevisionOperator):
             self.learning_system, not self.refine)
         variable_generator = self.variable_generator.clean_copy()
         variable_map: Dict[Term, Term] = dict()
+        variable_atom = to_variable_atom(
+            example, variable_generator, variable_map)
         body = []
         for atom in relevant_set:
             body.append(Literal(to_variable_atom(
                 atom, variable_generator, variable_map)))
 
-        return HornClause(
-            to_variable_atom(example, variable_generator, variable_map), *body)
+        return HornClause(variable_atom, *body)
 
     def build_rule_from_bottom_clause(self, targets, bottom_clause):
         """
@@ -674,8 +717,7 @@ class BottomClauseBoundedRule(RevisionOperator):
         logger.debug(
             "Evaluating the initial %s theory(es).", len(candidate_clauses))
         best_clause = self.multiprocessing.get_best_clause_from_candidates(
-            candidate_clauses, targets
-        )
+            candidate_clauses, targets)
         if best_clause is None:
             logger.debug(
                 "No minimal safe clause could be evaluated. There are two "
@@ -722,7 +764,7 @@ class BottomClauseBoundedRule(RevisionOperator):
         side_way_movements = 0
         logger.debug("Refining rule:\t%s", initial_clause.horn_clause)
         while not self.is_to_stop_by_side_way_movements(side_way_movements) \
-                and not candidates:
+                and candidates:
             remove_last_literal_equivalent_candidates(
                 candidates, current_clause.element)
             current_clause = self.specify_rule(
@@ -761,7 +803,7 @@ class BottomClauseBoundedRule(RevisionOperator):
         movements; otherwise, `False`
         :rtype: bool
         """
-        return -1 < self.maximum_side_way_movements < side_way_movements
+        return 0 <= self.maximum_side_way_movements < side_way_movements
 
     def specify_rule(self, clause, candidates, targets):
         """
@@ -821,7 +863,7 @@ class CombinedBottomClauseBoundedRule(BottomClauseBoundedRule):
                 new_rule = self.build_rule_from_bottom_clause(
                     targets, bottom_clause)
                 new_rule = self.apply_clause_modifiers(new_rule, examples)
-                theory.add_clauses(new_rule)
+                theory.add_clauses([new_rule])
                 theory.build_program()
                 logger.info("Rule appended to the theory:\t%s", new_rule)
             except TheoryRevisionException as e:
@@ -1000,7 +1042,7 @@ class CombinedBottomClauseBreadthSearch(CombinedBottomClauseBoundedRule):
             candidate_literals, targets, bottom_clause)
         for clause in horn_clauses:
             modified_clause = self.apply_clause_modifiers(clause, targets)
-            theory.add_clauses(modified_clause)
+            theory.add_clauses([modified_clause])
             logger.info("Rule appended to the theory:\t%s", modified_clause)
         theory.build_program()
 

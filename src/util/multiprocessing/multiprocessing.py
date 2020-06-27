@@ -6,6 +6,7 @@ import logging
 # noinspection PyProtectedMember
 from concurrent.futures._base import Future, CancelledError
 from concurrent.futures.process import ProcessPoolExecutor
+from concurrent.futures.thread import ThreadPoolExecutor
 from typing import TypeVar, Generic, Dict, Set
 
 from src.knowledge.examples import Examples
@@ -15,7 +16,8 @@ import src.structure_learning.structure_learning_system as sls
 from src.util import OrderedSet
 from src.util.multiprocessing.evaluation_transformer import \
     AsyncEvaluationTransformer
-from src.util.multiprocessing.theory_evaluation import AsyncTheoryEvaluator
+from src.util.multiprocessing.theory_evaluation import AsyncTheoryEvaluator, \
+    SyncTheoryEvaluator
 
 V = TypeVar('V')
 E = TypeVar('E')
@@ -68,14 +70,14 @@ class MultiprocessingEvaluation(Generic[V, E]):
         :param examples: the examples
         :type examples: Examples
         :param pool: the evaluation pool
-        :type pool: ProcessPoolExecutor
+        :type pool: ProcessPoolExecutor or ThreadPoolExecutor
         :return: the set of futures
         :rtype: Set[Future[AsyncTheoryEvaluator[E]]]
         """
         futures: Set[Future[AsyncTheoryEvaluator[E]]] = OrderedSet()
         for candidate in candidates:
             logger.debug("Submitting candidate:\t%s", candidate)
-            evaluator = AsyncTheoryEvaluator(
+            evaluator = SyncTheoryEvaluator(
                 examples, self.learning_system.theory_evaluator,
                 self.theory_metric, self.evaluation_timeout)
             evaluator = \
@@ -113,14 +115,20 @@ class MultiprocessingEvaluation(Generic[V, E]):
         try:
             logger.info("[ BEGIN ]\tAsynchronous evaluation of %d candidates.",
                         len(candidates))
-            pool = ProcessPoolExecutor(number_of_process)
+            pool = ThreadPoolExecutor(number_of_process)
             futures = self.submit_candidates(candidates, examples, pool)
             pool.shutdown(True)
             logger.info("[  END  ]\tAsynchronous evaluation.")
             best_clause = \
                 self.retrieve_evaluated_candidates(futures, evaluation_map)
             if logger.isEnabledFor(logging.DEBUG):
-                pass
+                sorted_clauses = sorted(
+                    evaluation_map.items(), key=lambda x: -x[1])
+                for clause, evaluation in sorted_clauses:
+                    logger.debug(
+                        "Evaluation: %.3f\twith time: %.3fs\tfor rule:\t%s",
+                        evaluation, clause.real_time, clause.horn_clause
+                    )
         except Exception:
             logger.exception("Error when evaluating the clause, reason:")
 
@@ -129,7 +137,7 @@ class MultiprocessingEvaluation(Generic[V, E]):
     def retrieve_evaluated_candidates(self, futures, evaluation_map=None):
         """
         Retrieves the evaluations from the `Future` `AsyncTheoryEvaluator`s
-        and appends it to the `evaluation_map`, it is not None. Also, returns
+        and appends it to the `evaluation_map`, if it is not None. Also, returns
         the best evaluated Horn clause.
 
         :param futures: the futures

@@ -66,7 +66,7 @@ class EquivalentAtom(Atom):
         if self.terms:
             hash_code = 31 * hash_code + len(self.terms)
             for i in range(len(self.terms)):
-                hash_code = 31 * hash_code + get_item_hash(self.terms[i], i)
+                hash_code = 31 * hash_code + get_item_hash(self.terms, i)
         return hash_code
 
     def __hash__(self):
@@ -174,14 +174,14 @@ class EquivalentHornClause:
         :type next_candidate_index: int
         """
         self.head: Atom = head
-        self.clause_body: Set[Literal] = clause_body or OrderedSet()
+        self.clause_body: Set[Literal] = OrderedSet(clause_body or ())
         self.last_literal: Literal = last_literal
 
         self.substitution_maps: List[Dict[Term, Term]] = list()
-        if substitution_map:
-            self.substitution_maps.append(substitution_map)
+        self.substitution_maps.append(dict(substitution_map or {}))
 
         self.fixed_terms = set()
+        self.fixed_terms.update(self.head.terms)
         for literal in self.clause_body:
             self.fixed_terms.update(literal.terms)
 
@@ -245,15 +245,15 @@ class EquivalentHornClause:
         self.current_candidates = []
         self.current_substitution_maps = []
         if self.fixed_terms.isdisjoint(candidate.terms):
-            lit = apply_substitution(candidate, self.substitution_maps[0])
-            self._test_and_add(lit, filter_function, self.substitution_maps[0])
-        else:
             for substitution_map in self.substitution_maps:
                 for key, value in substitution_map.items():
                     if key in candidate.terms and value in self.fixed_terms:
                         lit = apply_substitution(candidate, substitution_map)
                         self._test_and_add(
                             lit, filter_function, substitution_map)
+        else:
+            lit = apply_substitution(candidate, self.substitution_maps[0])
+            self._test_and_add(lit, filter_function, self.substitution_maps[0])
 
     def processing_substituted_candidates(
             self, skip_atom, skip_clause, horn_clauses, candidate_index):
@@ -279,7 +279,7 @@ class EquivalentHornClause:
             if equivalent_atom is None:
                 substitution_map = dict(self.current_substitution_maps[j])
 
-                current_set = OrderedSet()
+                current_set = OrderedSet(self.clause_body)
                 current_set.add(candidate)
 
                 skip_atom[current_atom] = current_atom
@@ -375,4 +375,4 @@ class EquivalentHornClause:
         return self.substitution_maps == other.substitution_maps
 
     def __repr__(self):
-        format_horn_clause(self.head, self.clause_body)
+        return format_horn_clause(self.head, self.clause_body)

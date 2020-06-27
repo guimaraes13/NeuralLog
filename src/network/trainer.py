@@ -10,7 +10,8 @@ import tensorflow as tf
 from tensorflow.keras.callbacks import ModelCheckpoint
 from tensorflow.python.keras.callbacks import TensorBoard
 
-from src.knowledge.program import get_predicate_from_string, BiDict
+from src.knowledge.program import get_predicate_from_string, BiDict, \
+    NeuralLogProgram
 from src.language.language import Predicate
 from src.network.callbacks import EpochLogger, get_neural_log_callback, \
     AbstractNeuralLogCallback
@@ -112,7 +113,7 @@ class Trainer:
     """
 
     def __init__(self, neural_program, output_path):
-        self.neural_program = neural_program
+        self.neural_program: NeuralLogProgram = neural_program
         self.output_path = output_path
         self.model: Optional[NeuralLogNetwork] = None
         self.parameters: Optional[Dict] = None
@@ -121,7 +122,18 @@ class Trainer:
 
         self.callbacks = []
         self.best_models = dict()
-        self.neural_dataset: Optional[NeuralLogDataset] = None
+        self._neural_dataset: Optional[NeuralLogDataset] = None
+        self._is_parameter_up_to_date = False
+
+    # noinspection PyMissingOrEmptyDocstring
+    @property
+    def neural_dataset(self):
+        self.build_dataset()
+        return self._neural_dataset
+
+    @neural_dataset.setter
+    def neural_dataset(self, value):
+        self._neural_dataset = value
 
     def init_model(self):
         """
@@ -160,6 +172,8 @@ class Trainer:
         """
         Reads the default parameters found in the program
         """
+        if self._is_parameter_up_to_date and self.neural_program.is_up_to_date:
+            return
         self.output_map = self._get_output_map()
         self.parameters = dict(self.neural_program.parameters)
         self.parameters.setdefault(
@@ -175,6 +189,7 @@ class Trainer:
         self.parameters.setdefault("batch_size", DEFAULT_BATCH_SIZE)
         self.parameters.setdefault("epochs", DEFAULT_NUMBER_OF_EPOCHS)
         self.parameters.setdefault("validation_period", DEFAULT_VALID_PERIOD)
+        self._is_parameter_up_to_date = True
 
     def _get_loss_function(self):
         """
@@ -408,8 +423,8 @@ class Trainer:
         :return: the NeuralLog dataset
         :rtype: NeuralLogDataset
         """
-        if self.neural_dataset is not None:
-            return self.neural_dataset
+        if self._neural_dataset is not None:
+            return self._neural_dataset
         inverse_relations = self.parameters.get(
             "inverse_relations", DEFAULT_INVERTED_RELATIONS)
         dataset_class = self.neural_program.parameters["dataset_class"]
@@ -421,8 +436,8 @@ class Trainer:
             class_name = dataset_class
         config["program"] = self.neural_program
         config["inverse_relations"] = inverse_relations
-        self.neural_dataset = get_dataset_class(class_name)(**config)
-        return self.neural_dataset
+        self._neural_dataset = get_dataset_class(class_name)(**config)
+        return self._neural_dataset
 
     def get_dataset(self, name):
         """

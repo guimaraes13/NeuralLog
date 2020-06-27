@@ -732,6 +732,51 @@ class EmptyLayer(NeuralLogLayer):
         return isinstance(other, EmptyLayer)
 
 
+class SizedEmptyLayer(NeuralLogLayer):
+    """
+    Represents an SizedEmptyLayer.
+    """
+
+    def __init__(self, name, output_size, **kwargs):
+        self.output_size = output_size
+        super(SizedEmptyLayer, self).__init__(name, **kwargs)
+
+    # noinspection PyMissingOrEmptyDocstring
+    def call(self, inputs: tf.Tensor, **kwargs):
+        if inputs.shape[0] is None:
+            return inputs
+        n = inputs.shape[0] or 1
+        return tf.constant(0.0, dtype=tf.float32, shape=[n, self.output_size])
+
+    # noinspection PyMissingOrEmptyDocstring
+    def get_config(self):
+        return super(SizedEmptyLayer, self).get_config()
+
+    # noinspection PyMissingOrEmptyDocstring,PyShadowingNames
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
+
+    def is_empty(self):
+        """
+        Checks if a Layer is empty.
+
+        The EmptyLayer is always empty.
+
+        :return: `True`, if the layer is empty; `False`, otherwise
+        :rtype: bool
+        """
+        return True
+
+    def __hash__(self):
+        return hash(("SizedEmpty", self.output_size))
+
+    def __eq__(self, other):
+        if not isinstance(other, SizedEmptyLayer):
+            return False
+        return self.output_size == other.output_size
+
+
 class AbstractFactLayer(NeuralLogLayer):
     """
     Represents an abstract fact layer.
@@ -1357,10 +1402,9 @@ class CyclicRuleException(KnowledgeException):
             message = "Clause `{}` is cyclic. Clauses must not contain " \
                       "cycles.".format(clause)
         else:
-            message = "Clause `{}`, defined in file: `{}` " \
-                      "at {} is cyclic. Clauses must not contain " \
-                      "cycles.".format(clause, clause.provenance.filename,
-                                       clause.provenance.start_line)
+            message = "Clause {}, {}, is cyclic. " \
+                      "Clauses must not contain cycles." \
+                .format(clause, clause.provenance)
         super(CyclicRuleException, self).__init__(message)
 
 

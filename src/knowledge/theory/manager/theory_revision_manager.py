@@ -65,9 +65,12 @@ class TheoryRevisionManager(Initializable):
 
     # noinspection PyMissingOrEmptyDocstring
     def initialize(self):
+        super().initialize()
         if self.theory_metric is None:
             self.theory_metric = DEFAULT_THEORY_METRIC()
-        super().initialize()
+        self.theory_metric.initialize()
+        self.revision_manager.theory_revision_manager = self
+        self.revision_manager.initialize()
 
     # noinspection PyMissingOrEmptyDocstring
     def required_fields(self):
@@ -106,7 +109,8 @@ class TheoryRevisionManager(Initializable):
         operator_evaluator = operator_selector.select_operator(
             examples.get_training_examples(self.train_using_all_examples),
             self.theory_metric)
-        logger.debug("Operator selected for revision:\t%s", operator_evaluator)
+        logger.debug("Operator selected for revision:\t%s",
+                     operator_evaluator.revision_operator)
         if operator_selector is None:
             return False
 
@@ -149,8 +153,8 @@ class TheoryRevisionManager(Initializable):
         improvement = self.theory_metric.difference(
             revised_metric, self.theory_evaluation)
         log_message = "Theory modification skipped due no significant " \
-                      "improvement. Improvement of %f, over %f, " \
-                      "threshold of %f."
+                      "improvement. Improvement of %.3f, over %.3f, " \
+                      "threshold of %.3f."
         theory_changed = False
         if improvement >= improvement_threshold:
             training_examples = examples.get_training_examples(
@@ -163,7 +167,7 @@ class TheoryRevisionManager(Initializable):
                 self.learning_system.save_trained_parameters()
                 operator_evaluator.theory_revision_accepted(revised_theory)
                 log_message = "Theory modification accepted. Improvement of " \
-                              "%d, over %d, threshold of %d."
+                              "%.3f, over %.3f, threshold of %.3f."
                 self.last_theory_change = time_measure.performance_time()
                 theory_changed = True
         logger.debug(log_message, improvement,

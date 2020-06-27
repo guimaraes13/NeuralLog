@@ -17,6 +17,11 @@ class RevisionOperatorEvaluator(Initializable):
     Class responsible for evaluating the revision operator.
     """
 
+    OPTIONAL_FIELDS = {
+        "updated_theory": None,
+        "is_revised": False
+    }
+
     def __init__(self, revision_operator=None):
         """
         Creates a revision operator evaluator.
@@ -25,8 +30,8 @@ class RevisionOperatorEvaluator(Initializable):
         :type revision_operator: RevisionOperator or None
         """
         self.revision_operator = revision_operator
-        self.updated_theory = None
-        self.is_revised = False
+        self.updated_theory = self.OPTIONAL_FIELDS["updated_theory"]
+        self.is_revised = self.OPTIONAL_FIELDS["is_revised"]
 
     # noinspection PyMissingOrEmptyDocstring
     def initialize(self):
@@ -48,7 +53,7 @@ class RevisionOperatorEvaluator(Initializable):
         :return: the evaluation of the operator
         :rtype: float
         """
-        if self.is_revised:
+        if not self.is_revised:
             self.updated_theory = \
                 self.revision_operator.perform_operation(examples)
             self.is_revised = True

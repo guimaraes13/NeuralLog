@@ -11,7 +11,7 @@ import ply.yacc as yacc
 
 from src.language.language import Atom, Predicate, TemplatePredicate, Number, \
     Quote, TemplateTerm, Variable, Constant, Literal, HornClause, AtomClause, \
-    ClauseProvenance, BadArgumentException, Clause
+    BadArgumentException, Clause, FileDefinedClause
 from src.language.parser.neural_log_listener import KeyDict, \
     BadClauseException, PLACE_HOLDER, ground_placeholders, solve_place_holders
 
@@ -323,7 +323,7 @@ class NeuralLogParser:
         arity = len(atom_terms)
         predicate = self.build_predicate_from_parts(predicate, arity)
 
-        provenance = ClauseProvenance(start_line, self.filename)
+        provenance = FileDefinedClause(start_line, self.filename)
         return Atom(predicate, *atom_terms, provenance=provenance)
 
     def build_term_from_parts(self, parts):
@@ -588,12 +588,12 @@ class NeuralLogParser:
 
     def p_horn_clause(self, p):
         """horn_clause : atom IMPLICATION_SIGN body"""
-        provenance = ClauseProvenance(p.lineno(1), self.filename)
+        provenance = FileDefinedClause(p.lineno(1), self.filename)
         p[0] = HornClause(p[1], *p[3], provenance=provenance)
 
     def p_e_horn_clause(self, p):
         """horn_clause : atom IMPLICATION_SIGN"""
-        provenance = ClauseProvenance(p.lineno(1), self.filename)
+        provenance = FileDefinedClause(p.lineno(1), self.filename)
         p[0] = HornClause(p[1], provenance=provenance)
 
     def p_predicate(self, p):

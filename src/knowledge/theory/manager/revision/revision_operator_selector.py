@@ -5,6 +5,7 @@ import logging
 from abc import abstractmethod, ABC
 from collections import Collection
 
+import src.structure_learning.structure_learning_system as sls
 from src.knowledge.examples import Examples
 from src.knowledge.theory import TheoryRevisionException
 from src.knowledge.theory.evaluation.metric.theory_metric import TheoryMetric
@@ -20,18 +21,28 @@ class RevisionOperatorSelector(Initializable):
     Class responsible for selecting the best suited revision operator.
     """
 
-    def __init__(self, operator_evaluators=None):
+    def __init__(self, learning_system=None, operator_evaluators=None):
         """
         Creates a revision operator selector.
 
+        :param learning_system: the learning system
+        :type learning_system: sls.StructureLearningSystem
         :param operator_evaluators: the operator evaluators
         :type operator_evaluators: Collection[RevisionOperatorEvaluator] or None
         """
+        self.learning_system = learning_system
         self.operator_evaluators = operator_evaluators
 
     # noinspection PyMissingOrEmptyDocstring
+    def initialize(self):
+        super().initialize()
+        for operator_evaluator in self.operator_evaluators:
+            operator_evaluator.learning_system = self.learning_system
+            operator_evaluator.initialize()
+
+    # noinspection PyMissingOrEmptyDocstring
     def required_fields(self):
-        return ["operator_evaluators"]
+        return ["learning_system", "operator_evaluators"]
 
     @abstractmethod
     def select_operator(self, examples, theory_metric):
@@ -122,6 +133,8 @@ class SingleRevisionOperatorEvaluator(RevisionOperatorEvaluatorSelector):
 
     # noinspection PyMissingOrEmptyDocstring
     def select_operator(self, targets, metric):
+        if self.operator_evaluator is not None:
+            self.operator_evaluator.clear_cached_theory()
         return self.operator_evaluator
 
 

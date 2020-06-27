@@ -88,6 +88,8 @@ class ReviseAllIncomingExample(IncomingExampleManager):
         else:
             size = 1
             revision_examples.add_example(examples)
+        if not size:
+            return
         logger.info("Calling revision with %d examples", size)
         self.learning_system.revise_theory(revision_examples)
 

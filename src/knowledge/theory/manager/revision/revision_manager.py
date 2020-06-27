@@ -38,6 +38,8 @@ class RevisionManager(Initializable):
     # noinspection PyMissingOrEmptyDocstring
     def initialize(self):
         super().initialize()
+        self.operator_selector.learning_system = \
+            self.theory_revision_manager.learning_system
         self.operator_selector.initialize()
 
     # noinspection PyMissingOrEmptyDocstring,PyMethodMayBeStatic
