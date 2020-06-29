@@ -2,6 +2,7 @@
 Manages the revision of the theory.
 """
 import logging
+import math
 
 import src.knowledge.theory.manager.revision.revision_examples as revision
 import src.structure_learning.structure_learning_system as sls
@@ -174,3 +175,146 @@ class TheoryRevisionManager(Initializable):
                      self.theory_evaluation, improvement_threshold)
         logger.debug(THEORY_CONTENT_MESSAGE, self.learning_system.theory)
         return theory_changed
+
+
+class HoeffdingBoundTheoryManager(TheoryRevisionManager):
+    """
+    Responsible to decide when to revise the theory, based on the Hoeffding's
+    bound.
+
+    The theory will be updated only if the improvement on the sample is
+    greater than the Hoeffding'g bound.
+
+    For a given value `delta` in [0, 1], a metric whose range size is `R`,
+    and a sample containing `n` independent examples; the Hoeffding's bound
+    `epsilon` is given by the formula `epsilon = sqrt((R^2 * ln(1/delta)/(2n)).
+    """
+
+    OPTIONAL_FIELDS = TheoryRevisionManager.OPTIONAL_FIELDS
+    OPTIONAL_FIELDS.update({
+        "delta": 1.0e-6,
+        "delta_update_function": None
+    })
+
+    def __init__(self, learning_system=None, revision_manager=None,
+                 theory_metric=None, train_using_all_examples=None,
+                 delta=None, delta_update_function=None):
+        super().__init__(learning_system, revision_manager, theory_metric,
+                         train_using_all_examples)
+
+        self._delta = delta
+        "The delta value to compute the Hoeffding's bound."
+
+        if self._delta is None:
+            self._delta = self.OPTIONAL_FIELDS["delta"]
+
+        self.delta_update_function = delta_update_function
+        """
+        A function (as a string), to update the value of delta, based on itself.
+        """
+
+        self._delta_function = None
+
+    @property
+    def delta(self):
+        """
+        The delta value to compute the Hoeffding's bound.
+        """
+        return self._delta
+
+    @delta.setter
+    def delta(self, value):
+        self.set_delta(value)
+
+    def set_delta(self, value):
+        """
+        Sets the value of delta, if `value` is valid.
+
+        It is valid if it is in [0, 1].
+
+        :param value: the value
+        :type value: float
+        :return: returns `True` if `value` is valid; otherwise, `False`
+        :rtype: bool
+        """
+        if 0.0 <= value <= 1.0:
+            self._delta = value
+            return True
+        return False
+
+    @staticmethod
+    def _compile_delta(delta_update_function):
+        """
+        Compiles the delta update function.
+
+        :param delta_update_function: the delta function
+        :type delta_update_function: str
+        :return: the compiled function
+        :rtype: Callable[[float], float]
+        """
+        if delta_update_function is None or \
+                not isinstance(delta_update_function, str):
+            return lambda x: x
+        return eval(delta_update_function, {})
+
+    # noinspection PyMissingOrEmptyDocstring
+    def initialize(self):
+        super().initialize()
+        self._delta_function = self._compile_delta(self.delta_update_function)
+
+    # noinspection PyMissingOrEmptyDocstring
+    def apply_revision(self, operator_selector, examples):
+        epsilon = self.calculate_hoeffding_bound(
+            self.theory_metric.get_range(), examples.relevant_examples.size())
+        self.theory_evaluation = self.evaluate_current_theory(examples)
+        best_possible_improvement = \
+            self.theory_metric.get_best_possible_improvement(
+                self.theory_evaluation)
+        if best_possible_improvement < epsilon:
+            logger.debug(
+                "Skipping the revision on examples, there are not enough "
+                "examples to exceed the threshold.")
+            return False
+
+        number_of_examples = examples.get_number_of_examples(
+            self.train_using_all_examples)
+        logger.debug("Calling the revision on %d examples.", number_of_examples)
+        operator_evaluator = operator_selector.select_operator(
+            examples.get_training_examples(self.train_using_all_examples),
+            self.theory_metric)
+        logger.debug("Operator selected for revision:\t%s",
+                     operator_evaluator.revision_operator)
+        if operator_selector is None:
+            return False
+        revised = self.apply_operator(operator_evaluator, examples, epsilon)
+        if revised:
+            self.update_delta()
+        return revised
+
+    def calculate_hoeffding_bound(self, metric_range, sample_size):
+        """
+        Calculates the Hoeffding's bound value of epsilon, based on the
+        `metric_range` of the metric and the `sample_size`.
+
+        :param metric_range: the range of the metric
+        :type metric_range: float
+        :param sample_size: the sample size
+        :type sample_size: int
+        :return: the Hoeffding's bound
+        :rtype: float
+        """
+        return math.sqrt((metric_range * metric_range * -math.log(self.delta)) /
+                         (2 * sample_size))
+
+    def update_delta(self):
+        """
+        Updates the delta each time a revision is accepted, given a specified
+        function f: R -> R, defined in `self.delta_update_function`.
+        """
+        old_delta = self.delta
+        new_delta = self._delta_function(old_delta)
+        if self.set_delta(new_delta):
+            logger.debug("Delta updated from\t%f to\t%f", old_delta, new_delta)
+        else:
+            logger.debug("Delta value not updated because of range "
+                         "constraints, current value:\t%f", old_delta)

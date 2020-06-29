@@ -7,7 +7,8 @@ from typing import TypeVar, Generic
 
 from src.knowledge.examples import Examples
 from src.language.equivalent_clauses import EquivalentHornClause
-from src.util.multiprocessing.theory_evaluation import AsyncTheoryEvaluator
+from src.util.multiprocessing.theory_evaluation import AsyncTheoryEvaluator, \
+    SyncTheoryEvaluator
 
 V = TypeVar('V')
 E = TypeVar('E')
@@ -24,13 +25,13 @@ class AsyncEvaluationTransformer(ABC, Generic[V, E]):
         Transforms a element of type `V` into an `AsyncTheoryEvaluator`.
 
         :param evaluator: the evaluator
-        :type evaluator: AsyncTheoryEvaluator[E]
+        :type evaluator: SyncTheoryEvaluator[E] or AsyncTheoryEvaluator[E]
         :param v: the element
         :type v: V
         :param examples: the examples
         :type examples: Examples
         :return: the async theory evaluator
-        :rtype: AsyncTheoryEvaluator[E]
+        :rtype: SyncTheoryEvaluator[E] or AsyncTheoryEvaluator[E]
         """
         pass
 
