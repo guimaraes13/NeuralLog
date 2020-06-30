@@ -7,8 +7,7 @@ from src.knowledge.examples import Examples
 from src.knowledge.program import NeuralLogProgram
 from src.knowledge.theory.evaluation.metric.theory_metric import TheoryMetric
 from src.knowledge.theory.manager.revision.clause_modifier import ClauseModifier
-from src.knowledge.theory.manager.revision.operator.revision_operator import \
-    RevisionOperator
+import src.knowledge.theory.manager.revision.operator.revision_operator as ro
 from src.util import Initializable
 
 
@@ -27,7 +26,7 @@ class RevisionOperatorEvaluator(Initializable):
         Creates a revision operator evaluator.
 
         :param revision_operator: the revision operator
-        :type revision_operator: RevisionOperator or None
+        :type revision_operator: ro.RevisionOperator or None
         """
         self.revision_operator = revision_operator
         self.updated_theory = self.OPTIONAL_FIELDS["updated_theory"]

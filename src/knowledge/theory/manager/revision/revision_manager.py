@@ -7,8 +7,7 @@ import logging
 import src.knowledge.theory.manager.revision.revision_examples as revision
 import src.knowledge.theory.manager.theory_revision_manager as manager
 from src.knowledge.theory import TheoryRevisionException
-from src.knowledge.theory.manager.revision.revision_operator_selector import \
-    RevisionOperatorSelector
+import src.knowledge.theory.manager.revision.revision_operator_selector as ros
 from src.util import Initializable
 
 logger = logging.getLogger(__name__)
@@ -30,7 +29,7 @@ class RevisionManager(Initializable):
         :param theory_revision_manager: the theory revision manager
         :type theory_revision_manager: manager.TheoryRevisionManager
         :param operator_selector: the operator selector
-        :type operator_selector: RevisionOperatorSelector
+        :type operator_selector: ros.RevisionOperatorSelector
         """
         self.theory_revision_manager = theory_revision_manager
         self.operator_selector = operator_selector

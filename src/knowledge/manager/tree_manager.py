@@ -8,6 +8,8 @@ from src.knowledge.manager.example_manager import IncomingExampleManager
 from src.knowledge.program import NeuralLogProgram
 from src.knowledge.theory.manager.revision.revision_examples import \
     RevisionExamples
+from src.knowledge.theory.manager.revision.sample_selector import \
+    AllRelevantSampleSelect
 from src.language.language import HornClause, Atom, Predicate
 from src.util.clause_utils import to_variable_atom
 
@@ -416,6 +418,8 @@ class TreeExampleManager(IncomingExampleManager):
     Class to manage the examples by putting them in a three structure based on
     the theory.
     """
+
+    ALL_SAMPLE_SELECTOR = AllRelevantSampleSelect()
 
     def __init__(self, learning_system=None, sample_selector=None,
                  tree_theory=None):
