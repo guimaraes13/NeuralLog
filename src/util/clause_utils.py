@@ -6,9 +6,10 @@ from typing import Set, List, Callable, TypeVar
 
 from src.language.language import Literal, Atom, Number, get_term_from_string, \
     HornClause, Term
+from src.util.variable_generator import VariableGenerator
 
 
-def to_variable_atom(atom, variable_generator, variable_map):
+def to_variable_atom(atom, variable_generator=None, variable_map=None):
     """
     Replace the constant terms of `atom` to variables, mapping equal constants
     to equal variables.
@@ -16,12 +17,16 @@ def to_variable_atom(atom, variable_generator, variable_map):
     :param atom: the atom
     :type atom: Atom
     :param variable_generator: the variable generator
-    :type variable_generator: VariableGenerator
+    :type variable_generator: Optional[VariableGenerator]
     :param variable_map: the map of constant to variables
-    :type variable_map: Dict[Term, Term]
+    :type variable_map: Optional[Dict[Term, Term]]
     :return: a new atom, with the constant terms replaces by variables
     :rtype: Atom
     """
+    if variable_generator is None:
+        variable_generator = VariableGenerator()
+    if variable_map is None:
+        variable_map = dict()
     terms = []
     for term in atom.terms:
         if isinstance(term, Number):

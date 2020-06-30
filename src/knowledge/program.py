@@ -694,11 +694,8 @@ class NeuralLogProgram:
 
     builtin = build_builtin_predicate()
 
-    # predicate_functions: Dict[Any, Any] = dict()
-    # "A dictionary with the functions defined for predicates in the program"
-
-    _predicate_parameters_to_add: List[Atom]
-    _parameters_to_add: List[Atom]
+    TRUE_ATOM = Atom(Predicate(TRUE_PREDICATE), weight=1.0)
+    FALSE_ATOM = Atom(Predicate(FALSE_PREDICATE), weight=0.0)
 
     def __init__(self):
         """
@@ -758,14 +755,15 @@ class NeuralLogProgram:
         self.parameters: Dict[Any, Any] = dict()
         "A dictionary with the parameters defined in the program"
 
-        self._predicate_parameters_to_add = list()
-        self._parameters_to_add = list()
+        self._predicate_parameters_to_add: List[Atom] = list()
+        self._parameters_to_add: List[Atom] = list()
         self._last_atom_for_predicate: Dict[Predicate, Atom] = dict()
 
         self._cached_atoms_by_term: Dict[Term, Set[Atom]] = dict()
         self._cached_neighbours_by_term: Dict[Term, Set[Term]] = dict()
 
         self.is_up_to_date = False
+
         # self.add_clauses(clauses)
         # del self._last_atom_for_predicate
         # self.build_program()
@@ -776,8 +774,8 @@ class NeuralLogProgram:
         """
         if self.is_up_to_date:
             return
-        self.add_fact(Atom(Predicate(FALSE_PREDICATE), weight=0.0), False)
-        self.add_fact(Atom(Predicate(TRUE_PREDICATE), weight=1.0), False)
+        self.add_fact(self.TRUE_ATOM, False)
+        self.add_fact(self.FALSE_ATOM, False)
         self._expand_clauses()
         self._add_specific_parameter("avoid_constant")
         self._get_constants()

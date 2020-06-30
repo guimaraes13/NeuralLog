@@ -359,6 +359,7 @@ class EquivalentHornClause:
         _hash = 31 * _hash + sum(map(lambda x: hash(x), self.clause_body))
         return _hash
 
+    # noinspection DuplicatedCode
     def __eq__(self, other):
         if id(self) == id(other):
             return True
