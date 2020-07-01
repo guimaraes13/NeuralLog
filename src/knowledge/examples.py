@@ -3,7 +3,7 @@ Represents training examples.
 """
 import collections
 from collections import OrderedDict, UserDict
-from typing import Dict, Any, MutableMapping
+from typing import Dict, Any, MutableMapping, Iterable
 
 from src.language.language import Predicate, Atom
 
@@ -54,7 +54,7 @@ class LimitedIterator:
         return self
 
 
-class ExampleIterator(collections.Iterable[Atom]):
+class ExampleIterator(Iterable[Atom]):
     """
     Iterates over the examples.
 
