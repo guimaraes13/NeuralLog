@@ -54,8 +54,12 @@ class LimitedIterator:
         return self
 
 
-class ExampleIterator:
-    """Iterates over the examples."""
+class ExampleIterator(collections.Iterable[Atom]):
+    """
+    Iterates over the examples.
+
+    Transforms an Examples object into a collections.Iterable[Atom].
+    """
 
     def __init__(self, examples, predicate=None):
         """

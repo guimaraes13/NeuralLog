@@ -127,9 +127,14 @@ class StructureLearningSystem(Initializable):
         add_null_atoms(self._knowledge_base)
         self.engine_system_translator.knowledge_base = value
 
-    # noinspection PyMissingOrEmptyDocstring
     @property
     def theory(self):
+        """
+        Gets the theory of the learning system.
+
+        :return: the theory
+        :rtype: NeuralLogProgram
+        """
         return self._theory
 
     @theory.setter
@@ -155,12 +160,12 @@ class StructureLearningSystem(Initializable):
         it retrains the parameters before inference.
 
         :param examples: the examples
-        :type examples: Examples
+        :type examples: Examples or Atom
         :param retrain: if `True`, it retrains the parameters before inference
         :type retrain: bool
         :param theory: If not `None`, use this theory instead of the current
         theory of the engine system.
-        :type theory: NeuralLogProgram
+        :type theory: Optional[NeuralLogProgram or collections.Iterable[Clause]]
         :return: the inference value of the examples
         :rtype: ExamplesInferences
         """

@@ -3,6 +3,7 @@ Handles the examples to be used on the theory revision.
 """
 from src.knowledge.examples import Examples, ExamplesInferences
 from src.knowledge.theory.manager.revision.sample_selector import SampleSelector
+from src.language.language import Atom
 from src.structure_learning.structure_learning_system import \
     StructureLearningSystem
 from src.util import time_measure
@@ -131,3 +132,6 @@ class RevisionExamples:
         :rtype: bool
         """
         return not self.incoming_examples
+
+    def __bool__(self):
+        return bool(self.incoming_examples)

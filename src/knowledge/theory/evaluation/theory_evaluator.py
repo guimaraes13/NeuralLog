@@ -9,6 +9,7 @@ from src.knowledge.examples import ExamplesInferences, Examples
 from src.knowledge.program import NeuralLogProgram
 from src.knowledge.theory.evaluation.metric.theory_metric import TheoryMetric
 from src.language.language import HornClause
+import src.structure_learning.structure_learning_system as sls
 from src.util import Initializable
 
 
@@ -22,11 +23,11 @@ class TheoryEvaluator(Initializable):
         Creates a theory evaluator.
 
         :param learning_system: the learning system
-        :type learning_system: StructureLearningSystem
+        :type learning_system: sls.StructureLearningSystem
         :param theory_metrics: the theory metrics
         :type theory_metrics: TheoryMetric or collections.Iterable[TheoryMetric]
         """
-        self.learning_system = learning_system
+        self.learning_system: sls.StructureLearningSystem = learning_system
         if theory_metrics is not None:
             if not isinstance(theory_metrics, collections.Iterable):
                 self.theory_metrics: List[TheoryMetric] = [theory_metrics]

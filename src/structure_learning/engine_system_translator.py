@@ -13,7 +13,7 @@ import numpy as np
 import src.structure_learning.structure_learning_system as sls
 from src.knowledge.examples import Examples, ExamplesInferences
 from src.knowledge.program import NeuralLogProgram, print_neural_log_program
-from src.language.language import Atom, Term
+from src.language.language import Atom, Term, Clause
 from src.network.network import NeuralLogNetwork
 from src.network.trainer import Trainer
 from src.util import Initializable
@@ -37,7 +37,7 @@ def append_theory(program, theory):
     :param program: the program
     :type program: NeuralLogProgram
     :param theory: the theory
-    :type theory: NeuralLogProgram or List[Clause]
+    :type theory: NeuralLogProgram or collections.Iterable[Clause]
     """
     if theory is not None:
         if isinstance(theory, NeuralLogProgram):
@@ -180,12 +180,12 @@ class EngineSystemTranslator(Initializable):
         theory of the engine system.
 
         :param examples: the examples
-        :type examples: Examples
+        :type examples: Examples or Atom
         :param retrain: if `True`, it retrains the parameters before inference
         :type retrain: bool
         :param theory: If not `None`, use this theory instead of the current
         theory of the engine system.
-        :type theory: NeuralLogProgram
+        :type theory: Optional[NeuralLogProgram or collections.Iterable[Clause]]
         :return: the inference value of the examples
         :rtype: ExamplesInferences
         """
@@ -327,16 +327,21 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
         Gets a trainer for the examples and the theory.
 
         :param examples: the examples
-        :type examples: Examples
+        :type examples: Examples or Atom
         :param theory: the theory
-        :type theory: Optional[NeuralLogProgram]
-        :return:
-        :rtype:
+        :type theory: Optional[NeuralLogProgram or collections.Iterable[Clause]]
+        :return: the trainer
+        :rtype: Trainer
         """
         program = self.knowledge_base.copy()
-        program.add_examples(examples, TEMPORARY_SET_NAME)
-        for predicate in examples:
-            null_atom = sls.build_null_atom(program, predicate)
+        if isinstance(examples, Examples):
+            program.add_examples(examples, TEMPORARY_SET_NAME)
+            for predicate in examples:
+                null_atom = sls.build_null_atom(program, predicate)
+                program.add_example(null_atom, NULL_SET_NAME, False)
+        else:
+            program.add_example(examples, TEMPORARY_SET_NAME)
+            null_atom = sls.build_null_atom(program, examples.predicate)
             program.add_example(null_atom, NULL_SET_NAME, False)
         if theory is None:
             theory = self.theory
@@ -344,8 +349,11 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
         program.build_program()
         trainer = Trainer(program, self.output_path)
         trainer.init_model()
-        trainer.model.build_layers(
-            map(lambda x: (x, False), examples.keys()))
+        if isinstance(examples, Examples):
+            trainer.model.build_layers(
+                map(lambda x: (x, False), examples.keys()))
+        else:
+            trainer.model.build_layers([(examples.predicate, False)])
         trainer.read_parameters()
         return trainer
 

@@ -1,9 +1,11 @@
 """
 Manages the incoming examples manager in a tree representation of the theory.
 """
+import collections
 import logging
 from typing import TypeVar, Generic, Optional, Set, List, Dict
 
+from src.knowledge.examples import Examples, ExampleIterator
 from src.knowledge.manager.example_manager import IncomingExampleManager
 from src.knowledge.program import NeuralLogProgram
 from src.knowledge.theory.manager.revision.revision_examples import \
@@ -424,7 +426,10 @@ class TreeExampleManager(IncomingExampleManager):
     def __init__(self, learning_system=None, sample_selector=None,
                  tree_theory=None):
         super().__init__(learning_system, sample_selector)
-        self.tree_theory = tree_theory
+        self.tree_theory: TreeTheory = tree_theory
+        self.cached_clauses: Dict[Predicate, List[HornClause]] = \
+            dict()
+        "Caches the list of all rules, except the rules of the key predicate."
 
     # noinspection PyMissingOrEmptyDocstring
     def required_fields(self):
@@ -432,8 +437,177 @@ class TreeExampleManager(IncomingExampleManager):
 
     # noinspection PyMissingOrEmptyDocstring
     def incoming_examples(self, examples):
-        pass
+        modifier_leaves = self.place_incoming_examples(examples)
+        self.call_revision(modifier_leaves)
+
+    def _update_rule_cache(self):
+        """
+        Updates the rule cache.
+        """
+        self.cached_clauses.clear()
+        clauses_by_predicate = self.learning_system.theory.clauses_by_predicate
+        for pred1 in clauses_by_predicate.keys():
+            for pred2, clauses in clauses_by_predicate.items():
+                if pred1 != pred2:
+                    self.cached_clauses.setdefault(
+                        pred1, []).extend(clauses)
+
+    def place_incoming_examples(self, examples):
+        """
+        Places the incoming examples into the correct leaves and returns the
+        set of the modifier leaves.
+
+        :param examples: the examples
+        :type examples: Atom or collections.Iterable[Atom]
+        :return: the leaves which was modified due to the addition of examples
+        :rtype: Dict[Predicate, Set[Node[HornClause]]]
+        """
+        modified_leaves: Dict[Predicate, Set[Node[HornClause]]] = dict()
+        count = 0
+        if not isinstance(examples, collections.Iterable):
+            examples = [examples]
+        self._update_rule_cache()
+        for example in examples:
+            self.place_example(modified_leaves, example)
+            count += 1
+        logger.debug(
+            "%s\twew example(s) placed at the leaves of the tree", count)
+        return modified_leaves
+
+    def place_example(self, modified_leaves_map, example):
+        """
+        Places the incoming example into the correct leaves and append the
+        leaves in the map of modified leaves.
+
+        :param modified_leaves_map: the map of modified leaves
+        :type modified_leaves_map: Dict[Predicate, Set[Node[HornClause]]]
+        :param example: the example
+        :type example: Atom
+        """
+        predicate = example.predicate
+        modified_leaves = modified_leaves_map.setdefault(predicate, set())
+        leaf_examples = \
+            self.tree_theory.get_leaf_example_map_from_tree(predicate)
+        root = self.tree_theory.get_tree_for_example(example)
+        covered = self.transverse_theory_tree(
+            root, example, modified_leaves, leaf_examples)
+        if not covered:
+            self.add_example_to_leaf(
+                root.default_child, example, modified_leaves, leaf_examples)
+
+    def transverse_theory_tree(
+            self, root, example, modified_leaves, leaf_examples):
+        """
+        Transverses the theory tree passing the covered example to the
+        respective sons and repeating the process of each son. All the leaves
+        modified by this process will be appended to `modified_leaves`.
+
+        :param root: the root of the tree
+        :type root: Node[HornClause]
+        :param example: the example
+        :type example: Atom
+        :param modified_leaves: the modified leaves set
+        :type modified_leaves: Set[Node[HornClause]]
+        :param leaf_examples: the leaf examples map to save the examples of
+        each lead
+        :type leaf_examples: Dict[Node[HornClause], RevisionExamples]
+        :return: `True`, if the example is covered; otherwise, `False`
+        :rtype: bool
+        """
+        inferred_examples = self.learning_system.infer_examples(
+            example,
+            self.cached_clauses.get(example.predicate, []) + [root.element],
+            retrain=False)
+        covered = inferred_examples.contains_example(example)
+        if covered:
+            if root.children:
+                self.push_example_to_child(
+                    root, example, modified_leaves, leaf_examples)
+            else:
+                self.add_example_to_leaf(
+                    root, example, modified_leaves, leaf_examples)
+
+        return covered
+
+    def push_example_to_child(
+            self, node, example, modified_leaves, leaf_example):
+        """
+        Pushes the example to the node, if the node has more children,
+        recursively pushes to its children as well.
+
+        :param node: the node
+        :type node: Node[HornClause]
+        :param example: the example
+        :type example: Atom
+        :param modified_leaves: the set into which to append the modified
+        leaves
+        :type modified_leaves: Set[Node[HornClause]]
+        :param leaf_example: the map of examples of each leaf, in order to
+        append the current example
+        :type leaf_example: Dict[Node[HornClause], RevisionExamples]
+        """
+        covered = False
+        for child in node.children:
+            covered |= self.transverse_theory_tree(
+                child, example, modified_leaves, leaf_example)
+        if not covered:
+            self.add_example_to_leaf(
+                node.default_child, example, modified_leaves, leaf_example)
+
+    def add_example_to_leaf(self, leaf, example, modified_leaves, leaf_example):
+        """
+        Adds the example to the leaf.
+
+        :param leaf: the leaf
+        :type leaf: Node[HornClause]
+        :param example: the example
+        :type example: Atom
+        :param modified_leaves: the set of modified leaves
+        :type modified_leaves: Set[Node[HornClause]]
+        :param leaf_example: the map of examples per leaf
+        :type leaf_example: Dict[Node[HornClause], RevisionExamples]
+        # :return: `True`, if this operation changes the set of modified leaves;
+        # otherwise, `False`
+        # :rtype: bool
+        """
+        revision_examples = leaf_example.get(leaf)
+        if revision_examples is None:
+            revision_examples = RevisionExamples(
+                self.learning_system, self.sample_selector.copy())
+            leaf_example[leaf] = revision_examples
+        revision_examples.add_example(example)
+        modified_leaves.add(leaf)
+
+    def call_revision(self, modified_leaves):
+        """
+        Labels each modified leaf as the revision point and call learning
+        system for the revision.
+
+        It is not guaranteed that the revision will occur.
+
+        :param modified_leaves: the modified leaves
+        :type modified_leaves: Dict[Predicate, Set[Node[HornClause]]]
+        """
+        for predicate, leaves in modified_leaves.items():
+            self.tree_theory.revision_leaves = []
+            targets = []
+            for leaf in leaves:
+                target = self.tree_theory.get_example_from_leaf(predicate, leaf)
+                if target:
+                    targets.append(target)
+                    self.tree_theory.revision_leaves.append(leaf)
+            logger.debug("Calling the revision for\t%d modified leaves of "
+                         "predicate:\t%s.", len(targets), predicate)
+            self.learning_system.revise_theory(targets)
 
     # noinspection PyMissingOrEmptyDocstring
     def get_remaining_examples(self):
-        pass
+        examples = Examples()
+        for tree in self.tree_theory.leaf_examples_map.values():
+            for revision_examples in tree.values():
+                training_examples = \
+                    revision_examples.get_training_examples(True)
+                for atom in ExampleIterator(training_examples):
+                    examples.add_example(atom)
+
+        return examples
