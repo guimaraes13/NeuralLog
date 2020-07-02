@@ -49,10 +49,59 @@ def get_unify_map(atom, goal, fixed_terms=None):
     return variable_map
 
 
+def check_predicates(goal, atom):
+    """
+    Checks if the predicates match in name and arity.
+
+    :param goal: the goal
+    :type goal: Atom
+    :param atom: the atom
+    :type atom: Atom
+    :return: `True`, if they match; otherwise, `False`
+    :rtype: bool
+    """
+    return goal.predicate == atom.predicate
+
+
+def unify_atom_to_goal(atom, goal):
+    """
+    Unifies the given `atom` to the given `goal` and returns the substitution
+    map of the terms. If the unification is not possible, returns `None`.
+
+    :param atom: the atom
+    :type atom: Atom
+    :param goal: the goal
+    :type goal: Atom
+    :return: the substitution map of the terms, if the unification is
+    possible; otherwise, `None`
+    :rtype: Optional[Dict[Term, Term]]
+    """
+    return get_unify_map(atom, goal) if check_predicates(goal, atom) else None
+
+
+def is_atom_unifiable_to_goal(atom, goal):
+    """
+    Checks if the given atom unifies with the goal. An atom unifies with the
+    goal if exists a substitution of variables that makes the atom equals to
+    the goal.
+
+    This method is not symmetric, i.e.
+    `is_atom_unifiable_to_goal(a, b) != is_atom_unifiable_to_goal(b, a)`
+
+    :param atom: the atom
+    :type atom: Atom
+    :param goal: the goal
+    :type goal: Atom
+    :return: `True`, if the atom unifies; otherwise, `False`
+    :rtype: bool
+    """
+    return unify_atom_to_goal(atom, goal) is not None
+
+
 def does_terms_match(goal, atom, fixed_terms):
     """
     Check if the constants and variables from the goal match the ones from
-    the atom,
+    the atom.
 
     :param goal: the goal
     :type goal: Atom

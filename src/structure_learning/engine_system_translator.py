@@ -374,7 +374,12 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
     def infer_examples_appending_clauses(
             self, examples, clauses, retrain=False):
         # noinspection PyTypeChecker
-        return self.infer_examples(examples, retrain=retrain, theory=clauses)
+        appended_clauses = list()
+        for theory_clauses in self.theory.clauses_by_predicate.values():
+            appended_clauses.extend(theory_clauses)
+        appended_clauses.extend(clauses)
+        return self.infer_examples(
+            examples, retrain=retrain, theory=appended_clauses)
 
     # noinspection PyMissingOrEmptyDocstring
     def inferred_relevant(self, terms):

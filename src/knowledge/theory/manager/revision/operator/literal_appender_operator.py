@@ -4,9 +4,10 @@ Handles some revision operators that append literals to the clause.
 import collections
 from abc import abstractmethod
 from random import random
-from typing import TypeVar, Generic, Set, Dict
+from typing import TypeVar, Generic, Set, Dict, List
 
 from src.knowledge.examples import Examples, ExampleIterator, ExamplesInferences
+from src.knowledge.program import NeuralLogProgram
 from src.knowledge.theory.manager.revision.operator.revision_operator import \
     RevisionOperator, is_positive, relevant_breadth_first_search
 from src.language.equivalent_clauses import EquivalentAtom
@@ -14,14 +15,19 @@ from src.language.language import HornClause, get_variable_atom, Literal, \
     Atom, \
     Term
 from src.util.clause_utils import to_variable_atom
+from src.util.language import is_atom_unifiable_to_goal
+from src.util.multiprocessing.evaluation_transformer import \
+    LiteralAppendAsyncTransformer
 from src.util.multiprocessing.multiprocessing import \
     DEFAULT_NUMBER_OF_PROCESS, \
-    DEFAULT_EVALUATION_TIMEOUT
+    DEFAULT_EVALUATION_TIMEOUT, MultiprocessingEvaluation
 from src.util.multiprocessing.theory_evaluation import AsyncTheoryEvaluator, \
     SyncTheoryEvaluator
 from src.util.variable_generator import VariableGenerator
 
 V = TypeVar('V')
+
+SUBSTITUTION_NAME = "__sub__"
 
 
 def create_substitution_map(head, answer):
@@ -106,6 +112,93 @@ def build_all_literals_from_clause(initial_clause, candidates, answer_literals,
         if current_atom not in skip_candidates:
             skip_candidates.add(current_atom)
             answer_literals.add(candidate)
+
+
+def build_substitution_clause(initial_clause):
+    """
+    Creates the clause to find the substitution of variables instantiated by the
+    initial clause.
+
+    :param initial_clause: the initial clause
+    :type initial_clause: HornClause
+    :return: the clause to find the substitutions
+    :rtype: HornClause
+    """
+    terms: List[Term] = []
+    append_variables_from_atom(initial_clause.head, terms)
+
+    body: List[Literal] = []
+    if not initial_clause.body:
+        body.append(NeuralLogProgram.TRUE_ATOM)
+    else:
+        for literal in initial_clause.body:
+            append_variables_from_atom(literal, terms)
+        body = initial_clause.body
+
+    return HornClause(Atom(SUBSTITUTION_NAME, *terms), *body)
+
+
+def append_variables_from_atom(atom, append):
+    """
+    Appends the variables from the `atom` to the `append` list.
+
+    :param atom: the atom
+    :type atom: Atom
+    :param append: the append list
+    :type append: List[Term]
+    """
+    for term in atom.terms:
+        if not term.is_constant() and term not in append:
+            append.append(term)
+
+
+def build_queries_from_examples(examples, initial_clause_head,
+                                substitution_head, positive_only):
+    """
+    Builds the queries from the positive examples to make possible find the
+    substitution of each proved example.
+
+    :param examples: the examples
+    :type examples: Examples
+    :param initial_clause_head: the initial clause head
+    :type initial_clause_head: Atom
+    :param substitution_head: the substitution clause head
+    :type substitution_head: Atom
+    :param positive_only: if `True`, only the positive examples will be
+    considered
+    :type positive_only: bool
+    :return: the queries of the examples
+    :rtype: Examples
+    """
+    query_set = Examples()
+    for example in ExampleIterator(examples):
+        if not is_atom_unifiable_to_goal(example, initial_clause_head):
+            continue
+        if positive_only and example.weight <= 0.0:
+            continue
+        query_set.add_example(build_query_from_example(
+            substitution_head, example))
+
+    return query_set
+
+
+def build_query_from_example(head, example):
+    """
+    Builds a query from the example, in order to find the substitution map
+    for all variables in the initial clause to the constants that satisfies
+    the example.
+
+    :param head: the head of the initial clause
+    :type head: Atom
+    :param example: the example
+    :type example: Atom
+    :return: the query to find the substitutions
+    :rtype: Atom
+    """
+    terms: List[Term] = [] + example.terms
+    for i in range(len(example.terms), head.arity()):
+        terms.append(head.terms[i])
+    return Atom(SUBSTITUTION_NAME, *terms, weight=example.weight)
 
 
 class LiteralAppendOperator(RevisionOperator, Generic[V]):
@@ -270,7 +363,7 @@ class LiteralAppendOperator(RevisionOperator, Generic[V]):
         return based_examples
 
     def get_literal_candidates_from_examples(
-            self, initial_clause, substitution_goal, examples, inferences,
+            self, initial_clause, substitution_goal, inferences,
             skip_candidates, connected):
         """
         Gets the literal candidates from the examples. The literals that are
@@ -281,8 +374,6 @@ class LiteralAppendOperator(RevisionOperator, Generic[V]):
         :type initial_clause: HornClause
         :param substitution_goal: the substitution query
         :type substitution_goal: Atom
-        :param examples: the examples inferred by the substitution query
-        :type examples: Examples
         :param inferences: the inferences of the `examples`
         :type inferences: ExamplesInferences
         :param skip_candidates: the candidates to skip
@@ -298,7 +389,7 @@ class LiteralAppendOperator(RevisionOperator, Generic[V]):
         candidate_literals: Set[Literal] = set()
         for predicate, inferred in inferences.items():
             for key, value in inferred.items():
-                example = examples.get(predicate, dict()).get(key)
+                example = inferences.examples.get(predicate, dict()).get(key)
                 if not example:
                     continue
                 constants = list(
@@ -316,3 +407,91 @@ class LiteralAppendOperator(RevisionOperator, Generic[V]):
                     skip_candidates, connected)
 
         return candidate_literals
+
+
+class RelevantLiteralAppendOperator(LiteralAppendOperator[Literal]):
+    """
+    A literal append operator that searches for a single literal, based on the
+    relevant terms from the examples.
+    """
+
+    def __init__(self,
+                 learning_system=None,
+                 theory_metric=None,
+                 clause_modifiers=None,
+                 modifier_clause_before_evaluate=None,
+                 number_of_process=None,
+                 evaluation_timeout=None,
+                 relevant_depth=None,
+                 maximum_based_examples=None
+                 ):
+        super().__init__(
+            learning_system, theory_metric, clause_modifiers,
+            modifier_clause_before_evaluate, number_of_process,
+            evaluation_timeout, relevant_depth, maximum_based_examples)
+
+    # noinspection PyMissingOrEmptyDocstring,PyAttributeOutsideInit
+    def initialize(self):
+        super().initialize()
+        self.literal_transformer = \
+            LiteralAppendAsyncTransformer(self.clause_modifiers)
+        self.multiprocessing = MultiprocessingEvaluation(
+            self.learning_system, self.theory_metric,
+            self.literal_transformer,
+            self.evaluation_timeout, self.number_of_process
+        )
+
+    # noinspection PyMissingOrEmptyDocstring
+    def theory_revision_accepted(self, revised_theory):
+        pass
+
+    # noinspection PyMissingOrEmptyDocstring
+    def build_extended_horn_clause(self, examples, initial_clause,
+                                   equivalent_literals):
+        substitution_clause = build_substitution_clause(initial_clause)
+        query_set = build_queries_from_examples(
+            self.get_based_examples(examples), initial_clause.head,
+            substitution_clause.head, True)
+
+        if not query_set:
+            return None
+        inferred_examples = \
+            self.learning_system.infer_examples_appending_clauses(
+                query_set, [substitution_clause])
+        skip_candidates = self.build_skip_candidates(
+            initial_clause, equivalent_literals)
+        literals = self.get_literal_candidates_from_examples(
+            initial_clause, substitution_clause.head, inferred_examples,
+            skip_candidates, True)
+        if not literals:
+            return None
+        self.literal_transformer.initial_clause = initial_clause
+        return self.multiprocessing.get_best_clause_from_candidates(
+            literals, examples)
+
+    @staticmethod
+    def build_skip_candidates(initial_clause, equivalent_literals):
+        """
+        Builds the set of equivalent atoms to be skipped during the creation
+        of the candidate literal. This set includes the literal that are
+        already in the initial clause and the literals from the
+        `equivalent_literals` collection.
+
+        :param initial_clause: the initial clause
+        :type initial_clause: HornClause
+        :param equivalent_literals: the equivalent literal collection,
+        i.e. the literal from other clause, to avoid creating equivalent clauses
+        :type equivalent_literals: collections.Collection[Literal]
+        :return: the set of equivalent atoms
+        :rtype: Set[EquivalentAtom]
+        """
+        fixed_terms: Set[Term] = set()
+        for literal in initial_clause.body:
+            fixed_terms.update(literal.terms)
+        fixed_terms.update(initial_clause.head.terms)
+        skip_candidates: Set[EquivalentAtom] = set()
+        for literal in initial_clause.body:
+            skip_candidates.add(EquivalentAtom(literal, fixed_terms))
+        for literal in equivalent_literals:
+            skip_candidates.add(EquivalentAtom(literal, fixed_terms))
+        return skip_candidates

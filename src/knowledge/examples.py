@@ -143,6 +143,7 @@ class ExamplesInferences(UserDict, MutableMapping[Predicate, Dict[Any, float]]):
 
     def __init__(self):
         super().__init__(OrderedDict())
+        self.examples = Examples()
 
     def contains_example(self, example):
         """
@@ -172,6 +173,7 @@ class ExamplesInferences(UserDict, MutableMapping[Predicate, Dict[Any, float]]):
         self.data.setdefault(
             example.predicate,
             OrderedDict())[example.simple_key()] = value
+        self.examples.add_example(example)
 
     def get_value_for_example(self, example):
         """
