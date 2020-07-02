@@ -99,6 +99,16 @@ class Examples(UserDict, MutableMapping[Predicate, Dict[Any, Atom]]):
     def __init__(self, *args):
         super().__init__(OrderedDict(*args))
 
+    def add_all(self, examples):
+        """
+        Adds all the examples.
+
+        :param examples: the examples
+        :type examples: collection.Iterable[Atom]
+        """
+        for example in examples:
+            self.add_example(example)
+
     def add_example(self, example):
         """
         Adds the example.

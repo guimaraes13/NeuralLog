@@ -59,6 +59,7 @@ class ClauseEvaluationProcess(Process):
         self.returning_queue.put(self)
 
 
+# TODO: Remove this class
 class ClauseEvaluationProcess2(Process):
     """
     Class to represent an evaluation process.
@@ -97,6 +98,7 @@ class ClauseEvaluationProcess2(Process):
         self.returning_queue.put(self)
 
 
+# TODO: fix this class in order to, at least, run the execution with a timeout
 class AsyncTheoryEvaluator(Generic[E]):
     """
     Handles an asynchronous evaluation of a theory.
@@ -164,6 +166,7 @@ class AsyncTheoryEvaluator(Generic[E]):
         # process = ClauseEvaluationProcess(
         #     self.theory_evaluator, self.theory_metric, self.examples,
         #     self.horn_clause, queue)
+        # TODO: Use thread instead of process
         process = ClauseEvaluationProcess2(shared_dict, queue)
         # noinspection PyBroadException
         try:

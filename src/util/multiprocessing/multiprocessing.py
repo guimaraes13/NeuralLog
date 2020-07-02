@@ -9,15 +9,18 @@ from concurrent.futures.process import ProcessPoolExecutor
 from concurrent.futures.thread import ThreadPoolExecutor
 from typing import TypeVar, Generic, Dict, Set
 
+import src.structure_learning.structure_learning_system as sls
 from src.knowledge.examples import Examples
 from src.knowledge.theory.evaluation.metric.theory_metric import TheoryMetric
 from src.language.language import HornClause, KnowledgeException
-import src.structure_learning.structure_learning_system as sls
 from src.util import OrderedSet
 from src.util.multiprocessing.evaluation_transformer import \
     AsyncEvaluationTransformer
 from src.util.multiprocessing.theory_evaluation import AsyncTheoryEvaluator, \
     SyncTheoryEvaluator
+
+DEFAULT_NUMBER_OF_PROCESS = 1
+DEFAULT_EVALUATION_TIMEOUT = 300
 
 V = TypeVar('V')
 E = TypeVar('E')
@@ -31,7 +34,8 @@ class MultiprocessingEvaluation(Generic[V, E]):
     """
 
     def __init__(self, learning_system, theory_metric,
-                 transformer, evaluation_timeout=300, number_of_process=1):
+                 transformer, evaluation_timeout=DEFAULT_EVALUATION_TIMEOUT,
+                 number_of_process=DEFAULT_NUMBER_OF_PROCESS):
         """
         Creates a multiprocessing evaluation.
 

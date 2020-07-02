@@ -139,10 +139,23 @@ class EngineSystemTranslator(Initializable):
     algorithm and vice versa.
     """
 
-    def __init__(self):
+    def __init__(self, knowledge_base=None, theory=None, output_path=None):
+        """
+        Creates the engine system translator.
+
+        :param knowledge_base: the knowledge base
+        :type knowledge_base: Optional[NeuralLogProgram]
+        :param theory: the theory
+        :type theory: Optional[NeuralLogProgram]
+        :param output_path: the output path
+        :type output_path: Optional[str]
+        """
         self._knowledge_base: Optional[NeuralLogProgram] = None
         self._theory: Optional[NeuralLogProgram] = None
         self._output_path: Optional[str] = None
+        self.knowledge_base = knowledge_base
+        self.theory = theory
+        self._output_path = output_path
 
     # noinspection PyMissingOrEmptyDocstring
     @property
@@ -273,8 +286,8 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
 
     OPTIONAL_FIELDS = {"batch_size": 16}
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, knowledge_base=None, theory=None, output_path=None):
+        super().__init__(knowledge_base, theory, output_path)
         self.saved_trainer: Optional[Trainer] = None
         self.current_trainer: Optional[Trainer] = None
         self.batch_size = self.OPTIONAL_FIELDS["batch_size"]
