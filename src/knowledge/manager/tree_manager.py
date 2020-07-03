@@ -283,17 +283,6 @@ class TreeTheory:
         """
         return self.leaf_examples_map.get(predicate).get(leaf)
 
-    def get_current_revision_leaf(self):
-        """
-        Gets the current revision leaf.
-
-        :return: the current revision leaf
-        :rtype: Node[HornClause]
-        """
-        if self.revision_leaf_index is None:
-            return None
-        return self.revision_leaves[self.revision_leaf_index]
-
     def get_revision_leaf(self, index=None):
         """
         Gets the revision leaf of `index`.
@@ -304,7 +293,9 @@ class TreeTheory:
         :rtype: Node[HornClause]
         """
         if index is None:
-            return self.get_current_revision_leaf()
+            if self.revision_leaf_index is None:
+                return None
+            return self.revision_leaves[self.revision_leaf_index]
         return self.revision_leaves[index]
 
     @staticmethod

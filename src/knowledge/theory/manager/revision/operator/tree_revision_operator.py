@@ -303,6 +303,23 @@ class AddNodeTreeRevisionOperator(TreeRevisionOperator):
         """
         return 0 <= self.maximum_side_way_movements < side_way_movements
 
+    # noinspection PyMissingOrEmptyDocstring
+    def theory_revision_accepted(self, revised_theory):
+        revision_leaf = self.tree_theory.get_revision_leaf()
+        self.tree_theory.remove_example_from_leaf(
+            revision_leaf.element.head.predicate, revision_leaf)
+        if revision_leaf.is_default_child:
+            revision_leaf = revision_leaf.parent
+        if revision_leaf.is_root and \
+                TreeTheory.is_default_theory(revision_leaf):
+            revision_leaf.element.body.clear()
+            revision_leaf.element.body.append(NeuralLogProgram.TRUE_ATOM)
+            initial_body = []
+        else:
+            initial_body = revision_leaf.element.body
+        TreeTheory.add_nodes_to_tree(
+            self.revised_clause, revision_leaf, initial_body)
+
     @staticmethod
     def build_redundant_literals(node):
         """
