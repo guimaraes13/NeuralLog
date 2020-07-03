@@ -114,6 +114,7 @@ class Node(Generic[E]):
         """
         return self.default_child is None
 
+    @property
     def is_leaf(self):
         """
         Checks if the node is a not default leaf.

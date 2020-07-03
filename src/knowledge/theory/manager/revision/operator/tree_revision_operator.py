@@ -14,6 +14,7 @@ from src.knowledge.theory.manager.revision.operator.literal_appender_operator \
 from src.knowledge.theory.manager.revision.operator.revision_operator import \
     RevisionOperator
 from src.language.language import HornClause, Literal
+from src.util import OrderedSet
 from src.util.multiprocessing.evaluation_transformer import apply_modifiers
 from src.util.multiprocessing.theory_evaluation import AsyncTheoryEvaluator, \
     SyncTheoryEvaluator
@@ -351,3 +352,127 @@ class AddNodeTreeRevisionOperator(TreeRevisionOperator):
         """
         theory.clauses_by_predicate[node.element.head.predicate].remove(
             node.element)
+
+
+class RemoveNodeTreeRevisionOperator(TreeRevisionOperator):
+    """
+    Revision operator that removes a node from the tree theory.
+    """
+
+    # noinspection PyMissingOrEmptyDocstring
+    def perform_operation(self, targets):
+        revision_leaf = self.tree_theory.get_revision_leaf()
+        logger.debug("Trying to refine rule:\t%s", revision_leaf)
+        if revision_leaf.is_root:
+            # Root case
+            # This is the root node
+            if TreeTheory.is_default_theory(revision_leaf):
+                # It is the default theory, there is nothing to remove here
+                return None
+            else:
+                # It is the true theory, making it the false (default) theory
+                return self.remove_rule_from_theory(revision_leaf)
+        elif revision_leaf.is_default_child:
+            if len(revision_leaf.parent.children) == 1:
+                # Remove Literal case
+                revision_node = next(iter(revision_leaf.parent.children))
+                if revision_node.is_leaf:
+                    # This node represents the last default of a straight rule
+                    #  path, it is a literal deletion operation
+                    return self.remove_literal_from_theory(
+                        revision_node, targets)
+        elif len(revision_leaf.parent.children) > 1:
+            # Remove Rule case
+            # This node represents a bifurcation of a rule, it is a rule
+            #  deletion operation
+            return self.remove_rule_from_theory(revision_leaf)
+
+        return None
+
+    def remove_rule_from_theory(self, node):
+        """
+        Removes the rule, represented by the `node`, from the theory.
+
+        :param node: the node
+        :type node: Node[HornClause]
+        :return: the modified theory
+        :rtype: NeuralLogProgram
+        """
+        theory = self.learning_system.theory.copy()
+        element = node.element
+        theory.clauses_by_predicate[element.head.predicate].remove(element)
+        logger.debug("Propose to remove the rule:\t%s", element)
+        return theory
+
+    def remove_literal_from_theory(self, node, examples):
+        """
+        Removes the literal from the rule, represented by the `node`,
+        reducing it to its parent.
+
+        :param node: the node
+        :type node: Node[HornClause]
+        :param examples: the examples
+        :type examples: Examples
+        :return: the modified theory
+        :rtype: NeuralLogProgram
+        """
+        predicate = node.element.head.predicate
+        theory_clauses = self.learning_system.theory.clauses_by_predicate.get(
+            predicate, ())
+        clauses = OrderedSet()
+        for clause in theory_clauses:
+            if node.element == clause:
+                revised_clause = apply_modifiers(
+                    self.clause_modifiers, node.parent.element, examples)
+                clauses.add(revised_clause)
+            else:
+                clauses.add(clauses)
+        if logger.isEnabledFor(logging.DEBUG):
+            body = set(node.element.body)
+            body.difference(node.parent.element.body)
+            logger.debug("Propose to remove the literal:\t%s", body)
+
+        modified_theory = self.learning_system.theory.copy()
+        modified_theory.clauses_by_predicate[predicate] = list(clauses)
+        modified_theory.build_program()
+        return modified_theory
+
+    # noinspection PyMissingOrEmptyDocstring
+    def theory_revision_accepted(self, revised_theory):
+        revision_leaf = self.tree_theory.get_revision_leaf()
+        predicate = revision_leaf.element.head.predicate
+        self.tree_theory.remove_example_from_leaf(predicate, revision_leaf)
+        if revision_leaf.is_root:
+            # Root case
+            revision_leaf.element.body.clear()
+            revision_leaf.element.body.append(NeuralLogProgram.FALSE_ATOM)
+        elif revision_leaf.is_default_child and \
+                len(revision_leaf.parent.children) == 1:
+            # Remove Literal case
+            revision_node = next(iter(revision_leaf.parent.children))
+            self.remove_literal_from_tree(revision_node)
+        else:
+            # Remove Rule case
+            TreeTheory.remove_node_from_tree(revision_leaf)
+            self.tree_theory.remove_example_from_leaf(predicate, revision_leaf)
+
+    def remove_literal_from_tree(self, revision_node):
+        """
+        Removes the literal from the tree and passes it examples to its parent.
+
+        :param revision_node: the literal node to remove
+        :type revision_node: Node[HornClause]
+        """
+        predicate = revision_node.element.head.predicate
+        if revision_node.is_leaf:
+            # Gets the examples from the last literal, which has been deleted
+            examples_from_leaf = self.tree_theory.get_example_from_leaf(
+                predicate, revision_node)
+            # Unbinds the examples from the leaf that will be removed from
+            #  the tree
+            self.tree_theory.remove_example_from_leaf(predicate, revision_node)
+            # Removes the leaf from the tree
+            TreeTheory.remove_node_from_tree(revision_node)
+            # Links the examples to the removed leaf's parent
+            self.tree_theory.get_leaf_example_map_from_tree(
+                predicate)[revision_node.parent] = examples_from_leaf
