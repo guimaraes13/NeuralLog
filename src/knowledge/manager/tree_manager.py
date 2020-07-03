@@ -294,15 +294,17 @@ class TreeTheory:
             return None
         return self.revision_leaves[self.revision_leaf_index]
 
-    def get_revision_leaf(self, index):
+    def get_revision_leaf(self, index=None):
         """
         Gets the revision leaf of `index`.
 
         :param index: the index
-        :type index: int
+        :type index: Optional[int]
         :return: the revision leaf
         :rtype: Node[HornClause]
         """
+        if index is None:
+            return self.get_current_revision_leaf()
         return self.revision_leaves[index]
 
     @staticmethod
