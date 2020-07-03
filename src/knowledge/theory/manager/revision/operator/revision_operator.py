@@ -395,7 +395,6 @@ class RevisionOperator(Initializable):
         """
         pass
 
-    @abstractmethod
     def theory_revision_accepted(self, revised_theory):
         """
         Method to send a feedback to the revision operator, telling
@@ -631,10 +630,6 @@ class BottomClauseBoundedRule(RevisionOperator):
             targets.add_example(
                 get_null_example(self.learning_system.knowledge_base,
                                  predicate))
-
-    # noinspection PyMissingOrEmptyDocstring
-    def theory_revision_accepted(self, revised_theory):
-        pass
 
     def perform_operation_for_example(self, example, theory, targets,
                                       inferred_examples):

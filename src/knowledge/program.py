@@ -1487,8 +1487,6 @@ class NeuralLogProgram:
 
         example_set = kwargs.get("example_set", NO_EXAMPLE_SET)
         self.add_example(atom, example_set)
-        self._add_predicate(atom)
-        self.logic_predicates.add(atom.predicate)
 
     def add_examples(
             self, examples, example_set=NO_EXAMPLE_SET, log_override=True):
@@ -1506,6 +1504,10 @@ class NeuralLogProgram:
             for atom in facts.values():
                 self.add_example(atom, example_set, log_override)
 
+    # TODO: when adding a not ground example, to add an example for each
+    #  possible variable substitution. Ideally, do it lazily,
+    #  in `build_program` after all grounded examples has been added and
+    #  their constants has been gathered.
     def add_example(self, atom, example_set=NO_EXAMPLE_SET, log_override=True):
         """
         Adds the `atom` example to the `example_set`.
@@ -1528,7 +1530,10 @@ class NeuralLogProgram:
                                "%s, %s.", old_atom, old_atom.provenance,
                                atom, atom.provenance)
         example_dict[key] = atom
+        self._add_predicate(atom)
+        self.logic_predicates.add(atom.predicate)
 
+    # TODO: do the same thing for the not ground examples
     # noinspection PyUnusedLocal,DuplicatedCode
     @builtin("mega_example")
     def _mega_example(self, example, *args, **kwargs):
@@ -1790,6 +1795,113 @@ class NeuralLogProgram:
             self._cached_neighbours_by_term[term] = neighbours
 
         return neighbours
+
+    def shortest_path(self, source, destination, maximum_length):
+        """
+        Finds the shortest paths (sequence of terms), of at most
+        `maximum_length` long, between the `source` and the `destination`
+        terms in the knowledge base. If such path exists.
+
+        :param source: the source term
+        :type source: Term
+        :param destination: the destination term
+        :type destination: Term
+        :param maximum_length: the maximum length of the path. If negative,
+        there will be no limit on the length of the path.
+        :type maximum_length: int
+        :return: the shortest paths between `source` and `destination`
+        :rtype: Collection[Tuple[Term]]
+        """
+        if not self.constants.issuperset({source, destination}):
+            return None
+        if source == destination or \
+                destination in self.get_neighbour_terms(source):
+            return [(source, destination)]
+
+        return self._find_shortest_paths(source, destination, maximum_length)
+
+    def _find_shortest_paths(self, source, destination, maximum_length):
+        """
+        Finds the shortest paths (sequence of terms), of at most
+        `maximum_length` long, between the `source` and the
+        `destination`
+        terms in the knowledge base. If such path exists.
+
+        :param source: the source term
+        :type source: Term
+        :param destination: the destination term
+        :type destination: Term
+        :param maximum_length: the maximum length of the path. If
+        negative,
+        there will be no limit on the length of the path.
+        :type maximum_length: int
+        :return: the shortest paths between `source` and `destination`
+        :rtype: Collection[Tuple[Term]]
+        """
+        distance_for_vertex: Dict[Term, int] = dict()
+        predecessors_of_vertex: Dict[Term, Set[Term]] = dict()
+
+        distance_for_vertex[source] = 0
+
+        queue: deque[Term] = deque()
+        queue.append(source)
+        found = False
+        previous_distance = 0
+        while queue:
+            current = queue.popleft()
+            distance = distance_for_vertex[current]
+            if found and distance > previous_distance:
+                break
+            previous_distance = distance
+            if 0 <= maximum_length < distance + 1:
+                break
+
+            for neighbor in self.get_neighbour_terms(current):
+                predecessors_of_vertex.setdefault(neighbor, set()).add(current)
+                if neighbor not in distance_for_vertex:
+                    distance_for_vertex[neighbor] = distance + 1
+                    queue.append(neighbor)
+
+                if neighbor == destination:
+                    found = True
+                    break
+
+        if not found:
+            return set()
+        return self._build_paths(
+            source, destination, predecessors_of_vertex,
+            distance_for_vertex[destination])
+
+    @staticmethod
+    def _build_paths(source, destination, predecessors_of_vertex, path_length):
+        """
+        Builds the paths based on the predecessors. Then, filters it by the
+        ones that starts on `source` and ends at `destination`.
+
+        :param source: the source of the path
+        :type source: Term
+        :param destination: the destination of the path
+        :type destination: Term
+        :param predecessors_of_vertex:
+        :type predecessors_of_vertex: Dict[Term, Set[Term]]
+        :param path_length: the length of the paths
+        :type path_length: int
+        :return: the paths that starts on `source` and ends at `destination`
+        :rtype: Collection[Tuple[Term]]
+        """
+        queue: deque[List[Term]] = deque()
+        queue.append([destination])
+
+        for i in range(path_length - 1, -1, -1):
+            size = len(queue)
+            for j in range(size):
+                current_array = queue.popleft()
+                for predecessor in predecessors_of_vertex[current_array[0]]:
+                    queue.append([predecessor] + list(current_array))
+
+        result = \
+            filter(lambda x: x[0] == source and x[-1] == destination, queue)
+        return set(map(lambda x: tuple(x), result))
 
 
 DEFAULT_PARAMETERS = [

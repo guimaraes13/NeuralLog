@@ -1,10 +1,10 @@
 """
 Handles some revision operators that append literals to the clause.
 """
-import collections
 from abc import abstractmethod
+from collections import Collection, deque
 from random import random
-from typing import TypeVar, Generic, Set, Dict, List
+from typing import TypeVar, Generic, Set, Dict, List, Tuple
 
 from src.knowledge.examples import Examples, ExampleIterator, ExamplesInferences
 from src.knowledge.program import NeuralLogProgram
@@ -14,10 +14,11 @@ from src.language.equivalent_clauses import EquivalentAtom
 from src.language.language import HornClause, get_variable_atom, Literal, \
     Atom, \
     Term
+from src.util import OrderedSet
 from src.util.clause_utils import to_variable_atom
 from src.util.language import is_atom_unifiable_to_goal
 from src.util.multiprocessing.evaluation_transformer import \
-    LiteralAppendAsyncTransformer
+    LiteralAppendAsyncTransformer, ConjunctionAppendAsyncTransformer
 from src.util.multiprocessing.multiprocessing import \
     DEFAULT_NUMBER_OF_PROCESS, \
     DEFAULT_EVALUATION_TIMEOUT, MultiprocessingEvaluation
@@ -171,13 +172,14 @@ def build_queries_from_examples(examples, initial_clause_head,
     :rtype: Examples
     """
     query_set = Examples()
-    for example in ExampleIterator(examples):
+    predicate = initial_clause_head.predicate
+    for example in ExampleIterator(examples, predicate=predicate):
         if not is_atom_unifiable_to_goal(example, initial_clause_head):
             continue
         if positive_only and example.weight <= 0.0:
             continue
-        query_set.add_example(build_query_from_example(
-            substitution_head, example))
+        query_set.add_example(
+            build_query_from_example(substitution_head, example))
 
     return query_set
 
@@ -442,10 +444,6 @@ class RelevantLiteralAppendOperator(LiteralAppendOperator[Literal]):
         )
 
     # noinspection PyMissingOrEmptyDocstring
-    def theory_revision_accepted(self, revised_theory):
-        pass
-
-    # noinspection PyMissingOrEmptyDocstring
     def build_extended_horn_clause(self, examples, initial_clause,
                                    equivalent_literals):
         substitution_clause = build_substitution_clause(initial_clause)
@@ -495,3 +493,125 @@ class RelevantLiteralAppendOperator(LiteralAppendOperator[Literal]):
         for literal in equivalent_literals:
             skip_candidates.add(EquivalentAtom(literal, fixed_terms))
         return skip_candidates
+
+
+class PathFinderAppendOperator(LiteralAppendOperator[Set[Literal]]):
+    """
+    A literal append operator that search for the literal based on the
+    relevant terms from the examples and returns a path between the input and
+    output terms.
+    """
+
+    OPTIONAL_FIELDS = super().OPTIONAL_FIELDS
+    OPTIONAL_FIELDS.update({
+        "destination_index": -1,
+        "maximum_path_length": -1
+    })
+
+    def __init__(self,
+                 learning_system=None,
+                 theory_metric=None,
+                 clause_modifiers=None,
+                 modifier_clause_before_evaluate=None,
+                 number_of_process=None,
+                 evaluation_timeout=None,
+                 relevant_depth=None,
+                 maximum_based_examples=None,
+                 destination_index=None,
+                 maximum_path_length=None
+                 ):
+        super().__init__(
+            learning_system, theory_metric, clause_modifiers,
+            modifier_clause_before_evaluate, number_of_process,
+            evaluation_timeout, relevant_depth, maximum_based_examples)
+        self.destination_index = destination_index
+        "The index of the term to be the destination of the path."
+
+        if self.destination_index is None:
+            self.destination_index = self.OPTIONAL_FIELDS["destination_index"]
+
+        self.maximum_path_length = maximum_path_length
+        "The maximum length of the path."
+
+        if self.maximum_path_length is None:
+            self.maximum_path_length = \
+                self.OPTIONAL_FIELDS["maximum_path_length"]
+
+    # noinspection PyMissingOrEmptyDocstring,PyAttributeOutsideInit
+    def initialize(self):
+        super().initialize()
+        self.conjunction_transformer: ConjunctionAppendAsyncTransformer = \
+            ConjunctionAppendAsyncTransformer(self.clause_modifiers)
+        self.multiprocessing = MultiprocessingEvaluation(
+            self.learning_system, self.theory_metric,
+            self.conjunction_transformer,
+            self.evaluation_timeout, self.number_of_process
+        )
+
+    # noinspection PyMissingOrEmptyDocstring
+    def build_extended_horn_clause(self, examples, initial_clause,
+                                   equivalent_literals):
+        substitution_clause = build_substitution_clause(initial_clause)
+        head = initial_clause.head
+        query_set = build_queries_from_examples(
+            self.get_based_examples(examples), head, substitution_clause.head,
+            True)
+        if not query_set:
+            return None
+        inferred_examples = \
+            self.learning_system.infer_examples_appending_clauses(
+                query_set, [substitution_clause])
+        literals = self.get_literal_candidates_from_examples(
+            initial_clause, substitution_clause.head, inferred_examples,
+            set(), False)
+        if not literals:
+            return None
+        knowledge_base = NeuralLogProgram()
+        for literal in literals:
+            knowledge_base.add_fact(literal)
+        knowledge_base.build_program()
+        paths: Collection[Tuple[Term]] = knowledge_base.shortest_path(
+            head.terms[0], head.terms[self.destination_index],
+            self.maximum_path_length)
+        if not paths:
+            return None
+        conjunctions: Set[OrderedSet[Term]] = set()
+        for path in paths:
+            self.path_to_rules(path, knowledge_base, conjunctions)
+        self.conjunction_transformer.initial_clause = initial_clause
+        return self.multiprocessing.get_best_clause_from_candidates(
+            conjunctions, examples)
+
+    @staticmethod
+    def path_to_rules(path, knowledge_base, append):
+        """
+        Creates rules where the body is the path between terms in a
+        knowledge base.
+
+        :param path: the path
+        :type path: Tuple[Term] or List[Term]
+        :param knowledge_base: the knowledge base
+        :type knowledge_base: NeuralLogProgram
+        :param append: the collection of rules to append
+        :type append: Set[Iterable[Literal]]
+        :return: the collection of rules
+        :rtype: Set[Iterable[Literal]]
+        """
+        current_edges = set(knowledge_base.get_atoms_with_term(path[0]))
+        path_length = len(path) - 1
+        queue: deque[OrderedSet[Literal]] = deque()
+        queue.append(OrderedSet())
+        for i in range(path_length):
+            size = len(queue)
+            next_edges = set(knowledge_base.get_atoms_with_term(path[i + 1]))
+            current_edges = current_edges.intersection(next_edges)
+            for j in range(size):
+                current_array = queue.popleft()
+                for edge in current_edges:
+                    auxiliary = OrderedSet(current_array)
+                    auxiliary.add(Literal(edge))
+                    queue.append(auxiliary)
+            current_edges = next_edges
+
+        append.update(queue)
+        return append

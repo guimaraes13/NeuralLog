@@ -4,7 +4,7 @@ Handles the training of a NeuralLog network.
 import logging
 import os
 from functools import reduce
-from typing import Optional, Tuple, Dict
+from typing import Optional, Tuple, Dict, List
 
 import tensorflow as tf
 from tensorflow.keras.callbacks import ModelCheckpoint
@@ -260,7 +260,7 @@ class Trainer:
         metrics = self.parameters.get("metrics", None)
         loss = self.parameters["loss_function"]
         if isinstance(metrics, dict):
-            results = dict()
+            results: Dict[str, List] = dict()
             all_metrics = []
             for key, values in metrics.items():
                 if isinstance(values, dict):

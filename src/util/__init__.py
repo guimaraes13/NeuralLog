@@ -3,6 +3,7 @@ Package with generic useful tools.
 """
 import logging
 from abc import ABC, abstractmethod
+from functools import reduce
 from typing import Any, Iterator, Iterable, Union, Tuple, AbstractSet, Set, \
     TypeVar
 
@@ -85,6 +86,9 @@ class OrderedSet(set):
             for item in sequence:
                 self.add(item)
 
+    def __getitem__(self, item):
+        return self._list[item]
+
     def __len__(self) -> int:
         return super().__len__()
 
@@ -146,7 +150,8 @@ class OrderedSet(set):
         return "{{{}}}".format(", ".join(map(lambda x: str(x), self._list)))
 
     def __hash__(self) -> int:
-        return sum(map(lambda x: hash(x), self._list))
+        return reduce(lambda x, y: x * y, self._list)
+        # return sum(map(lambda x: hash(x), self._list))
 
     def __format__(self, format_spec: str) -> str:
         return super().__format__(format_spec)
