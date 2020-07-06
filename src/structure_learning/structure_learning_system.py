@@ -148,7 +148,7 @@ class StructureLearningSystem(Initializable):
 
         :param revision_examples: the revision examples
         :type revision_examples:
-            RevisionExamples or collections.Iterable[RevisionExamples]
+            RevisionExamples or collections.Collection[RevisionExamples]
         """
         self.theory_revision_manager.revise(revision_examples)
 

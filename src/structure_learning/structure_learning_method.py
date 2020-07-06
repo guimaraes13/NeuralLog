@@ -135,6 +135,8 @@ class StructureLearningMethod(Initializable):
         pass
 
 
+# TODO: Remove the clause modifiers from the learning method, set it
+#  individually for each revision operator.
 class BatchStructureLearning(StructureLearningMethod):
     """
     Class to learn the logic program from a batch of examples.

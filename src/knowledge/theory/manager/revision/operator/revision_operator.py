@@ -336,6 +336,18 @@ class LearnedClause(ClauseProvenance):
             message += " modifier by: {}".format(", ".join(self.modifiers))
         return message
 
+    def copy(self):
+        """
+        Returns a copy of itself.
+
+        :return: the copy
+        :rtype: LearnedClause
+        """
+        copy = LearnedClause(self.creator)
+        copy.modifiers = list(self.modifiers)
+
+        return copy
+
 
 class RevisionOperator(Initializable):
     """

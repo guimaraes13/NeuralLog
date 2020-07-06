@@ -1508,6 +1508,7 @@ class NeuralLogProgram:
     #  possible variable substitution. Ideally, do it lazily,
     #  in `build_program` after all grounded examples has been added and
     #  their constants has been gathered.
+    #  Maybe, do it at the building of the dataset.
     def add_example(self, atom, example_set=NO_EXAMPLE_SET, log_override=True):
         """
         Adds the `atom` example to the `example_set`.
@@ -1533,7 +1534,8 @@ class NeuralLogProgram:
         self._add_predicate(atom)
         self.logic_predicates.add(atom.predicate)
 
-    # TODO: do the same thing for the not ground examples
+    # TODO: do the same thing for the not ground examples.
+    #  Maybe, do it at the building of the dataset.
     # noinspection PyUnusedLocal,DuplicatedCode
     @builtin("mega_example")
     def _mega_example(self, example, *args, **kwargs):

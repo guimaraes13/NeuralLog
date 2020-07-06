@@ -8,10 +8,9 @@ from typing import TypeVar, Generic, Optional, Set, List, Dict
 from src.knowledge.examples import Examples, ExampleIterator
 from src.knowledge.manager.example_manager import IncomingExampleManager
 from src.knowledge.program import NeuralLogProgram
-from src.knowledge.theory.manager.revision.revision_examples import \
-    RevisionExamples
-from src.knowledge.theory.manager.revision.sample_selector import \
-    AllRelevantSampleSelect
+import src.knowledge.theory.manager.revision.revision_examples as re
+
+import src.knowledge.theory.manager.revision.sample_selector as selector
 from src.language.language import HornClause, Atom, Predicate
 from src.util.clause_utils import to_variable_atom
 
@@ -172,7 +171,7 @@ class TreeTheory:
         self.tree_map: Optional[Dict[Predicate, Node[HornClause]]] = None
         self.leaf_examples_map: \
             Optional[Dict[Predicate, Dict[Node[HornClause],
-                                          RevisionExamples]]] = None
+                                          re.RevisionExamples]]] = None
 
     def initialize(self, theory):
         """
@@ -415,7 +414,7 @@ class TreeExampleManager(IncomingExampleManager):
     the theory.
     """
 
-    ALL_SAMPLE_SELECTOR = AllRelevantSampleSelect()
+    ALL_SAMPLE_SELECTOR = selector.AllRelevantSampleSelect()
 
     def __init__(self, learning_system=None, sample_selector=None,
                  tree_theory=None):
@@ -566,7 +565,7 @@ class TreeExampleManager(IncomingExampleManager):
         """
         revision_examples = leaf_example.get(leaf)
         if revision_examples is None:
-            revision_examples = RevisionExamples(
+            revision_examples = re.RevisionExamples(
                 self.learning_system, self.sample_selector.copy())
             leaf_example[leaf] = revision_examples
         revision_examples.add_example(example)

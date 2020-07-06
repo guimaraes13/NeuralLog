@@ -83,7 +83,7 @@ class TheoryRevisionManager(Initializable):
 
         :param revision_examples: the revision examples
         :type revision_examples: revision.RevisionExamples or
-            collections.Iterable[revision.RevisionExamples]
+            collections.Collection[revision.RevisionExamples]
         """
         self.revision_manager.revise(revision_examples)
 

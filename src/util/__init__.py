@@ -229,7 +229,7 @@ class Initializable(ABC):
         the ones that are optional and have default values.
         """
         for key, value in self.OPTIONAL_FIELDS.items():
-            if not hasattr(self, key):
+            if not hasattr(self, key) or getattr(self, key) is None:
                 setattr(self, key, value)
 
     @abstractmethod
