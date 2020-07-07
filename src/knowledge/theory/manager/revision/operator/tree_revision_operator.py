@@ -15,7 +15,6 @@ from src.knowledge.theory.manager.revision.operator.revision_operator import \
     RevisionOperator
 from src.language.language import HornClause, Literal
 from src.util import OrderedSet
-from src.util.multiprocessing.evaluation_transformer import apply_modifiers
 from src.util.multiprocessing.theory_evaluation import AsyncTheoryEvaluator, \
     SyncTheoryEvaluator
 
@@ -143,7 +142,6 @@ class AddNodeTreeRevisionOperator(TreeRevisionOperator):
     def initialize(self):
         super().initialize()
         self.append_operator.learning_system = self.learning_system
-        self.append_operator.clause_modifiers = self.clause_modifiers
         self.append_operator.initialize()
 
     # noinspection PyMissingOrEmptyDocstring
@@ -212,8 +210,8 @@ class AddNodeTreeRevisionOperator(TreeRevisionOperator):
         if self.refine:
             horn_clause = self.refine_clause(horn_clause, examples)
         self.revised_clause = horn_clause.horn_clause
-        self.revised_clause = apply_modifiers(
-            self.clause_modifiers, self.revised_clause, examples)
+        self.revised_clause = \
+            self.apply_clause_modifiers(self.revised_clause, examples)
         self.log_changes(node, remove_old)
 
         theory = self.learning_system.theory.copy()
@@ -422,8 +420,8 @@ class RemoveNodeTreeRevisionOperator(TreeRevisionOperator):
         clauses = OrderedSet()
         for clause in theory_clauses:
             if node.element == clause:
-                revised_clause = apply_modifiers(
-                    self.clause_modifiers, node.parent.element, examples)
+                revised_clause = \
+                    self.apply_clause_modifiers(node.parent.element, examples)
                 clauses.add(revised_clause)
             else:
                 clauses.add(clauses)

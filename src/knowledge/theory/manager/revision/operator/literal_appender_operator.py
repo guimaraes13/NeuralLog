@@ -211,7 +211,6 @@ class LiteralAppendOperator(RevisionOperator, Generic[V]):
 
     OPTIONAL_FIELDS = super().OPTIONAL_FIELDS
     OPTIONAL_FIELDS.update({
-        "modifier_clause_before_evaluate": False,
         "number_of_process": DEFAULT_NUMBER_OF_PROCESS,
         "evaluation_timeout": DEFAULT_EVALUATION_TIMEOUT,
         "relevant_depth": 0,
@@ -222,23 +221,12 @@ class LiteralAppendOperator(RevisionOperator, Generic[V]):
                  learning_system=None,
                  theory_metric=None,
                  clause_modifiers=None,
-                 modifier_clause_before_evaluate=None,
                  number_of_process=None,
                  evaluation_timeout=None,
                  relevant_depth=None,
                  maximum_based_examples=None
                  ):
         super().__init__(learning_system, theory_metric, clause_modifiers)
-
-        self.modifier_clause_before_evaluate = modifier_clause_before_evaluate
-        """
-        If `True`, apply the clause modifier to the clause before 
-        evaluating the clause to decide which one is the best.
-        """
-
-        if modifier_clause_before_evaluate is None:
-            self.modifier_clause_before_evaluate = \
-                self.OPTIONAL_FIELDS["modifier_clause_before_evaluate"]
 
         self.number_of_process = number_of_process
         """
@@ -421,7 +409,6 @@ class RelevantLiteralAppendOperator(LiteralAppendOperator[Literal]):
                  learning_system=None,
                  theory_metric=None,
                  clause_modifiers=None,
-                 modifier_clause_before_evaluate=None,
                  number_of_process=None,
                  evaluation_timeout=None,
                  relevant_depth=None,
@@ -429,8 +416,8 @@ class RelevantLiteralAppendOperator(LiteralAppendOperator[Literal]):
                  ):
         super().__init__(
             learning_system, theory_metric, clause_modifiers,
-            modifier_clause_before_evaluate, number_of_process,
-            evaluation_timeout, relevant_depth, maximum_based_examples)
+            number_of_process, evaluation_timeout, relevant_depth,
+            maximum_based_examples)
 
     # noinspection PyMissingOrEmptyDocstring,PyAttributeOutsideInit
     def initialize(self):
@@ -512,7 +499,6 @@ class PathFinderAppendOperator(LiteralAppendOperator[Set[Literal]]):
                  learning_system=None,
                  theory_metric=None,
                  clause_modifiers=None,
-                 modifier_clause_before_evaluate=None,
                  number_of_process=None,
                  evaluation_timeout=None,
                  relevant_depth=None,
@@ -522,8 +508,8 @@ class PathFinderAppendOperator(LiteralAppendOperator[Set[Literal]]):
                  ):
         super().__init__(
             learning_system, theory_metric, clause_modifiers,
-            modifier_clause_before_evaluate, number_of_process,
-            evaluation_timeout, relevant_depth, maximum_based_examples)
+            number_of_process, evaluation_timeout, relevant_depth,
+            maximum_based_examples)
         self.destination_index = destination_index
         "The index of the term to be the destination of the path."
 

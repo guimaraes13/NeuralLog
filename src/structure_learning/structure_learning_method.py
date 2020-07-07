@@ -135,8 +135,6 @@ class StructureLearningMethod(Initializable):
         pass
 
 
-# TODO: Remove the clause modifiers from the learning method, set it
-#  individually for each revision operator.
 class BatchStructureLearning(StructureLearningMethod):
     """
     Class to learn the logic program from a batch of examples.
@@ -177,7 +175,6 @@ class BatchStructureLearning(StructureLearningMethod):
                  theory_metrics=None,
                  revision_operator_selector=None,
                  revision_operator_evaluators=None,
-                 clause_modifiers=None,
                  ):
         """
         Creates a batch structure learning method.
@@ -222,8 +219,8 @@ class BatchStructureLearning(StructureLearningMethod):
         :param revision_operator_evaluators: the revision operator evaluators
         :type revision_operator_evaluators:
             Optional[List[RevisionOperatorEvaluator]]
-        :param clause_modifiers: a iterable of clause modifiers
-        :type clause_modifiers: Optional[collections.Iterable[ClauseModifier]]
+        # :param clause_modifiers: a iterable of clause modifiers
+        # :type clause_modifiers: Optional[collections.Iterable[ClauseModifier]]
         """
         super(BatchStructureLearning, self).__init__(
             knowledge_base_file_paths,
@@ -271,7 +268,6 @@ class BatchStructureLearning(StructureLearningMethod):
         self.theory_metrics = theory_metrics
         self.revision_operator_selector = revision_operator_selector
         self.revision_operator_evaluators = revision_operator_evaluators
-        self.clause_modifiers = clause_modifiers
 
     # noinspection PyMissingOrEmptyDocstring
     @property
@@ -429,7 +425,6 @@ class BatchStructureLearning(StructureLearningMethod):
         self.learning_system = StructureLearningSystem(
             self._knowledge_base, self._theory, self.engine_system_translator)
         self.build_theory_metrics()
-        self.build_clause_modifiers()
         self.build_operator_selector()
 
         self.build_incoming_example_manager()
@@ -444,16 +439,6 @@ class BatchStructureLearning(StructureLearningMethod):
         """
         if not self.theory_metrics:
             self.theory_evaluator = default_theory_metrics()
-
-    def build_clause_modifiers(self):
-        """
-        Builds the clause modifiers.
-        """
-        if self.clause_modifiers is None:
-            self.clause_modifiers = []
-        # else:
-        # for clause_modifier in self.clause_modifiers:
-        #     clause_modifier.learning_system = self.learning_system
 
     def build_operator_selector(self):
         """
@@ -478,9 +463,8 @@ class BatchStructureLearning(StructureLearningMethod):
         else:
             self.revision_operator_evaluators = \
                 list(self.revision_operator_evaluators)
-        for operator in self.revision_operator_evaluators:
-            # operator.learning_system = self.learning_system
-            operator.clause_modifiers = self.clause_modifiers
+        # for operator in self.revision_operator_evaluators:
+        #     operator.clause_modifiers = self.clause_modifiers
         return self.revision_operator_evaluators
 
     def build_incoming_example_manager(self):

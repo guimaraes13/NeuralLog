@@ -4,10 +4,9 @@ Modifies proposed clauses.
 import re
 from abc import abstractmethod
 
+import src.knowledge.theory.manager.revision.operator.revision_operator as ro
 import src.structure_learning.structure_learning_system as sls
 from src.knowledge.examples import Examples
-import src.knowledge.theory.manager.revision.operator.revision_operator as ro
-
 from src.language.language import HornClause, Literal, Atom, \
     get_term_from_string
 from src.util import Initializable
@@ -47,6 +46,71 @@ class ClauseModifier(Initializable):
 
     def __repr__(self):
         return self.__class__.__name__
+
+
+class ClauseHeadPredicateModifier(ClauseModifier):
+    """
+    Modifies the predicate of the head of the clause.
+
+    Useful when one wants to indirect learn rules from a set of examples of
+    another predicate.
+
+    For instance, supposes one wants to learn a with head
+    `a_1(.)`, from a set of examples `a(.)`, to append to a theory that
+    contains a rule of the form `a(.) :- a_1(.), ... .`.
+    """
+
+    def __init__(self, learning_system=None,
+                 old_predicate=None, new_predicate=None):
+        """
+        Creates a clause modifier.
+
+        :param learning_system: the learning system
+        :type learning_system: sls.StructureLearningSystem
+        :param old_predicate: the old predicate, a regex to match the term to
+        be substituted, if the regex return a group, it will be appended to
+        the new predicate ter
+        :type old_predicate: Optional[str]
+        :param new_predicate: the new predicate
+        :type new_predicate: Optional[int]
+        """
+        super().__init__(learning_system)
+        if old_predicate is not None:
+            self.old_predicate = old_predicate
+        self.new_predicate = new_predicate
+
+    # noinspection PyMissingOrEmptyDocstring
+    def required_fields(self):
+        return super().required_fields() + ["old_predicate", "new_predicate"]
+
+    # noinspection PyMissingOrEmptyDocstring,PyAttributeOutsideInit
+    def initialize(self):
+        super().initialize()
+        self.predicate_regex = re.compile(self.old_predicate)
+
+    # noinspection PyMissingOrEmptyDocstring
+    def modify_clause(self, clause, examples):
+        head = clause.head
+        match = self.predicate_regex.fullmatch(head.predicate.name)
+        if match is None:
+            return clause
+        groups = match.groups()
+        if groups:
+            new_predicate = groups[0] + self.new_predicate
+        else:
+            new_predicate = self.new_predicate
+        new_head = Atom(new_predicate, *head.terms, weight=head.weight)
+        provenance = clause.provenance
+        if isinstance(provenance, ro.LearnedClause):
+            provenance = provenance.copy()
+            provenance.add_modifier(self)
+        new_clause = HornClause(new_head, *clause.body, provenance=provenance)
+
+        return new_clause
+
+    def __repr__(self):
+        return f"[{super().__repr__()}] {self.new_predicate}" + \
+               f" -> () + {self.old_predicate}"
 
 
 class AppendLiteralModifier(ClauseModifier):
@@ -147,68 +211,3 @@ class AppendLiteralWithUniqueTermModifier(ClauseModifier):
     def __repr__(self):
         return f"[{super().__repr__()}] {self.predicate}/1[" + \
                f"{self.term_prefix} + ()]"
-
-
-class ClauseHeadPredicateModifier(ClauseModifier):
-    """
-    Modifies the predicate of the head of the clause.
-
-    Useful when one wants to indirect learn rules from a set of examples of
-    another predicate.
-
-    For instance, supposes one wants to learn a with head
-    `a_1(.)`, from a set of examples `a(.)`, to append to a theory that
-    contains a rule of the form `a(.) :- a_1(.), ... .`.
-    """
-
-    def __init__(self, learning_system=None,
-                 old_predicate=None, new_predicate=None):
-        """
-        Creates a clause modifier.
-
-        :param learning_system: the learning system
-        :type learning_system: sls.StructureLearningSystem
-        :param old_predicate: the old predicate, a regex to match the term to
-        be substituted, if the regex return a group, it will be appended to
-        the new predicate ter
-        :type old_predicate: Optional[str]
-        :param new_predicate: the new predicate
-        :type new_predicate: Optional[int]
-        """
-        super().__init__(learning_system)
-        if old_predicate is not None:
-            self.old_predicate = re.compile(old_predicate)
-        self.new_predicate = new_predicate
-
-    # noinspection PyMissingOrEmptyDocstring
-    def required_fields(self):
-        return super().required_fields() + ["old_predicate", "new_predicate"]
-
-    # noinspection PyMissingOrEmptyDocstring,PyAttributeOutsideInit
-    def initialize(self):
-        super().initialize()
-        self.predicate_regex = re.compile(self.old_predicate)
-
-    # noinspection PyMissingOrEmptyDocstring
-    def modify_clause(self, clause, examples):
-        head = clause.head
-        match = self.predicate_regex.fullmatch(head.predicate.name)
-        if match is None:
-            return clause
-        groups = match.groups()
-        if groups:
-            new_predicate = groups[0] + self.new_predicate
-        else:
-            new_predicate = self.new_predicate
-        new_head = Atom(new_predicate, *head.terms, weight=head.weight)
-        provenance = clause.provenance
-        if isinstance(provenance, ro.LearnedClause):
-            provenance = provenance.copy()
-            provenance.add_modifier(self)
-        new_clause = HornClause(new_head, *clause.body, provenance=provenance)
-
-        return new_clause
-
-    def __repr__(self):
-        return f"[{super().__repr__()}] {self.new_predicate}" + \
-               f" -> () + {self.old_predicate}"
