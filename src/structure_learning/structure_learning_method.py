@@ -419,8 +419,8 @@ class BatchStructureLearning(StructureLearningMethod):
         """
         Builds the learning system.
         """
-        logger.info("Build the learning system:\t%s",
-                    StructureLearningSystem.__class__.__name__)
+        logger.info(
+            "Build the learning system:\t%s", StructureLearningSystem.__name__)
         # noinspection PyAttributeOutsideInit
         self.learning_system = StructureLearningSystem(
             self._knowledge_base, self._theory, self.engine_system_translator)

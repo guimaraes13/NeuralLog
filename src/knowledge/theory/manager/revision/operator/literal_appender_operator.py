@@ -186,8 +186,8 @@ def build_queries_from_examples(examples, initial_clause_head,
             continue
         if positive_only and example.weight <= 0.0:
             continue
-        query_set.add_example(
-            build_query_from_example(substitution_head, example))
+        query = build_query_from_example(substitution_head, example)
+        query_set.add_example(query)
 
     return query_set
 
@@ -330,7 +330,8 @@ class LiteralAppendOperator(RevisionOperator, Generic[V]):
 
     @abstractmethod
     def build_extended_horn_clause(
-            self, examples, initial_clause, equivalent_literals):
+            self, examples, initial_clause, equivalent_literals,
+            target_predicate=None):
         """
         Method to build an extended Horn clause that improves the metric on the
         examples, based on the initial clause.
@@ -350,6 +351,9 @@ class LiteralAppendOperator(RevisionOperator, Generic[V]):
         :type equivalent_literals: Set[Literal]
         :raise TheoryRevisionException: in case an error occur during the
         revision
+        :param target_predicate: the target predicate, in case it is
+        different from the the initial clause
+        :type target_predicate: Optional[Predicate]
         :return: The extended horn clause
         :rtype: AsyncTheoryEvaluator or SyncTheoryEvaluator
         """
@@ -441,8 +445,8 @@ class RelevantLiteralAppendOperator(LiteralAppendOperator[Literal]):
     # noinspection PyMissingOrEmptyDocstring,PyAttributeOutsideInit
     def initialize(self):
         super().initialize()
-        self.literal_transformer = \
-            LiteralAppendAsyncTransformer(self.clause_modifiers)
+        self.literal_transformer = LiteralAppendAsyncTransformer(
+            clause_modifiers=self.clause_modifiers)
         self.multiprocessing = MultiprocessingEvaluation(
             self.learning_system, self.theory_metric,
             self.literal_transformer,
@@ -451,11 +455,16 @@ class RelevantLiteralAppendOperator(LiteralAppendOperator[Literal]):
 
     # noinspection PyMissingOrEmptyDocstring
     def build_extended_horn_clause(self, examples, initial_clause,
-                                   equivalent_literals):
+                                   equivalent_literals, target_predicate=None):
         substitution_clause, type_clause = \
             build_substitution_clause(initial_clause)
+        if target_predicate:
+            initial_clause_head = \
+                Atom(target_predicate, *initial_clause.head.terms)
+        else:
+            initial_clause_head = initial_clause.head
         query_set = build_queries_from_examples(
-            self.get_based_examples(examples), initial_clause.head,
+            self.get_based_examples(examples), initial_clause_head,
             substitution_clause.head, True)
 
         if not query_set:
@@ -548,16 +557,18 @@ class PathFinderAppendOperator(LiteralAppendOperator[Set[Literal]]):
     def initialize(self):
         super().initialize()
         self.conjunction_transformer: ConjunctionAppendAsyncTransformer = \
-            ConjunctionAppendAsyncTransformer(self.clause_modifiers)
+            ConjunctionAppendAsyncTransformer(
+                clause_modifiers=self.clause_modifiers)
         self.multiprocessing = MultiprocessingEvaluation(
             self.learning_system, self.theory_metric,
             self.conjunction_transformer,
             self.evaluation_timeout, self.number_of_process
         )
 
+    # TODO: consider the target predicate in this method
     # noinspection PyMissingOrEmptyDocstring
     def build_extended_horn_clause(self, examples, initial_clause,
-                                   equivalent_literals):
+                                   equivalent_literals, target_predicate=None):
         substitution_clause, type_clause = \
             build_substitution_clause(initial_clause)
         head = initial_clause.head

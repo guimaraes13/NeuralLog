@@ -153,7 +153,7 @@ class LiteralAppendAsyncTransformer(AsyncEvaluationTransformer[Literal, J]):
         if not value:
             self._clause_modifiers = []
         else:
-            if isinstance(ClauseModifier, value):
+            if isinstance(value, ClauseModifier):
                 self._clause_modifiers = [value]
             else:
                 self._clause_modifiers = list(value)
@@ -224,7 +224,7 @@ class ConjunctionAppendAsyncTransformer(AsyncEvaluationTransformer[
         if not value:
             self._clause_modifiers = []
         else:
-            if isinstance(ClauseModifier, value):
+            if isinstance(value, ClauseModifier):
                 self._clause_modifiers = [value]
             else:
                 self._clause_modifiers = list(value)

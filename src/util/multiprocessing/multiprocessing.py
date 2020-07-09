@@ -155,6 +155,7 @@ class MultiprocessingEvaluation(Generic[V, E]):
         best_evaluator = None
         successful_runs = 0
         for future in futures:
+            # noinspection PyBroadException
             try:
                 async_evaluator = future.result(0)
                 if not async_evaluator.has_finished:
@@ -165,14 +166,15 @@ class MultiprocessingEvaluation(Generic[V, E]):
                 if evaluation_map is not None:
                     evaluation_map[async_evaluator] = evaluation
 
-                if self.theory_metric.compare(evaluation, best_evaluation) > 0:
+                if best_evaluator is None or self.theory_metric.compare(
+                        evaluation, best_evaluation) > 0.0:
                     best_evaluation = evaluation
                     best_evaluator = async_evaluator
             except (CancelledError, TimeoutError):
                 logger.exception(
                     "Evaluation of the theory timed out after %d seconds.",
                     self.evaluation_timeout)
-            except KnowledgeException:
+            except Exception:
                 logger.exception("Error when evaluating the clause, reason:")
 
         return best_evaluator

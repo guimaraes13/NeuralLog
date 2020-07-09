@@ -196,10 +196,10 @@ class BestLeafRevisionManager(RevisionManager):
     # noinspection PyMissingOrEmptyDocstring
     def revise(self, revision_examples):
         if not isinstance(revision_examples, collections.Collection):
-            self.tree_theory.revision_leaf_index = 0
+            self.tree_theory.current_index = 0
             self.call_revision(revision_examples)
         elif len(revision_examples) == 1:
-            self.tree_theory.revision_leaf_index = 0
+            self.tree_theory.current_index = 0
             self.call_revision(next(iter(revision_examples)))
         else:
             total_revision = self.get_maximum_revision_points(revision_examples)
@@ -215,7 +215,7 @@ class BestLeafRevisionManager(RevisionManager):
                     self.revision_heuristic.compare,
                     lambda x, y, _: (x.get_training_examples(all_examples), y)))
             for revision_point, _, index in revision_points[:total_revision]:
-                self.tree_theory.revision_leaf_index = index
+                self.tree_theory.current_index = index
                 self.call_revision(revision_point)
 
     def get_maximum_revision_points(self, revision_points):

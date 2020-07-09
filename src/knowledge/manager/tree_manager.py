@@ -161,7 +161,7 @@ class TreeTheory:
 
     DEFAULT_THEORY_BODY = [FALSE_LITERAL]
 
-    def __init__(self, initial_modifiers=()):
+    def __init__(self, learning_system=None, initial_modifiers=()):
         """
         Creates a tree theory.
 
@@ -172,17 +172,23 @@ class TreeTheory:
         can be `None`.
         :type initial_modifiers: collections.Collection[ClauseModifier]
         """
+        self.learning_system = learning_system
+
         self.revision_leaves: Optional[List[Node[HornClause]]] = None
         "The revision leaves"
 
-        self.revision_leaf_index: Optional[int] = None
+        self.current_index: Optional[int] = None
         "The index of the current revision leaf"
+
+        self.target_predicates: Optional[List[Predicate]] = None
+        "The target predicates"
 
         self.tree_map: Optional[Dict[Predicate, Node[HornClause]]] = None
         self.leaf_examples_map: \
             Optional[Dict[Predicate, Dict[Node[HornClause],
                                           re.RevisionExamples]]] = None
-        self.initial_modifiers = initial_modifiers
+        self.initial_modifiers: collections.Collection[ClauseModifier] = \
+            initial_modifiers
 
     def initialize(self, theory=None):
         """
@@ -191,10 +197,18 @@ class TreeTheory:
         :param theory: the theory
         :type theory: Optional[NeuralLogProgram]
         """
-        if not hasattr(self, "initial_modifiers"):
+        if not hasattr(self, "initial_modifiers") or \
+                self.initial_modifiers is None:
             self.initial_modifiers = ()
+        else:
+            for clause_modifier in self.initial_modifiers:
+                if not hasattr(clause_modifier, "learning_system") or \
+                        clause_modifier.learning_system is None:
+                    clause_modifier.learning_system = self.learning_system
+                clause_modifier.initialize()
         self.revision_leaves = None
-        self.revision_leaf_index = None
+        self.target_predicates = None
+        self.current_index = None
         self.leaf_examples_map = dict()
         self.tree_map = dict()
         if theory:
@@ -307,7 +321,8 @@ class TreeTheory:
 
     def get_revision_leaf(self, index=None):
         """
-        Gets the revision leaf of `index`.
+        Gets the revision leaf of `index`. If `index` is `None`, returns the
+        current revision leaf.
 
         :param index: the index
         :type index: Optional[int]
@@ -315,10 +330,26 @@ class TreeTheory:
         :rtype: Node[HornClause]
         """
         if index is None:
-            if self.revision_leaf_index is None:
+            if self.current_index is None:
                 return None
-            return self.revision_leaves[self.revision_leaf_index]
+            return self.revision_leaves[self.current_index]
         return self.revision_leaves[index]
+
+    def get_target_predicate(self, index=None):
+        """
+        Gets the target predicate of `index`. If `index` is `None`, returns the
+        current target predicate.
+
+        :param index: the index
+        :type index: Optional[int]
+        :return: the revision leaf
+        :rtype: Predicate
+        """
+        if index is None:
+            if self.current_index is None:
+                return None
+            return self.target_predicates[self.current_index]
+        return self.target_predicates[index]
 
     @staticmethod
     def is_default_theory(node):
@@ -452,6 +483,7 @@ class TreeExampleManager(IncomingExampleManager):
         self.cached_clauses: Dict[Predicate, List[HornClause]] = dict()
         "Caches the list of all rules, except the rules of the key predicate."
 
+        self.tree_theory.learning_system = self.learning_system
         self.tree_theory.initialize()
 
     # noinspection PyMissingOrEmptyDocstring
@@ -609,12 +641,14 @@ class TreeExampleManager(IncomingExampleManager):
         """
         for predicate, leaves in modified_leaves.items():
             self.tree_theory.revision_leaves = []
+            self.tree_theory.target_predicates = []
             targets = []
             for leaf in leaves:
                 target = self.tree_theory.get_example_from_leaf(predicate, leaf)
                 if target:
                     targets.append(target)
                     self.tree_theory.revision_leaves.append(leaf)
+                    self.tree_theory.target_predicates.append(predicate)
             logger.debug("Calling the revision for\t%d modified leaves of "
                          "predicate:\t%s.", len(targets), predicate)
             self.learning_system.revise_theory(targets)

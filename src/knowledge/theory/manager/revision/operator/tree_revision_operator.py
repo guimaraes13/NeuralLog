@@ -204,8 +204,10 @@ class AddNodeTreeRevisionOperator(TreeRevisionOperator):
         """
         element = \
             HornClause(node.element.head) if node.is_root else node.element
+        target_predicate = self.tree_theory.get_target_predicate()
         horn_clause = self.append_operator.build_extended_horn_clause(
-            examples, element, self.build_redundant_literals(node))
+            examples, element, self.build_redundant_literals(node),
+            target_predicate)
         if not horn_clause:
             return None
         if self.refine:
@@ -256,9 +258,10 @@ class AddNodeTreeRevisionOperator(TreeRevisionOperator):
         side_way_movements = 0
         best_clause = initial_clause
         current_clause = initial_clause
+        target_predicate = self.tree_theory.get_target_predicate()
         while not self.is_to_stop_by_side_way_movements(side_way_movements):
             current_clause = self.append_operator.build_extended_horn_clause(
-                examples, current_clause.horn_clause, set())
+                examples, current_clause.horn_clause, set(), target_predicate)
             if not current_clause:
                 break
             logger.debug("Proposed refined rule:\t%s", current_clause)
