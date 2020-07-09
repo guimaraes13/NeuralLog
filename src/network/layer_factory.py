@@ -626,8 +626,8 @@ class LayerFactory:
         tensor = self._tensor_by_name.get(name, None)
         if tensor is None:
             if isinstance(value, csr_matrix):
-                sparsity = len(value.data) / np.prod(value.shape,
-                                                     dtype=np.float32)
+                sparsity = \
+                    len(value.data) / np.prod(value.shape, dtype=np.float32)
                 if allow_sparse and sparsity < self.SPARSE_THRESHOLD:
                     data = value.data
                     if len(data) == 0:

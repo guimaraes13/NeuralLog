@@ -676,11 +676,12 @@ class BottomClauseBoundedRule(RevisionOperator):
             horn_clause = \
                 self.build_rule_from_bottom_clause(targets, bottom_clause)
             horn_clause = self.apply_clause_modifiers(horn_clause, targets)
-            horn_clause.provenance = LearnedClause(str(self))
-            theory.add_clauses([horn_clause])
-            theory.build_program()
-            logger.info("Rule appended to the theory:\t%s", horn_clause)
-            return True
+            if horn_clause:
+                horn_clause.provenance = LearnedClause(str(self))
+                theory.add_clauses([horn_clause])
+                theory.build_program()
+                logger.info("Rule appended to the theory:\t%s", horn_clause)
+                return True
         except (KnowledgeException, InitializationException):
             logger.exception("Error when revising the example, reason:")
         return False

@@ -12,7 +12,7 @@ from typing import TypeVar, Generic, Dict, Set
 import src.structure_learning.structure_learning_system as sls
 from src.knowledge.examples import Examples
 from src.knowledge.theory.evaluation.metric.theory_metric import TheoryMetric
-from src.language.language import HornClause, KnowledgeException
+from src.language.language import HornClause
 from src.util import OrderedSet
 from src.util.multiprocessing.evaluation_transformer import \
     AsyncEvaluationTransformer
@@ -64,6 +64,125 @@ class MultiprocessingEvaluation(Generic[V, E]):
         self.number_of_process = number_of_process
         "The maximum number of process this class is allowed to create."
 
+    def get_best_clause_from_candidates(
+            self, candidates, examples, evaluation_map=None):
+        """
+        Evaluates the candidate clauses against the metric and returns the
+        best evaluated clause.
+
+        :param candidates: the candidates
+        :type candidates: collections.Collection[V]
+        :param examples: the examples
+        :type examples: Examples
+        :param evaluation_map: the map of rules and their evaluations
+        :type evaluation_map: Dict[AsyncTheoryEvaluator[E], float] or None
+        :return: the async theory evaluator containing the best evaluated clause
+        :rtype: AsyncTheoryEvaluator[E]
+        """
+        if not candidates:
+            return None
+
+        best_clause = None
+        # noinspection PyBroadException
+        try:
+            if evaluation_map is None:
+                evaluation_map = dict()
+            self.learning_system.engine_system_translator.debug_mode = True
+            # best_clause = self._evaluate_using_pool(
+            #     candidates, examples, evaluation_map)
+            best_clause = self._evaluate_sequentially(
+                candidates, examples, evaluation_map)
+            self.learning_system.engine_system_translator.debug_mode = False
+            if logger.isEnabledFor(logging.DEBUG):
+                sorted_clauses = sorted(
+                    evaluation_map.items(), key=lambda x: -x[1])
+                for clause, evaluation in sorted_clauses:
+                    logger.debug(
+                        "Evaluation: %.3f\twith time: %.3fs\tfor rule:\t%s",
+                        evaluation, clause.real_time, clause.horn_clause
+                    )
+        except Exception:
+            logger.exception("Error when evaluating the clause, reason:")
+
+        return best_clause
+
+    # noinspection DuplicatedCode
+    def _evaluate_sequentially(self, candidates, examples, evaluation_map=None):
+        """
+        Evaluates the candidates sequentially.
+
+        :param candidates: the candidates
+        :type candidates: collections.Collection[V]
+        :param examples: the examples
+        :type examples: Examples
+        :param evaluation_map: the map of rules and their evaluations
+        :type evaluation_map: Dict[AsyncTheoryEvaluator[E], float] or
+        None
+        :return: the async theory evaluator containing the best
+        evaluated clause
+        :rtype: AsyncTheoryEvaluator[E]
+        """
+        best_evaluation = self.theory_metric.default_value
+        best_evaluator = None
+        successful_runs = 0
+        logger.info("[ BEGIN ]\tSequential evaluation of %d candidates.",
+                    len(candidates))
+        for candidate in candidates:
+            # noinspection PyBroadException
+            try:
+                logger.debug("Evaluating candidate:\t%s", candidate)
+                evaluator = SyncTheoryEvaluator(
+                    examples, self.learning_system.theory_evaluator,
+                    self.theory_metric, self.evaluation_timeout)
+                evaluator = \
+                    self.transformer.transform(evaluator, candidate, examples)
+                async_evaluator: AsyncTheoryEvaluator = evaluator()
+                if not async_evaluator.has_finished:
+                    continue
+                successful_runs += 1
+
+                evaluation = async_evaluator.evaluation
+                if evaluation_map is not None:
+                    evaluation_map[async_evaluator] = evaluation
+
+                if best_evaluator is None or self.theory_metric.compare(
+                        evaluation, best_evaluation) > 0.0:
+                    best_evaluation = evaluation
+                    best_evaluator = async_evaluator
+            except (CancelledError, TimeoutError):
+                logger.exception(
+                    "Evaluation of the theory timed out after %d seconds.",
+                    self.evaluation_timeout)
+            except Exception:
+                logger.exception("Error when evaluating the clause, reason:")
+        logger.info("[  END  ]\tSequential evaluation.")
+        return best_evaluator
+
+    def _evaluate_using_pool(self, candidates, examples, evaluation_map=None):
+        """
+        Evaluates the candidates using a pool of workers.
+
+        :param candidates: the candidates
+        :type candidates: collections.Collection[V]
+        :param examples: the examples
+        :type examples: Examples
+        :param evaluation_map: the map of rules and their evaluations
+        :type evaluation_map: Dict[AsyncTheoryEvaluator[E], float] or None
+        :return: the async theory evaluator containing the best evaluated clause
+        :rtype: AsyncTheoryEvaluator[E]
+        """
+        logger.info("[ BEGIN ]\tAsynchronous evaluation of %d candidates.",
+                    len(candidates))
+        number_of_process = min(self.number_of_process, len(candidates))
+        pool = ThreadPoolExecutor(number_of_process)
+        futures = self.submit_candidates(candidates, examples, pool)
+        pool.shutdown(True)
+        logger.info("[  END  ]\tAsynchronous evaluation.")
+        best_clause = \
+            self.retrieve_evaluated_candidates(futures, evaluation_map)
+
+        return best_clause
+
     def submit_candidates(self, candidates, examples, pool):
         """
         Submits the `candidates` to the evaluation `pool`, returning a set of
@@ -91,53 +210,7 @@ class MultiprocessingEvaluation(Generic[V, E]):
 
         return futures
 
-    def get_best_clause_from_candidates(
-            self, candidates, examples, evaluation_map=None):
-        """
-        Evaluates the candidate clauses against the metric and returns the
-        best evaluated clause.
-
-        :param candidates: the candidates
-        :type candidates: collections.Collection[V]
-        :param examples: the examples
-        :type examples: Examples
-        :param evaluation_map: the map of rules and their evaluations
-        :type evaluation_map: Dict[AsyncTheoryEvaluator[E], float] or None
-        :return: the async theory evaluator containing the best evaluated clause
-        :rtype: AsyncTheoryEvaluator[E]
-        """
-        if not candidates:
-            return None
-
-        best_clause = None
-
-        number_of_process = min(self.number_of_process, len(candidates))
-        if evaluation_map is None:
-            evaluation_map = dict()
-
-        # noinspection PyBroadException
-        try:
-            logger.info("[ BEGIN ]\tAsynchronous evaluation of %d candidates.",
-                        len(candidates))
-            pool = ThreadPoolExecutor(number_of_process)
-            futures = self.submit_candidates(candidates, examples, pool)
-            pool.shutdown(True)
-            logger.info("[  END  ]\tAsynchronous evaluation.")
-            best_clause = \
-                self.retrieve_evaluated_candidates(futures, evaluation_map)
-            if logger.isEnabledFor(logging.DEBUG):
-                sorted_clauses = sorted(
-                    evaluation_map.items(), key=lambda x: -x[1])
-                for clause, evaluation in sorted_clauses:
-                    logger.debug(
-                        "Evaluation: %.3f\twith time: %.3fs\tfor rule:\t%s",
-                        evaluation, clause.real_time, clause.horn_clause
-                    )
-        except Exception:
-            logger.exception("Error when evaluating the clause, reason:")
-
-        return best_clause
-
+    # noinspection DuplicatedCode
     def retrieve_evaluated_candidates(self, futures, evaluation_map=None):
         """
         Retrieves the evaluations from the `Future` `AsyncTheoryEvaluator`s

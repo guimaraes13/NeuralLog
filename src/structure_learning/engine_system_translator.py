@@ -332,6 +332,7 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
         self.saved_trainer: Optional[Trainer] = None
         self.current_trainer: Optional[Trainer] = None
         self.batch_size = self.OPTIONAL_FIELDS["batch_size"]
+        self.debug_mode = False
 
     # noinspection PyMissingOrEmptyDocstring
     @EngineSystemTranslator.knowledge_base.setter
@@ -354,6 +355,7 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
     def initialize(self):
         super().initialize()
         self._build_model()
+        self.debug_mode = False
 
     def _build_model(self):
         if not self.knowledge_base or not self.theory:
@@ -369,6 +371,8 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
                        positive_threshold=None):
         trainer = self.get_trainer(examples, theory)
 
+        if self.debug_mode:
+            logger.info("Program:\n%s", trainer.neural_program)
         dataset = trainer.build_dataset()
         dataset = dataset.get_dataset(TEMPORARY_SET_NAME, self.batch_size)
         if retrain:
@@ -424,6 +428,8 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
             examples, retrain=retrain,
             theory=appended_clauses, positive_threshold=positive_threshold)
 
+    # IMPROVE: The examples variable is no longer needed since the inference
+    #  know stores the inferred examples
     # noinspection PyMissingOrEmptyDocstring
     def inferred_relevant(self, terms, positive_threshold=None):
         self._update_example_terms()
