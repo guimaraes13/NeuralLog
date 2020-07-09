@@ -626,7 +626,7 @@ class SimpleRulePath:
     def __len__(self):
         return self.path.__len__()
 
-    def __str__(self):
+    def __repr__(self):
         message = []
         for i in range(0, len(self.path)):
             prefix = self.path[i].predicate.name
@@ -641,8 +641,6 @@ class SimpleRulePath:
             message.append(prefix)
 
         return ", ".join(message)
-
-    __repr__ = __str__
 
     def __hash__(self):
         return hash((self.source, tuple(self.path)))
@@ -801,12 +799,15 @@ class NeuralLogProgram:
             if isinstance(clause, AtomClause) and clause.is_grounded():
                 self.add_fact(clause.atom, True)
             elif isinstance(clause, HornClause):
+                clauses_for_predicate = self.clauses_by_predicate.setdefault(
+                    clause.head.predicate, list())
+                if clause in clauses_for_predicate:
+                    return
                 self._add_predicate(clause.head)
                 self.logic_predicates.add(clause.head.predicate)
                 for atom in clause.body:
                     self._add_predicate(atom)
-                self.clauses_by_predicate.setdefault(clause.head.predicate,
-                                                     list()).append(clause)
+                clauses_for_predicate.append(clause)
                 self.is_up_to_date = False
             else:
                 raise ClauseMalformedException(clause)

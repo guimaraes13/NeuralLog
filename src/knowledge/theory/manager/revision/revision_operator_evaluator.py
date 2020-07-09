@@ -135,3 +135,6 @@ class RevisionOperatorEvaluator(Initializable):
     @learning_system.setter
     def learning_system(self, value):
         self.revision_operator.learning_system = value
+
+    def __repr__(self):
+        return f"[{self.__class__.__name__}] {self.revision_operator}"

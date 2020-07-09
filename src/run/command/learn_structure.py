@@ -10,11 +10,13 @@ from shutil import copyfile
 import yaml
 
 import resources
+import src.knowledge.manager.tree_manager
+import src.knowledge.theory.manager.revision.operator.tree_revision_operator
 from src.run import configure_log
 from src.run.command import Command, command, create_log_file
-from src.util import print_args
 from src.structure_learning.structure_learning_method import \
     BatchStructureLearning
+from src.util import print_args
 
 YAML_SHORT_OPTION = "-y"
 YAML_LONG_OPTION = "--yaml"
@@ -176,9 +178,10 @@ class LearnStructure(Command):
         if not os.path.isdir(self.output_directory):
             os.makedirs(self.output_directory, exist_ok=True)
 
-        self.learning_method.output_directory = self.output_directory
+        if self.learning_method.output_directory is None:
+            self.learning_method.output_directory = self.output_directory
         self.save_configuration()
-        print_args(args, logger)
+        src.util.print_args(args, logger)
 
     def save_configuration(self):
         """

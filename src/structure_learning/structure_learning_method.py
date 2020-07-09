@@ -24,7 +24,7 @@ from src.knowledge.theory.manager.revision.revision_operator_evaluator import \
 from src.knowledge.theory.manager.revision.revision_operator_selector import \
     SelectFirstRevisionOperator
 from src.knowledge.theory.manager.revision.sample_selector import \
-    AllRelevantSampleSelect
+    AllRelevantSampleSelector
 from src.knowledge.theory.manager.theory_revision_manager import \
     TheoryRevisionManager
 from src.run.command import TRAIN_SET_NAME, VALIDATION_SET_NAME
@@ -473,7 +473,7 @@ class BatchStructureLearning(StructureLearningMethod):
         """
         if self.incoming_example_manager is None:
             self.incoming_example_manager = ReviseAllIncomingExample(
-                sample_selector=AllRelevantSampleSelect())
+                sample_selector=AllRelevantSampleSelector())
         self.learning_system.incoming_example_manager = \
             self.incoming_example_manager
 

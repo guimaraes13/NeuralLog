@@ -382,7 +382,9 @@ class RevisionOperator(Initializable):
         elif not isinstance(self.clause_modifiers, Collection):
             self.clause_modifiers = [self.clause_modifiers]
         for clause_modifier in self.clause_modifiers:
-            clause_modifier.learning_system = self.learning_system
+            if not hasattr(clause_modifier, "learning_system") or \
+                    clause_modifier.learning_system is None:
+                clause_modifier.learning_system = self.learning_system
             clause_modifier.initialize()
         self.theory_metric.initialize()
 

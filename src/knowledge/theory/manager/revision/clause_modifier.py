@@ -109,8 +109,8 @@ class ClauseHeadPredicateModifier(ClauseModifier):
         return new_clause
 
     def __repr__(self):
-        return f"[{super().__repr__()}] {self.new_predicate}" + \
-               f" -> () + {self.old_predicate}"
+        return f"[{super().__repr__()}] {self.old_predicate}" + \
+               f" -> {self.old_predicate}{self.new_predicate}"
 
 
 class AppendLiteralModifier(ClauseModifier):

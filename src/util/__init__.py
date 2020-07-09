@@ -246,7 +246,7 @@ class Initializable(ABC):
         required_fields = self.required_fields()
         if required_fields is not None and name in required_fields:
             if hasattr(self, name) and getattr(self, name) is not None:
-                raise reset_field_error(self, "learning_system")
+                raise reset_field_error(self, name)
         super().__setattr__(name, value)
 
     def __repr__(self):

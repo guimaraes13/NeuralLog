@@ -48,7 +48,7 @@ def append_theory(program, theory):
 
 
 # noinspection PyTypeChecker,DuplicatedCode
-def convert_predictions(model, dataset):
+def convert_predictions(model, dataset, positive_threshold=None):
     """
     Gets the examples inferred by the `model`, based on the `dataset`.
 
@@ -56,13 +56,16 @@ def convert_predictions(model, dataset):
     :type model: NeuralLogNetwork
     :param dataset: the dataset
     :type dataset: tf.data.Dataset
+    :param positive_threshold: if set, only the examples whose inference are
+    above the threshold will be considered as positive.
+    :type positive_threshold: Optional[float]
     :return: the example inferences
     :rtype: ExamplesInferences
     """
     neural_program = model.program
     inferences = ExamplesInferences()
     empty_entry = None
-    for features, _ in dataset:
+    for features, labels in dataset:
         y_scores = model.predict(features)
         if y_scores is None:
             continue
@@ -80,12 +83,31 @@ def convert_predictions(model, dataset):
             row_scores = y_scores[i]
             if len(row_scores.shape) == 3:
                 row_scores = np.squeeze(row_scores, axis=1)
+            if len(row_scores) == 1:
+                # The network prediction is a scalar, this is, the prediction
+                #   is equal for any output subject.
+                #   As such, we can resize the output to represent this,
+                #   as the line bellow:
+                #   row_scores = np.resize(row_scores, labels[i].shape)
+                # Since this function only return the examples with score
+                #   greater than the null output, and since all the outputs
+                #   have the same score, no output for this predicate will be
+                #   greater than the null score, thus, it can break here as
+                #   long as the positive_threshold is `None`.
+                if positive_threshold is None:
+                    break
+                else:
+                    row_scores = np.resize(row_scores, labels[i].shape)
             initial_offset = sum(model.input_sizes[:i])
             for j in range(len(row_scores)):
                 # iterates over subjects
-                if predicate.arity == 1 and \
-                        float(row_scores[null_index]) >= float(row_scores[j]):
-                    continue
+                if predicate.arity == 1:
+                    if positive_threshold is None:
+                        null_score = float(row_scores[null_index])
+                    else:
+                        null_score = positive_threshold
+                    if float(row_scores[j]) <= null_score or j == null_index:
+                        continue
                 y_score = row_scores[j]
                 x = []
                 subjects = []
@@ -119,10 +141,13 @@ def convert_predictions(model, dataset):
                 else:
                     # null_index = neural_program.get_index_of_constant(
                     #     predicate, -1, sls.NULL_ENTITY)
-                    null_score = float(y_score[null_index])
+                    if positive_threshold is None:
+                        null_score = float(y_score[null_index])
+                    else:
+                        null_score = positive_threshold
                     for index in range(len(y_score)):
                         atom_score = float(y_score[index])
-                        if null_score >= atom_score:
+                        if atom_score <= null_score or index == null_index:
                             continue
                         object_term = neural_program.get_constant_by_index(
                             predicate, -1, index)
@@ -185,7 +210,8 @@ class EngineSystemTranslator(Initializable):
         self._output_path = value
 
     @abstractmethod
-    def infer_examples(self, examples, retrain=False, theory=None):
+    def infer_examples(self, examples, retrain=False, theory=None,
+                       positive_threshold=None):
         """
         Perform the inference for the given examples. If `retrain` is `True`,
         it retrains the parameters before inference. If `theory` is not
@@ -197,16 +223,21 @@ class EngineSystemTranslator(Initializable):
         :param retrain: if `True`, it retrains the parameters before inference
         :type retrain: bool
         :param theory: If not `None`, use this theory instead of the current
-        theory of the engine system.
+        theory of the engine system
         :type theory: Optional[NeuralLogProgram or collections.Iterable[Clause]]
+        :param positive_threshold: if set, only the examples whose inference
+        are above the threshold will be considered as positive. If not set,
+        only the examples whose score is above the score of the `__null__`
+        example will be considered as positive
+        :type positive_threshold: Optional[float]
         :return: the inference value of the examples
         :rtype: ExamplesInferences
         """
         pass
 
     @abstractmethod
-    def infer_examples_appending_clauses(self, examples, clauses,
-                                         retrain=False):
+    def infer_examples_appending_clauses(
+            self, examples, clauses, retrain=False, positive_threshold=None):
         """
         Perform the inference for the given examples. The `clauses` are
         appended to the current theory, before evaluation. If `retrain` is
@@ -222,13 +253,18 @@ class EngineSystemTranslator(Initializable):
         :param clauses: clauses to be appended to the current theory, for
         evaluation proposes only
         :type clauses: collections.Iterable[HornClauses]
+        :param positive_threshold: if set, only the examples whose inference
+        are above the threshold will be considered as positive. If not set,
+        only the examples whose score is above the score of the `__null__`
+        example will be considered as positive
+        :type positive_threshold: Optional[float]
         :return: the inference value of the examples
         :rtype: ExamplesInferences
         """
         pass
 
     @abstractmethod
-    def inferred_relevant(self, terms):
+    def inferred_relevant(self, terms, positive_threshold=None):
         """
         Perform the inference in order to get all atoms directly
         relevant to `terms`. The atoms directly relevant ot a term is the atoms
@@ -236,6 +272,11 @@ class EngineSystemTranslator(Initializable):
 
         :param terms: the terms
         :type terms: Set[Term]
+        :param positive_threshold: if set, only the examples whose inference
+        are above the threshold will be considered as positive. If not set,
+        only the examples whose score is above the score of the `__null__`
+        example will be considered as positive
+        :type positive_threshold: Optional[float]
         :return: the atoms relevant to the terms
         :rtype: Set[Atom]
         """
@@ -324,7 +365,8 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
         self.current_trainer = self.saved_trainer
 
     # noinspection PyMissingOrEmptyDocstring
-    def infer_examples(self, examples, retrain=False, theory=None):
+    def infer_examples(self, examples, retrain=False, theory=None,
+                       positive_threshold=None):
         trainer = self.get_trainer(examples, theory)
 
         dataset = trainer.build_dataset()
@@ -333,7 +375,7 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
             trainer.compile_module()
             trainer.fit(dataset)
 
-        return convert_predictions(trainer.model, dataset)
+        return convert_predictions(trainer.model, dataset, positive_threshold)
 
     def get_trainer(self, examples, theory=None):
         """
@@ -372,23 +414,25 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
 
     # noinspection PyMissingOrEmptyDocstring
     def infer_examples_appending_clauses(
-            self, examples, clauses, retrain=False):
+            self, examples, clauses, retrain=False, positive_threshold=None):
         # noinspection PyTypeChecker
         appended_clauses = list()
         for theory_clauses in self.theory.clauses_by_predicate.values():
             appended_clauses.extend(theory_clauses)
         appended_clauses.extend(clauses)
         return self.infer_examples(
-            examples, retrain=retrain, theory=appended_clauses)
+            examples, retrain=retrain,
+            theory=appended_clauses, positive_threshold=positive_threshold)
 
     # noinspection PyMissingOrEmptyDocstring
-    def inferred_relevant(self, terms):
+    def inferred_relevant(self, terms, positive_threshold=None):
         self._update_example_terms()
         self.saved_trainer.read_parameters()
         dataset = self.saved_trainer.neural_dataset.get_dataset(ALL_TERMS_NAME)
         if dataset is None:
             return set()
-        inferences = convert_predictions(self.saved_trainer.model, dataset)
+        inferences = convert_predictions(
+            self.saved_trainer.model, dataset, positive_threshold)
         examples = self.knowledge_base.examples.get(ALL_TERMS_NAME, Examples())
         results = set()
         for predicate, facts in examples.items():

@@ -388,10 +388,8 @@ class Term:
     def __le__(self, other):
         return self.key() <= other.key()
 
-    def __str__(self):
+    def __repr__(self):
         return self.value
-
-    __repr__ = __str__
 
 
 class Constant(Term):
@@ -412,10 +410,8 @@ class Constant(Term):
     def is_constant(self):
         return True
 
-    def __str__(self):
+    def __repr__(self):
         return self.value
-
-    __repr__ = __str__
 
 
 class Variable(Term):
@@ -547,7 +543,7 @@ class Predicate:
         """
         return False
 
-    def __str__(self):
+    def __repr__(self):
         return "{}/{}".format(self.name, self.arity)
 
     def key(self):
@@ -591,8 +587,6 @@ class Predicate:
             return self.name == other.name
         else:
             return self == other
-
-    __repr__ = __str__
 
 
 class TemplatePredicate(Predicate):
@@ -756,7 +750,7 @@ class Atom(Clause):
     def key(self):
         return self.weight, self.predicate, tuple(self.terms)
 
-    def __str__(self):
+    def __repr__(self):
         if self.terms is None or len(self.terms) == 0:
             if self.weight == 1.0:
                 return self.predicate.name
@@ -781,8 +775,6 @@ class Atom(Clause):
 
         return False
 
-    __repr__ = __str__
-
 
 class Literal(Atom):
     """
@@ -800,7 +792,7 @@ class Literal(Atom):
         :raise AtomMalformedException: in case the number of terms differs
         from the arity of the predicate
         """
-        super().__init__(atom.predicate, *atom.terms, weight=atom.weight,
+        super().__init__(atom.predicate, *atom.terms, weight=1.0,
                          provenance=atom.provenance)
         self.negated = negated
 
@@ -809,13 +801,11 @@ class Literal(Atom):
         # noinspection PyTypeChecker
         return (self.negated,) + super().key()
 
-    def __str__(self):
-        atom = super().__str__()
+    def __repr__(self):
+        atom = super().__repr__()
         if self.negated:
             return "{} {}".format(NEGATION_KEY, atom)
         return atom
-
-    __repr__ = __str__
 
 
 class AtomClause(Clause):
@@ -912,7 +902,7 @@ class HornClause(Clause):
                 key_tuple += literal.key()
         return tuple(key_tuple)
 
-    def __str__(self):
+    def __repr__(self):
         return format_horn_clause(self.head, self.body)
 
     # noinspection PyMissingOrEmptyDocstring
@@ -926,8 +916,6 @@ class HornClause(Clause):
                 return True
 
         return False
-
-    __repr__ = __str__
 
 
 class TermType:

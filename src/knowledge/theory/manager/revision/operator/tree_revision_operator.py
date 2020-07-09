@@ -6,7 +6,8 @@ from abc import ABC
 from typing import Optional, Set
 
 from src.knowledge.examples import Examples
-from src.knowledge.manager.tree_manager import TreeTheory, Node
+from src.knowledge.manager.tree_manager import TreeTheory, Node, \
+    FALSE_LITERAL, TRUE_LITERAL
 from src.knowledge.program import NeuralLogProgram
 from src.knowledge.theory.manager.revision.operator.literal_appender_operator \
     import \
@@ -58,7 +59,7 @@ class AddNodeTreeRevisionOperator(TreeRevisionOperator):
     operator.
     """
 
-    OPTIONAL_FIELDS = super().OPTIONAL_FIELDS
+    OPTIONAL_FIELDS = TreeRevisionOperator.OPTIONAL_FIELDS
     OPTIONAL_FIELDS.update({
         "refine": False,
         "maximum_side_way_movements": -1,
@@ -312,7 +313,7 @@ class AddNodeTreeRevisionOperator(TreeRevisionOperator):
         if revision_leaf.is_root and \
                 TreeTheory.is_default_theory(revision_leaf):
             revision_leaf.element.body.clear()
-            revision_leaf.element.body.append(NeuralLogProgram.TRUE_ATOM)
+            revision_leaf.element.body.append(TRUE_LITERAL)
             initial_body = []
         else:
             initial_body = revision_leaf.element.body
@@ -350,6 +351,9 @@ class AddNodeTreeRevisionOperator(TreeRevisionOperator):
         """
         theory.clauses_by_predicate[node.element.head.predicate].remove(
             node.element)
+
+    def __repr__(self):
+        return f"[{self.__class__.__name__}] {self.append_operator}"
 
 
 class RemoveNodeTreeRevisionOperator(TreeRevisionOperator):
@@ -443,7 +447,7 @@ class RemoveNodeTreeRevisionOperator(TreeRevisionOperator):
         if revision_leaf.is_root:
             # Root case
             revision_leaf.element.body.clear()
-            revision_leaf.element.body.append(NeuralLogProgram.FALSE_ATOM)
+            revision_leaf.element.body.append(FALSE_LITERAL)
         elif revision_leaf.is_default_child and \
                 len(revision_leaf.parent.children) == 1:
             # Remove Literal case

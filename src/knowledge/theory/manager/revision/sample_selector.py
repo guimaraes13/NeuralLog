@@ -74,7 +74,7 @@ class SampleSelector(Initializable):
         self._learning_system = value
 
 
-class AllRelevantSampleSelect(SampleSelector):
+class AllRelevantSampleSelector(SampleSelector):
     """
     Class to select all examples as relevant.
     """

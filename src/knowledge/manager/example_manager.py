@@ -5,14 +5,11 @@ import collections
 import logging
 from abc import abstractmethod
 
+import src.knowledge.theory.manager.revision.revision_examples as rev_ex
 from src.knowledge.examples import Examples
-from src.knowledge.theory.manager.revision.revision_examples import \
-    RevisionExamples
-from src.knowledge.theory.manager.revision.sample_selector import \
-    SampleSelector, AllRelevantSampleSelect
+import src.knowledge.theory.manager.revision.sample_selector as selector
 from src.language.language import Atom
-from src.structure_learning.structure_learning_system import \
-    StructureLearningSystem
+import src.structure_learning.structure_learning_system as sls
 from src.util import Initializable
 
 logger = logging.getLogger(__name__)
@@ -31,9 +28,9 @@ class IncomingExampleManager(Initializable):
         Creates the a IncomingExampleManager.
 
         :param learning_system: the learning system
-        :type learning_system: StructureLearningSystem
+        :type learning_system: sls.StructureLearningSystem
         :param sample_selector: a sample selector
-        :type sample_selector: SampleSelector
+        :type sample_selector: selector.SampleSelector
         """
         self.learning_system = learning_system
         self.sample_selector = sample_selector
@@ -46,7 +43,7 @@ class IncomingExampleManager(Initializable):
     def initialize(self):
         super().initialize()
         if self.sample_selector is None:
-            self.sample_selector = AllRelevantSampleSelect()
+            self.sample_selector = selector.AllRelevantSampleSelector()
         self.sample_selector.learning_system = self.learning_system
         self.sample_selector.initialize()
 
@@ -78,8 +75,8 @@ class ReviseAllIncomingExample(IncomingExampleManager):
 
     # noinspection PyMissingOrEmptyDocstring
     def incoming_examples(self, examples):
-        revision_examples = RevisionExamples(self.learning_system,
-                                             self.sample_selector.copy())
+        revision_examples = rev_ex.RevisionExamples(self.learning_system,
+                                                    self.sample_selector.copy())
         if isinstance(examples, collections.Iterable):
             size = 0
             for example in examples:

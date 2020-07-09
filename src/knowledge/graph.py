@@ -437,7 +437,7 @@ class RulePath:
     def __len__(self):
         return self.path.__len__()
 
-    def __str__(self):
+    def __repr__(self):
         message = []
         for i in range(0, len(self.path)):
             prefix = self.path[i].predicate.name
@@ -453,8 +453,6 @@ class RulePath:
             message.append(prefix)
 
         return ", ".join(message)
-
-    __repr__ = __str__
 
     def __hash__(self):
         return hash((self.source, tuple(self.path)))

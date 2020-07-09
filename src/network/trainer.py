@@ -436,7 +436,9 @@ class Trainer:
             class_name = dataset_class
         config["program"] = self.neural_program
         config["inverse_relations"] = inverse_relations
-        self._neural_dataset = get_dataset_class(class_name)(**config)
+        self._neural_dataset: NeuralLogDataset = \
+            get_dataset_class(class_name)(**config)
+        self._neural_dataset.target_predicates = self.model.predicates
         return self._neural_dataset
 
     def get_dataset(self, name):

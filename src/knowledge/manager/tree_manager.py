@@ -5,18 +5,22 @@ import collections
 import logging
 from typing import TypeVar, Generic, Optional, Set, List, Dict
 
+import src.knowledge.theory.manager.revision.revision_examples as re
+import src.knowledge.theory.manager.revision.sample_selector as selector
 from src.knowledge.examples import Examples, ExampleIterator
 from src.knowledge.manager.example_manager import IncomingExampleManager
 from src.knowledge.program import NeuralLogProgram
-import src.knowledge.theory.manager.revision.revision_examples as re
-
-import src.knowledge.theory.manager.revision.sample_selector as selector
-from src.language.language import HornClause, Atom, Predicate
+from src.knowledge.theory.manager.revision.clause_modifier import ClauseModifier
+from src.language.language import HornClause, Atom, Predicate, Literal
 from src.util.clause_utils import to_variable_atom
+from src.util.multiprocessing.evaluation_transformer import apply_modifiers
 
 logger = logging.getLogger(__name__)
 
 E = TypeVar('E')
+
+TRUE_LITERAL = Literal(NeuralLogProgram.TRUE_ATOM)
+FALSE_LITERAL = Literal(NeuralLogProgram.FALSE_ATOM)
 
 
 class Node(Generic[E]):
@@ -24,8 +28,7 @@ class Node(Generic[E]):
     Class to manage a node of the TreeTheory data.
     """
 
-    def __init__(self, parent, element,
-                 default_child_element=None, children=None):
+    def __init__(self, parent, element, default_child_element=None):
         """
         Constructs a node.
 
@@ -35,14 +38,15 @@ class Node(Generic[E]):
         :type element: E
         :param default_child_element: the default child element
         :type default_child_element: Optional[E]
-        :param children: the children of the node
-        :type children: Optional[collections.Iterable[Node[E]]]
         """
         self.parent: Optional[Node] = parent
         self.element: E = element
-        self.default_child: Optional[Node[E]] = \
-            Node(self, default_child_element)
-        self.children: Optional[Set[Node[E]]] = children
+        if default_child_element is None:
+            self.default_child: Optional[Node[E]] = None
+            self.children = None
+        else:
+            self.default_child = Node(self, default_child_element, None)
+            self.children: Set[Node[E]] = set()
 
     @staticmethod
     def new_tree(element, default_child):
@@ -56,8 +60,7 @@ class Node(Generic[E]):
         :return: the root of the tree
         :rtype: Node[E]
         """
-        return Node(None, element,
-                    default_child_element=default_child, children=set())
+        return Node(None, element, default_child_element=default_child)
 
     def add_child_to_node(self, child, default_child):
         """
@@ -75,7 +78,7 @@ class Node(Generic[E]):
             return None
 
         child_node = Node(
-            self, child, default_child_element=default_child, children=set())
+            self, child, default_child_element=default_child)
         self.children.add(child_node)
         return child_node
 
@@ -148,7 +151,7 @@ class Node(Generic[E]):
         return self.default_child == other.default_child
 
     def __repr__(self):
-        str(self.element)
+        return str(self.element)
 
 
 class TreeTheory:
@@ -156,11 +159,18 @@ class TreeTheory:
     Class to manage the theory as a tree.
     """
 
-    DEFAULT_THEORY_BODY = [NeuralLogProgram.FALSE_ATOM]
+    DEFAULT_THEORY_BODY = [FALSE_LITERAL]
 
-    def __init__(self):
+    def __init__(self, initial_modifiers=()):
         """
         Creates a tree theory.
+
+        :param initial_modifiers: Sets the initial clause modifiers. These
+        modifiers are used on the creation of the default theories for each
+        predicate. Although the clause modifiers accept a set of examples in
+        order to modify the clause, these modifiers must assume the examples
+        can be `None`.
+        :type initial_modifiers: collections.Collection[ClauseModifier]
         """
         self.revision_leaves: Optional[List[Node[HornClause]]] = None
         "The revision leaves"
@@ -172,14 +182,19 @@ class TreeTheory:
         self.leaf_examples_map: \
             Optional[Dict[Predicate, Dict[Node[HornClause],
                                           re.RevisionExamples]]] = None
+        self.initial_modifiers = initial_modifiers
 
-    def initialize(self, theory):
+    def initialize(self, theory=None):
         """
         Initializes the tree with the theory.
 
         :param theory: the theory
-        :type theory: NeuralLogProgram
+        :type theory: Optional[NeuralLogProgram]
         """
+        if not hasattr(self, "initial_modifiers"):
+            self.initial_modifiers = ()
+        self.revision_leaves = None
+        self.revision_leaf_index = None
         self.leaf_examples_map = dict()
         self.tree_map = dict()
         if theory:
@@ -196,7 +211,7 @@ class TreeTheory:
             current_clause = value[0]
             root = self.build_initial_tree(current_clause.head)
             root.element.body.clear()
-            root.element.body.append(NeuralLogProgram.TRUE_ATOM)
+            root.element.body.append(TRUE_LITERAL)
             TreeTheory.add_nodes_to_tree(current_clause, root, [])
             for current_clause in value[1:]:
                 parent_node = TreeTheory.find_parent_node(root, current_clause)
@@ -212,8 +227,15 @@ class TreeTheory:
         :return: the root of the initial tree
         :rtype: Node[HornClause]
         """
-        root = Node.new_tree(TreeTheory.build_default_theory(head),
-                             TreeTheory.build_default_theory(head))
+        initial_clause = TreeTheory.build_default_theory(head)
+        # noinspection PyTypeChecker
+        initial_clause = \
+            apply_modifiers(self.initial_modifiers, initial_clause, None)
+        default_clause = TreeTheory.build_default_theory(head)
+        # noinspection PyTypeChecker
+        default_clause = \
+            apply_modifiers(self.initial_modifiers, default_clause, None)
+        root = Node.new_tree(initial_clause, default_clause)
         self.tree_map[head.predicate] = root
         return root
 
@@ -323,7 +345,7 @@ class TreeTheory:
         :return: the theory
         :rtype: HornClause
         """
-        return HornClause(head, NeuralLogProgram.FALSE_ATOM)
+        return HornClause(head, FALSE_LITERAL)
 
     @staticmethod
     def add_node_to_tree(parent, child):
@@ -358,8 +380,7 @@ class TreeTheory:
         for literal in clause.body:
             if literal in current_body:
                 continue
-            if len(current_body) == 1 and \
-                    NeuralLogProgram.TRUE_ATOM in current_body:
+            if len(current_body) == 1 and TRUE_LITERAL in current_body:
                 current_body.clear()
             next_body = current_body + [literal]
             node = TreeTheory.add_node_to_tree(
@@ -414,19 +435,24 @@ class TreeExampleManager(IncomingExampleManager):
     the theory.
     """
 
-    ALL_SAMPLE_SELECTOR = selector.AllRelevantSampleSelect()
+    ALL_SAMPLE_SELECTOR = selector.AllRelevantSampleSelector()
 
     def __init__(self, learning_system=None, sample_selector=None,
                  tree_theory=None):
         super().__init__(learning_system, sample_selector)
         self.tree_theory: TreeTheory = tree_theory
-        self.cached_clauses: Dict[Predicate, List[HornClause]] = \
-            dict()
-        "Caches the list of all rules, except the rules of the key predicate."
 
     # noinspection PyMissingOrEmptyDocstring
     def required_fields(self):
         return super().required_fields() + ["tree_theory"]
+
+    # noinspection PyMissingOrEmptyDocstring,PyAttributeOutsideInit
+    def initialize(self):
+        super().initialize()
+        self.cached_clauses: Dict[Predicate, List[HornClause]] = dict()
+        "Caches the list of all rules, except the rules of the key predicate."
+
+        self.tree_theory.initialize()
 
     # noinspection PyMissingOrEmptyDocstring
     def incoming_examples(self, examples):

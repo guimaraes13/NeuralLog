@@ -4,8 +4,8 @@ The core of the structure learning system.
 import collections
 from typing import Set
 
-from src.knowledge.examples import Examples, ExamplesInferences
 import src.knowledge.manager.example_manager as manager
+from src.knowledge.examples import Examples, ExamplesInferences
 from src.knowledge.program import NeuralLogProgram
 from src.knowledge.theory.evaluation.theory_evaluator import TheoryEvaluator
 from src.knowledge.theory.manager.theory_revision_manager import \
@@ -152,7 +152,8 @@ class StructureLearningSystem(Initializable):
         """
         self.theory_revision_manager.revise(revision_examples)
 
-    def infer_examples(self, examples, theory=None, retrain=False):
+    def infer_examples(self, examples, theory=None,
+                       retrain=False, positive_threshold=None):
         """
         Perform the inference for the given examples. If `theory` is not
         `None`, it is used theory as the theory to be evaluated, instead of the
@@ -166,14 +167,19 @@ class StructureLearningSystem(Initializable):
         :param theory: If not `None`, use this theory instead of the current
         theory of the engine system.
         :type theory: Optional[NeuralLogProgram or collections.Iterable[Clause]]
+        :param positive_threshold: if set, only the examples whose inference
+        are above the threshold will be considered as positive. If not set,
+        only the examples whose score is above the score of the `__null__`
+        example will be considered as positive
+        :type positive_threshold: Optional[float]
         :return: the inference value of the examples
         :rtype: ExamplesInferences
         """
         return self.engine_system_translator.infer_examples(
-            examples, retrain, theory)
+            examples, retrain, theory, positive_threshold=positive_threshold)
 
     def infer_examples_appending_clauses(
-            self, examples, clauses, retrain=False):
+            self, examples, clauses, retrain=False, positive_threshold=None):
         """
         Perform the inference for the given examples. The `clauses` are
         appended to the current theory, before evaluation. If `retrain` is
@@ -190,13 +196,19 @@ class StructureLearningSystem(Initializable):
         :param clauses: clauses to be appended to the current theory,
         for evaluation proposes only
         :type clauses: collections.Iterable[HornClauses]
+        :param positive_threshold: if set, only the examples whose inference
+        are above the threshold will be considered as positive. If not set,
+        only the examples whose score is above the score of the `__null__`
+        example will be considered as positive
+        :type positive_threshold: Optional[float]
         :return: the inference value of the examples
         :rtype: ExamplesInferences
         """
         return self.engine_system_translator.infer_examples_appending_clauses(
-            examples, clauses, retrain=retrain)
+            examples, clauses, retrain=retrain,
+            positive_threshold=positive_threshold)
 
-    def inferred_relevant(self, terms):
+    def inferred_relevant(self, terms, positive_threshold=None):
         """
         Perform the inference in order to get all atoms directly relevant to
         `terms`. The atoms directly relevant ot a term is the atoms which
@@ -204,10 +216,16 @@ class StructureLearningSystem(Initializable):
 
         :param terms: the terms
         :type terms: Set[Term]
+        :param positive_threshold: if set, only the examples whose inference
+        are above the threshold will be considered as positive. If not set,
+        only the examples whose score is above the score of the `__null__`
+        example will be considered as positive
+        :type positive_threshold: Optional[float]
         :return: the atoms relevant to the terms
         :rtype: Set[Atom]
         """
-        return self.engine_system_translator.inferred_relevant(terms)
+        return self.engine_system_translator.inferred_relevant(
+            terms, positive_threshold)
 
     def train_parameters(self, training_examples: Examples):
         """

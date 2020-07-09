@@ -6,15 +6,84 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Tuple
 
+import src.knowledge.manager.tree_manager as tm
+import src.knowledge.theory.manager.revision.operator.revision_operator as ro
 import src.knowledge.theory.manager.revision.revision_examples as revision
 import src.knowledge.theory.manager.revision.revision_operator_selector as ros
 import src.knowledge.theory.manager.theory_revision_manager as manager
 from src.knowledge.examples import Examples, ExampleIterator
 from src.knowledge.theory import TheoryRevisionException
-import src.knowledge.theory.manager.revision.operator.revision_operator as ro
 from src.util import Initializable
 
 logger = logging.getLogger(__name__)
+
+
+class NodeRevisionHeuristic(ABC):
+    """
+    Class to calculate a heuristic value of how good a collection of examples
+    is for revise. The heuristic should be simple and should not rely on
+    inference.
+    """
+
+    def compare(self, o1, o2):
+        """
+        Compares two tuples of examples and nodes. By default, as higher the
+        heuristic, better the tuple, for revision. Override this method,
+        otherwise.
+
+        :param o1: the first tuple of examples and node
+        :type o1: Tuple[Examples, Node[HornClause]] or float
+        :param o2: the second tuple of examples and node
+        :type o2: Tuple[Examples, Node[HornClause]] or float
+        :return: `0` if `o1` is equal to `o2`; a value less than `0` if `o1` is
+        numerically less than `o2`; a value greater than `0` if `o1` is
+        numerically greater than `o2`
+        :rtype: float
+        """
+        if not isinstance(o1, float):
+            o1 = self.evaluate(*o1)
+        if not isinstance(o2, float):
+            o2 = self.evaluate(*o2)
+        return o2 - o1
+
+    @abstractmethod
+    def evaluate(self, examples, node):
+        """
+        Evaluates the `node` based on the `examples`.
+
+        :param examples: the examples
+        :type examples: Examples
+        :param node: the node
+        :type node: Node[HornClause]
+        :return: the evaluation of the node, based on the examples
+        :rtype: float
+        """
+        pass
+
+
+class UniformNodeHeuristic(NodeRevisionHeuristic):
+    """
+    The uniform revision heuristic, treats all nodes as equal.
+    """
+
+    # noinspection PyMissingOrEmptyDocstring
+    def evaluate(self, examples, node):
+        return 0.0
+
+
+class RepairableNodeHeuristic(NodeRevisionHeuristic):
+    """
+    Calculates the number of repairable examples in the leaf. The number of
+    repairable examples is the number of positive (negative) examples in a
+    negative (positive) leaf.
+    """
+
+    # noinspection PyMissingOrEmptyDocstring
+    def evaluate(self, examples, node):
+        if node.is_default_child:
+            return sum(map(lambda x: x.weight > 0, ExampleIterator(examples)))
+        else:
+            return sum(map(lambda x: x.weight <= 0, ExampleIterator(examples)))
 
 
 class RevisionManager(Initializable):
@@ -88,6 +157,7 @@ class BestLeafRevisionManager(RevisionManager):
 
     OPTIONAL_FIELDS = RevisionManager.OPTIONAL_FIELDS
     OPTIONAL_FIELDS.update({
+        "revision_heuristic": UniformNodeHeuristic(),
         "number_of_leaves_to_revise": -1
     })
 
@@ -102,13 +172,17 @@ class BestLeafRevisionManager(RevisionManager):
         :param operator_selector: the operator selector
         :type operator_selector: ros.RevisionOperatorSelector
         :param tree_theory: the tree theory
-        :type tree_theory: TreeTheory
+        :type tree_theory: Optional[tm.TreeTheory]
         :param revision_heuristic: the revision heuristic
         :type revision_heuristic: NodeRevisionHeuristic
         """
         super().__init__(theory_revision_manager, operator_selector)
-        self.tree_theory = tree_theory
+        self.tree_theory: tm.TreeTheory = tree_theory
+
         self.revision_heuristic = revision_heuristic
+        if self.revision_heuristic is None:
+            self.revision_heuristic = \
+                self.OPTIONAL_FIELDS["revision_heuristic"]
 
         self.number_of_leaves_to_revise = number_of_leaves_to_revise
         if self.number_of_leaves_to_revise is None:
@@ -164,71 +238,3 @@ class BestLeafRevisionManager(RevisionManager):
             return length
 
         return min(self.number_of_leaves_to_revise, length)
-
-
-class NodeRevisionHeuristic(ABC):
-    """
-    Class to calculate a heuristic value of how good a collection of examples
-    is for revise. The heuristic should be simple and should not rely on
-    inference.
-    """
-
-    def compare(self, o1, o2):
-        """
-        Compares two tuples of examples and nodes. By default, as higher the
-        heuristic, better the tuple, for revision. Override this method,
-        otherwise.
-
-        :param o1: the first tuple of examples and node
-        :type o1: Tuple[Examples, Node[HornClause]] or float
-        :param o2: the second tuple of examples and node
-        :type o2: Tuple[Examples, Node[HornClause]] or float
-        :return: `0` if `o1` is equal to `o2`; a value less than `0` if `o1` is
-        numerically less than `o2`; a value greater than `0` if `o1` is
-        numerically greater than `o2`
-        :rtype: float
-        """
-        if not isinstance(o1, float):
-            o1 = self.evaluate(*o1)
-        if not isinstance(o2, float):
-            o2 = self.evaluate(*o2)
-        return o2 - o1
-
-    @abstractmethod
-    def evaluate(self, examples, node):
-        """
-        Evaluates the `node` based on the `examples`.
-
-        :param examples: the examples
-        :type examples: Examples
-        :param node: the node
-        :type node: Node[HornClause]
-        :return: the evaluation of the node, based on the examples
-        :rtype: float
-        """
-        pass
-
-
-class UniformNodeHeuristic(NodeRevisionHeuristic):
-    """
-    The uniform revision heuristic, treats all nodes as equal.
-    """
-
-    # noinspection PyMissingOrEmptyDocstring
-    def evaluate(self, examples, node):
-        return 0.0
-
-
-class RepairableNodeHeuristic(NodeRevisionHeuristic):
-    """
-    Calculates the number of repairable examples in the leaf. The number of
-    repairable examples is the number of positive (negative) examples in a
-    negative (positive) leaf.
-    """
-
-    # noinspection PyMissingOrEmptyDocstring
-    def evaluate(self, examples, node):
-        if node.is_default_child:
-            return sum(map(lambda x: x.weight > 0, ExampleIterator(examples)))
-        else:
-            return sum(map(lambda x: x.weight <= 0, ExampleIterator(examples)))

@@ -6,7 +6,7 @@ import sys
 from abc import abstractmethod, ABC
 from collections import OrderedDict
 from functools import partial
-from typing import List
+from typing import List, Tuple
 
 import numpy as np
 import tensorflow as tf
@@ -413,6 +413,27 @@ class NeuralLogDataset(ABC):
         """
         self.program = program
         self.inverse_relations = inverse_relations
+        self._target_predicates = None
+
+    @property
+    def target_predicates(self):
+        """
+        Gets the target predicates.
+
+        :return: the target predicates
+        :rtype: List[Tuple[Predicate, bool]]
+        """
+        return self._target_predicates
+
+    @target_predicates.setter
+    def target_predicates(self, value):
+        """
+        Sets the target predicates.
+
+        :param value: the target predicates
+        :type value: List[Tuple[Predicate, bool]]
+        """
+        self._target_predicates = value
 
     @abstractmethod
     def has_example_key(self, key):
@@ -567,6 +588,8 @@ class DefaultDataset(NeuralLogDataset):
                     batch_size=1, shuffle=False):
         features, labels = self.build(example_set=example_set)
         # noinspection PyTypeChecker
+        if not features:
+            return None
         dataset_size = len(features[0])
         if not dataset_size:
             return None
@@ -575,8 +598,8 @@ class DefaultDataset(NeuralLogDataset):
             dataset = dataset.shuffle(dataset_size)
         dataset = dataset.batch(batch_size)
         dataset = dataset.map(self)
-        logger.info("Dataset %s created with %d example(s)", example_set,
-                    dataset_size)
+        logger.debug("Dataset %s created with %d example(s)", example_set,
+                     dataset_size)
         return dataset
 
     def build(self, example_set=NO_EXAMPLE_SET):
@@ -836,8 +859,8 @@ class SequenceDataset(DefaultDataset):
         if shuffle:
             dataset = dataset.shuffle(dataset_size)
         dataset = dataset.map(self)
-        logger.info("Dataset %s created with %d example(s)", example_set,
-                    dataset_size)
+        logger.debug("Dataset %s created with %d example(s)", example_set,
+                     dataset_size)
         return dataset
 
     def build(self, example_set=NO_EXAMPLE_SET):
@@ -1084,8 +1107,8 @@ class WordCharDataset(SequenceDataset):
         if shuffle:
             dataset = dataset.shuffle(dataset_size)
 
-        logger.info("Dataset %s created with %d example(s)", example_set,
-                    dataset_size)
+        logger.debug("Dataset %s created with %d example(s)", example_set,
+                     dataset_size)
         return dataset
 
     def call(self, features, labels, *args, **kwargs):

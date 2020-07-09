@@ -1,19 +1,19 @@
 """
 Handles some revision operators that append literals to the clause.
 """
+import random
 from abc import abstractmethod
 from collections import Collection, deque
-from random import random
 from typing import TypeVar, Generic, Set, Dict, List, Tuple
 
 from src.knowledge.examples import Examples, ExampleIterator, ExamplesInferences
+from src.knowledge.manager.tree_manager import TRUE_LITERAL
 from src.knowledge.program import NeuralLogProgram
 from src.knowledge.theory.manager.revision.operator.revision_operator import \
     RevisionOperator, is_positive, relevant_breadth_first_search
 from src.language.equivalent_clauses import EquivalentAtom
 from src.language.language import HornClause, get_variable_atom, Literal, \
-    Atom, \
-    Term
+    Atom, Term
 from src.util import OrderedSet
 from src.util.clause_utils import to_variable_atom
 from src.util.language import is_atom_unifiable_to_goal
@@ -29,6 +29,7 @@ from src.util.variable_generator import VariableGenerator
 V = TypeVar('V')
 
 SUBSTITUTION_NAME = "__sub__"
+TYPE_PREDICATE_NAME = "__type_sub__"
 
 
 def create_substitution_map(head, answer):
@@ -66,9 +67,8 @@ def append_variable_atom_to_set(initial_atoms, variable_literals,
     :type variable_generator: VariableGenerator
     """
     for atom in initial_atoms:
-        variable_atom = to_variable_atom(atom, variable_map, variable_generator)
+        variable_atom = to_variable_atom(atom, variable_generator, variable_map)
         variable_literals.add(Literal(variable_atom))
-        pass
 
 
 def build_all_literals_from_clause(initial_clause, candidates, answer_literals,
@@ -118,25 +118,33 @@ def build_all_literals_from_clause(initial_clause, candidates, answer_literals,
 def build_substitution_clause(initial_clause):
     """
     Creates the clause to find the substitution of variables instantiated by the
-    initial clause.
+    initial clause and a `type` clause, to associate the type of the
+    substitution clause with the type of the `initial_clause`.
 
     :param initial_clause: the initial clause
     :type initial_clause: HornClause
-    :return: the clause to find the substitutions
-    :rtype: HornClause
+    :return: the clause to find the substitutions and the type clause
+    :rtype: Tuple[HornClause, HornClause]
     """
     terms: List[Term] = []
     append_variables_from_atom(initial_clause.head, terms)
 
     body: List[Literal] = []
     if not initial_clause.body:
-        body.append(NeuralLogProgram.TRUE_ATOM)
+        body.append(TRUE_LITERAL)
     else:
         for literal in initial_clause.body:
             append_variables_from_atom(literal, terms)
         body = initial_clause.body
 
-    return HornClause(Atom(SUBSTITUTION_NAME, *terms), *body)
+    substitution_head = Atom(SUBSTITUTION_NAME, *terms)
+    substitution_clause = HornClause(substitution_head, *body)
+
+    type_clause = HornClause(
+        Atom(TYPE_PREDICATE_NAME, *terms),
+        Literal(substitution_head), Literal(initial_clause.head))
+
+    return substitution_clause, type_clause
 
 
 def append_variables_from_atom(atom, append):
@@ -209,12 +217,13 @@ class LiteralAppendOperator(RevisionOperator, Generic[V]):
     examples, in order to improve the evaluation of the rule on those examples.
     """
 
-    OPTIONAL_FIELDS = super().OPTIONAL_FIELDS
+    OPTIONAL_FIELDS = RevisionOperator.OPTIONAL_FIELDS
     OPTIONAL_FIELDS.update({
         "number_of_process": DEFAULT_NUMBER_OF_PROCESS,
         "evaluation_timeout": DEFAULT_EVALUATION_TIMEOUT,
         "relevant_depth": 0,
-        "maximum_based_examples": -1
+        "maximum_based_examples": -1,
+        "positive_threshold": None
     })
 
     def __init__(self,
@@ -224,7 +233,8 @@ class LiteralAppendOperator(RevisionOperator, Generic[V]):
                  number_of_process=None,
                  evaluation_timeout=None,
                  relevant_depth=None,
-                 maximum_based_examples=None
+                 maximum_based_examples=None,
+                 positive_threshold=None
                  ):
         super().__init__(learning_system, theory_metric, clause_modifiers)
 
@@ -275,6 +285,16 @@ class LiteralAppendOperator(RevisionOperator, Generic[V]):
         if maximum_based_examples is None:
             self.maximum_based_examples = \
                 self.OPTIONAL_FIELDS["maximum_based_examples"]
+
+        self.positive_threshold = positive_threshold
+        """
+        The threshold to consider an inferred atom as positive, if `None`, only 
+        the atoms whose inferred value are greater than the `__null__` atom 
+        are considered as positives. 
+        """
+
+        if self.positive_threshold is None:
+            self.positive_threshold = self.OPTIONAL_FIELDS["positive_threshold"]
 
     # noinspection PyMissingOrEmptyDocstring
     def perform_operation(self, targets):
@@ -357,8 +377,7 @@ class LiteralAppendOperator(RevisionOperator, Generic[V]):
             skip_candidates, connected):
         """
         Gets the literal candidates from the examples. The literals that are
-        candidates to be appended to the initial clause in order to get
-        improve it.
+        candidates to be appended to the initial clause in order to improve it.
 
         :param initial_clause: the initial clause
         :type initial_clause: HornClause
@@ -433,7 +452,8 @@ class RelevantLiteralAppendOperator(LiteralAppendOperator[Literal]):
     # noinspection PyMissingOrEmptyDocstring
     def build_extended_horn_clause(self, examples, initial_clause,
                                    equivalent_literals):
-        substitution_clause = build_substitution_clause(initial_clause)
+        substitution_clause, type_clause = \
+            build_substitution_clause(initial_clause)
         query_set = build_queries_from_examples(
             self.get_based_examples(examples), initial_clause.head,
             substitution_clause.head, True)
@@ -442,7 +462,8 @@ class RelevantLiteralAppendOperator(LiteralAppendOperator[Literal]):
             return None
         inferred_examples = \
             self.learning_system.infer_examples_appending_clauses(
-                query_set, [substitution_clause])
+                query_set, [substitution_clause, type_clause],
+                positive_threshold=self.positive_threshold)
         skip_candidates = self.build_skip_candidates(
             initial_clause, equivalent_literals)
         literals = self.get_literal_candidates_from_examples(
@@ -489,7 +510,7 @@ class PathFinderAppendOperator(LiteralAppendOperator[Set[Literal]]):
     output terms.
     """
 
-    OPTIONAL_FIELDS = super().OPTIONAL_FIELDS
+    OPTIONAL_FIELDS = LiteralAppendOperator.OPTIONAL_FIELDS
     OPTIONAL_FIELDS.update({
         "destination_index": -1,
         "maximum_path_length": -1
@@ -537,7 +558,8 @@ class PathFinderAppendOperator(LiteralAppendOperator[Set[Literal]]):
     # noinspection PyMissingOrEmptyDocstring
     def build_extended_horn_clause(self, examples, initial_clause,
                                    equivalent_literals):
-        substitution_clause = build_substitution_clause(initial_clause)
+        substitution_clause, type_clause = \
+            build_substitution_clause(initial_clause)
         head = initial_clause.head
         query_set = build_queries_from_examples(
             self.get_based_examples(examples), head, substitution_clause.head,
@@ -546,7 +568,8 @@ class PathFinderAppendOperator(LiteralAppendOperator[Set[Literal]]):
             return None
         inferred_examples = \
             self.learning_system.infer_examples_appending_clauses(
-                query_set, [substitution_clause])
+                query_set, [substitution_clause, type_clause],
+                positive_threshold=self.positive_threshold)
         literals = self.get_literal_candidates_from_examples(
             initial_clause, substitution_clause.head, inferred_examples,
             set(), False)

@@ -668,10 +668,8 @@ class NeuralLogLayer(keras.layers.Layer):
         kwargs.pop("regularizer", None)
         super(NeuralLogLayer, self).__init__(**kwargs)
 
-    def __str__(self):
+    def __repr__(self):
         return "[{}] {}".format(self.__class__.__name__, self.layer_name)
-
-    __repr__ = __str__
 
     def is_empty(self):
         """
