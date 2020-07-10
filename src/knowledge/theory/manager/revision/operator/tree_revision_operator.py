@@ -218,19 +218,14 @@ class AddNodeTreeRevisionOperator(TreeRevisionOperator):
         self.log_changes(node, remove_old)
 
         theory = self.learning_system.theory.copy()
-        theory.add_clauses(self.revised_clause)
+        theory.add_clauses([self.revised_clause])
         if remove_old:
             self.remove_old_rule_from_theory(node, theory)
 
-        clauses = []
-        for predicate_clauses in theory.clauses_by_predicate.values():
-            clauses.extend(predicate_clauses)
-        clauses.sort(key=lambda x: str(x))
+        for clauses in theory.clauses_by_predicate.values():
+            clauses.sort(key=lambda x: str(x))
 
-        sorted_theory = NeuralLogProgram()
-        sorted_theory.add_clauses(clauses)
-
-        return sorted_theory
+        return theory
 
     def refine_clause(self, initial_clause, examples):
         """

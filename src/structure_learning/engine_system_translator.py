@@ -48,7 +48,8 @@ def append_theory(program, theory):
 
 
 # noinspection PyTypeChecker,DuplicatedCode
-def convert_predictions(model, dataset, positive_threshold=None):
+def convert_predictions(model, dataset, positive_threshold=None,
+                        is_debug=False):
     """
     Gets the examples inferred by the `model`, based on the `dataset`.
 
@@ -66,6 +67,8 @@ def convert_predictions(model, dataset, positive_threshold=None):
     inferences = ExamplesInferences()
     empty_entry = None
     for features, labels in dataset:
+        if is_debug:
+            y_scores = model.call(features)
         y_scores = model.predict(features)
         if y_scores is None:
             continue
@@ -379,7 +382,8 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
             trainer.compile_module()
             trainer.fit(dataset)
 
-        return convert_predictions(trainer.model, dataset, positive_threshold)
+        return convert_predictions(
+            trainer.model, dataset, positive_threshold, self.debug_mode)
 
     def get_trainer(self, examples, theory=None):
         """
@@ -438,7 +442,8 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
         if dataset is None:
             return set()
         inferences = convert_predictions(
-            self.saved_trainer.model, dataset, positive_threshold)
+            self.saved_trainer.model, dataset, positive_threshold,
+            self.debug_mode)
         examples = self.knowledge_base.examples.get(ALL_TERMS_NAME, Examples())
         results = set()
         for predicate, facts in examples.items():

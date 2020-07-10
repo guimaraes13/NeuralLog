@@ -759,6 +759,7 @@ class NeuralLogNetwork(keras.Model):
             for edge in rule_graph.edges:
                 if edge.literal.predicate.name == ANY_PREDICATE_NAME:
                     literal_layer = self._get_any_literal()
+                    literal_layers[edge.get_inverted_edge()] = literal_layer
                 else:
                     literal_layer = self._build_literal(
                         edge.literal, predicates_depths, edge.is_inverted())

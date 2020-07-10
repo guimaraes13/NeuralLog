@@ -124,8 +124,9 @@ class MultiprocessingEvaluation(Generic[V, E]):
         """
         best_evaluation = self.theory_metric.default_value
         best_evaluator = None
+        current_clause = None
         successful_runs = 0
-        logger.info("[ BEGIN ]\tSequential evaluation of %d candidates.",
+        logger.info("[ BEGIN ]\tSequential evaluation of %d candidate(s).",
                     len(candidates))
         for candidate in candidates:
             # noinspection PyBroadException
@@ -136,6 +137,7 @@ class MultiprocessingEvaluation(Generic[V, E]):
                     self.theory_metric, self.evaluation_timeout)
                 evaluator = \
                     self.transformer.transform(evaluator, candidate, examples)
+                current_clause = evaluator.horn_clause
                 async_evaluator: AsyncTheoryEvaluator = evaluator()
                 if not async_evaluator.has_finished:
                     continue
@@ -153,8 +155,10 @@ class MultiprocessingEvaluation(Generic[V, E]):
                 logger.exception(
                     "Evaluation of the theory timed out after %d seconds.",
                     self.evaluation_timeout)
+                logger.warning("Clause:\t%s", current_clause)
             except Exception:
                 logger.exception("Error when evaluating the clause, reason:")
+                logger.warning("Clause:\t%s", current_clause)
         logger.info("[  END  ]\tSequential evaluation.")
         return best_evaluator
 
@@ -171,7 +175,7 @@ class MultiprocessingEvaluation(Generic[V, E]):
         :return: the async theory evaluator containing the best evaluated clause
         :rtype: AsyncTheoryEvaluator[E]
         """
-        logger.info("[ BEGIN ]\tAsynchronous evaluation of %d candidates.",
+        logger.info("[ BEGIN ]\tAsynchronous evaluation of %d candidate(s).",
                     len(candidates))
         number_of_process = min(self.number_of_process, len(candidates))
         pool = ThreadPoolExecutor(number_of_process)

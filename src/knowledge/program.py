@@ -1725,30 +1725,32 @@ class NeuralLogProgram:
         :return: A copy of this NeuralLog program
         :rtype: NeuralLogProgram
         """
-        program = NeuralLogProgram()
-
-        program.facts_by_predicate = copy.deepcopy(self.facts_by_predicate)
-        program.examples = copy.deepcopy(self.examples)
-        program.mega_examples = copy.deepcopy(self.mega_examples)
-        program.clauses_by_predicate = copy.deepcopy(self.clauses_by_predicate)
-        program.constants = set(self.constants)
-        program.iterable_constants_per_term = \
-            copy.deepcopy(self.iterable_constants_per_term)
-        program.predicates = copy.deepcopy(self.predicates)
-        program.logic_predicates = set(self.logic_predicates)
-        program.functional_predicates = set(self.functional_predicates)
-        program.trainable_predicates = set(self.trainable_predicates)
-        program.parameters = copy.deepcopy(self.parameters)
-
-        program._predicate_parameters_to_add = \
-            copy.deepcopy(self._predicate_parameters_to_add)
-        program._parameters_to_add = copy.deepcopy(self._parameters_to_add)
-        program._last_atom_for_predicate = \
-            copy.deepcopy(self._last_atom_for_predicate)
-
-        program.is_up_to_date = self.is_up_to_date
-
-        return program
+        return copy.deepcopy(self)
+        # program = NeuralLogProgram()
+        #
+        # program.facts_by_predicate = copy.deepcopy(self.facts_by_predicate)
+        # program.examples = copy.deepcopy(self.examples)
+        # program.mega_examples = copy.deepcopy(self.mega_examples)
+        # program.clauses_by_predicate = \
+        #     copy.deepcopy(self.clauses_by_predicate)
+        # program.constants = set(self.constants)
+        # program.iterable_constants_per_term = \
+        #     copy.deepcopy(self.iterable_constants_per_term)
+        # program.predicates = copy.deepcopy(self.predicates)
+        # program.logic_predicates = set(self.logic_predicates)
+        # program.functional_predicates = set(self.functional_predicates)
+        # program.trainable_predicates = set(self.trainable_predicates)
+        # program.parameters = copy.deepcopy(self.parameters)
+        #
+        # program._predicate_parameters_to_add = \
+        #     copy.deepcopy(self._predicate_parameters_to_add)
+        # program._parameters_to_add = copy.deepcopy(self._parameters_to_add)
+        # program._last_atom_for_predicate = \
+        #     copy.deepcopy(self._last_atom_for_predicate)
+        #
+        # program.is_up_to_date = self.is_up_to_date
+        #
+        # return program
 
     def __repr__(self):
         message = ""

@@ -590,6 +590,35 @@ class Edge:
     def __repr__(self):
         return self.__str__()
 
+    def get_inverted_edge(self):
+        """
+        Gets an inverted version of this edge. Raises an error if the this edge
+        has more than one input and, thus, cannot be inverted.
+
+        :raise ValueError: if the edge has more than one input
+        :return: the inverted edge
+        :rtype: Edge
+        """
+        return Edge.inverted_edge(self)
+
+    @staticmethod
+    def inverted_edge(edge):
+        """
+        Gets an inverted version of the `edge`. Raises an error if the edge
+        has more than one input and, thus, cannot be inverted.
+
+        :param edge: the edge
+        :type edge: Edge
+        :raise ValueError: if the edge has more than one input
+        :return: the inverted edge
+        :rtype: Edge
+        """
+        if len(edge.input_indices) > 1:
+            raise ValueError("Cannot invert edge with more than one input.")
+        inv_literal = Literal(Atom(
+            edge.literal.predicate, *reversed(edge.literal.terms)))
+        return Edge(inv_literal, (edge.output_index,), edge.input_indices[0])
+
 
 def build_edge_for_path(path, index):
     """
