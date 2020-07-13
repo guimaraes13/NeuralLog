@@ -87,12 +87,10 @@ class MultiprocessingEvaluation(Generic[V, E]):
         try:
             if evaluation_map is None:
                 evaluation_map = dict()
-            self.learning_system.engine_system_translator.debug_mode = True
             # best_clause = self._evaluate_using_pool(
             #     candidates, examples, evaluation_map)
             best_clause = self._evaluate_sequentially(
                 candidates, examples, evaluation_map)
-            self.learning_system.engine_system_translator.debug_mode = False
             if logger.isEnabledFor(logging.DEBUG):
                 sorted_clauses = sorted(
                     evaluation_map.items(), key=lambda x: -x[1])

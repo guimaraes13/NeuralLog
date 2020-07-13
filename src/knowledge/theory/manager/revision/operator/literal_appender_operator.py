@@ -6,7 +6,8 @@ from abc import abstractmethod
 from collections import Collection, deque
 from typing import TypeVar, Generic, Set, Dict, List, Tuple
 
-from src.knowledge.examples import Examples, ExampleIterator, ExamplesInferences
+from src.knowledge.examples import Examples, ExampleIterator, \
+    ExamplesInferences, GroupedAtoms
 from src.knowledge.manager.tree_manager import TRUE_LITERAL
 from src.knowledge.program import NeuralLogProgram
 from src.knowledge.theory.manager.revision.operator.revision_operator import \
@@ -115,7 +116,7 @@ def build_all_literals_from_clause(initial_clause, candidates, answer_literals,
             answer_literals.add(candidate)
 
 
-def build_substitution_clause(initial_clause):
+def build_substitution_clause(initial_clause, program):
     """
     Creates the clause to find the substitution of variables instantiated by the
     initial clause and a `type` clause, to associate the type of the
@@ -123,18 +124,20 @@ def build_substitution_clause(initial_clause):
 
     :param initial_clause: the initial clause
     :type initial_clause: HornClause
+    :param program: the program
+    :type program: NeuralLogProgram
     :return: the clause to find the substitutions and the type clause
     :rtype: Tuple[HornClause, HornClause]
     """
     terms: List[Term] = []
-    append_variables_from_atom(initial_clause.head, terms)
+    append_variables_from_atom(initial_clause.head, program, terms)
 
     body: List[Literal] = []
     if not initial_clause.body:
         body.append(TRUE_LITERAL)
     else:
         for literal in initial_clause.body:
-            append_variables_from_atom(literal, terms)
+            append_variables_from_atom(literal, program, terms)
         body = initial_clause.body
 
     substitution_head = Atom(SUBSTITUTION_NAME, *terms)
@@ -147,17 +150,22 @@ def build_substitution_clause(initial_clause):
     return substitution_clause, type_clause
 
 
-def append_variables_from_atom(atom, append):
+def append_variables_from_atom(atom, program, append):
     """
     Appends the variables from the `atom` to the `append` list.
 
     :param atom: the atom
     :type atom: Atom
+    :param program: the program
+    :type program: NeuralLogProgram
     :param append: the append list
     :type append: List[Term]
     """
-    for term in atom.terms:
-        if not term.is_constant() and term not in append:
+    term_types = program.predicates[atom.predicate]
+    for i in range(atom.arity()):
+        term = atom.terms[i]
+        if not term.is_constant() and not term_types[i].number and \
+                term not in append:
             append.append(term)
 
 
@@ -205,10 +213,30 @@ def build_query_from_example(head, example):
     :return: the query to find the substitutions
     :rtype: Atom
     """
-    terms: List[Term] = [] + example.terms
-    for i in range(len(example.terms), head.arity()):
+    terms: List[Term] = list(example.terms)
+    for i in range(len(terms), head.arity()):
         terms.append(head.terms[i])
     return Atom(SUBSTITUTION_NAME, *terms, weight=example.weight)
+
+
+def get_initial_clause_head(initial_clause_head, target_predicate):
+    """
+    Gets the initial clause head, based on the initial clause and the
+    target predicate.
+
+    :param initial_clause_head: the head of the initial clause
+    :type initial_clause_head: Atom
+    :param target_predicate: the target predicate
+    :type target_predicate: Predicate
+    :return: the initial clause head
+    :rtype: Atom
+    """
+    if target_predicate:
+        initial_clause_head = \
+            Atom(target_predicate, *initial_clause_head.terms)
+    else:
+        initial_clause_head = initial_clause_head
+    return initial_clause_head
 
 
 class LiteralAppendOperator(RevisionOperator, Generic[V]):
@@ -373,7 +401,7 @@ class LiteralAppendOperator(RevisionOperator, Generic[V]):
         based_examples = Examples()
         if 0 < self.maximum_based_examples < len(positives):
             positives = random.sample(positives, self.maximum_based_examples)
-        based_examples.add_all(positives)
+        based_examples.add_examples(positives)
         return based_examples
 
     def get_literal_candidates_from_examples(
@@ -400,18 +428,17 @@ class LiteralAppendOperator(RevisionOperator, Generic[V]):
         variable_generator = VariableGenerator(
             map(lambda x: x.value, substitution_goal.terms))
         candidate_literals: Set[Literal] = set()
-        for predicate, inferred in inferences.items():
-            for key, value in inferred.items():
-                example = inferences.examples.get(predicate, dict()).get(key)
-                if not example:
-                    continue
-                constants = list(
-                    filter(lambda x: x.is_constant(), example.terms))
-                relevant_atoms = relevant_breadth_first_search(
-                    constants, self.relevant_depth, self.learning_system)
-                variable_relevant: Set[Literal] = set()
-                substitution_map = create_substitution_map(
-                    substitution_goal, example)
+        grouped_atoms = \
+            GroupedAtoms.group_examples(ExampleIterator(inferences.examples))
+        for grouped_atom in grouped_atoms:
+            constants = list(
+                filter(lambda x: x.is_constant(), grouped_atom.query.terms))
+            relevant_atoms = relevant_breadth_first_search(
+                constants, self.relevant_depth, self.learning_system)
+            variable_relevant: Set[Literal] = set()
+            for answer in grouped_atom.atoms:
+                substitution_map = \
+                    create_substitution_map(substitution_goal, answer)
                 append_variable_atom_to_set(
                     relevant_atoms, variable_relevant, substitution_map,
                     variable_generator)
@@ -453,22 +480,21 @@ class RelevantLiteralAppendOperator(LiteralAppendOperator[Literal]):
             self.evaluation_timeout, self.number_of_process
         )
 
-    # noinspection PyMissingOrEmptyDocstring
+    # noinspection PyMissingOrEmptyDocstring,DuplicatedCode
     def build_extended_horn_clause(self, examples, initial_clause,
                                    equivalent_literals, target_predicate=None):
         substitution_clause, type_clause = \
-            build_substitution_clause(initial_clause)
-        if target_predicate:
-            initial_clause_head = \
-                Atom(target_predicate, *initial_clause.head.terms)
-        else:
-            initial_clause_head = initial_clause.head
+            build_substitution_clause(
+                initial_clause, self.learning_system.knowledge_base)
+        initial_clause_head = \
+            get_initial_clause_head(initial_clause.head, target_predicate)
         query_set = build_queries_from_examples(
             self.get_based_examples(examples), initial_clause_head,
             substitution_clause.head, True)
 
         if not query_set:
             return None
+
         inferred_examples = \
             self.learning_system.infer_examples_appending_clauses(
                 query_set, [substitution_clause, type_clause],
@@ -565,18 +591,20 @@ class PathFinderAppendOperator(LiteralAppendOperator[Set[Literal]]):
             self.evaluation_timeout, self.number_of_process
         )
 
-    # TODO: consider the target predicate in this method
-    # noinspection PyMissingOrEmptyDocstring
+    # noinspection PyMissingOrEmptyDocstring,DuplicatedCode
     def build_extended_horn_clause(self, examples, initial_clause,
                                    equivalent_literals, target_predicate=None):
-        substitution_clause, type_clause = \
-            build_substitution_clause(initial_clause)
-        head = initial_clause.head
+        substitution_clause, type_clause = build_substitution_clause(
+            initial_clause, self.learning_system.knowledge_base)
+        initial_clause_head = \
+            get_initial_clause_head(initial_clause.head, target_predicate)
         query_set = build_queries_from_examples(
-            self.get_based_examples(examples), head, substitution_clause.head,
-            True)
+            self.get_based_examples(examples), initial_clause_head,
+            substitution_clause.head, True)
+
         if not query_set:
             return None
+
         inferred_examples = \
             self.learning_system.infer_examples_appending_clauses(
                 query_set, [substitution_clause, type_clause],
@@ -586,12 +614,10 @@ class PathFinderAppendOperator(LiteralAppendOperator[Set[Literal]]):
             set(), False)
         if not literals:
             return None
-        knowledge_base = NeuralLogProgram()
-        for literal in literals:
-            knowledge_base.add_fact(literal)
-        knowledge_base.build_program()
+        knowledge_base = self.build_knowledge_base_with_facts(literals)
         paths: Collection[Tuple[Term]] = knowledge_base.shortest_path(
-            head.terms[0], head.terms[self.destination_index],
+            initial_clause_head.terms[0],
+            initial_clause_head.terms[self.destination_index],
             self.maximum_path_length)
         if not paths:
             return None
@@ -601,6 +627,22 @@ class PathFinderAppendOperator(LiteralAppendOperator[Set[Literal]]):
         self.conjunction_transformer.initial_clause = initial_clause
         return self.multiprocessing.get_best_clause_from_candidates(
             conjunctions, examples)
+
+    @staticmethod
+    def build_knowledge_base_with_facts(facts):
+        """
+        Builds a knowledge base with the facts.
+
+        :param facts: the facts
+        :type facts: collections.Iterable[Atom]
+        :return: the knowledge base
+        :rtype: NeuralLogProgram
+        """
+        knowledge_base = NeuralLogProgram()
+        for literal in facts:
+            knowledge_base.add_fact(literal)
+        knowledge_base.build_program()
+        return knowledge_base
 
     @staticmethod
     def path_to_rules(path, knowledge_base, append):

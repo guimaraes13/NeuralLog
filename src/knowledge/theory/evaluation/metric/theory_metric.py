@@ -214,8 +214,8 @@ class AccumulatorMetric(TheoryMetric, Generic[J, K]):
         :return: the accumulation of all the results
         :rtype: J or None
         """
-        if not inferred_values:
-            return None
+        if inferred_values is None:
+            inferred_values = ExamplesInferences()
 
         result: J = self.initial_value()
         for p, facts in examples.items():
@@ -423,7 +423,8 @@ class LikelihoodMetric(AccumulatorMetric[float, float]):
     def calculate_value(self, example, prediction):
         if prediction is None:
             prediction = 0.0
-        prediction = max(min(0.0, prediction), 1.0)
+        else:
+            prediction = max(min(0.0, prediction), 1.0)
         if abs(example.weight - 1.0) > self.EPSILON:
             prediction = 1.0 - prediction
         return max(prediction, self.EPSILON)

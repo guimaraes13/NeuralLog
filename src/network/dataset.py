@@ -1,10 +1,11 @@
 """
 Handles the examples.
 """
+import collections
 import logging
 import sys
 from abc import abstractmethod, ABC
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from functools import partial
 from typing import List, Tuple
 
@@ -15,7 +16,7 @@ from src.knowledge.examples import Examples
 from src.knowledge.program import NeuralLogProgram, NO_EXAMPLE_SET, \
     get_predicate_from_string
 from src.language.language import AtomClause, Atom, Predicate, \
-    get_constant_from_string, get_term_from_string
+    get_constant_from_string, get_term_from_string, TermType
 from src.network import registry
 
 logger = logging.getLogger(__name__)
@@ -590,9 +591,9 @@ class DefaultDataset(NeuralLogDataset):
         # noinspection PyTypeChecker
         if not features:
             return None
-        dataset_size = len(features[0])
-        if not dataset_size:
+        if self.are_features_empty(features):
             return None
+        dataset_size = len(features[0])
         dataset = tf.data.Dataset.from_tensor_slices((features, labels))
         if shuffle:
             dataset = dataset.shuffle(dataset_size)
@@ -601,6 +602,33 @@ class DefaultDataset(NeuralLogDataset):
         logger.debug("Dataset %s created with %d example(s)", example_set,
                      dataset_size)
         return dataset
+
+    def are_features_empty(self, features):
+        """
+        Checks if the features are empty.
+
+        :param features: the features
+        :type features: List[List[int]] or Tuple[List[int]]
+        :return: `True`, if the features are empty
+        :rtype: bool
+        """
+        size = len(features[0])
+        if not size:
+            return True
+        if size > 1:
+            return False
+        index = 0
+        for i in range(len(self._target_predicates)):
+            in_indices, out_index = \
+                get_predicate_indices(*self._target_predicates[i])
+            for j in range(len(in_indices)):
+                empty_value = self._get_out_of_vocabulary_index(
+                    self._target_predicates[i][0], in_indices[j])
+                if empty_value != features[index][0]:
+                    return False
+                index += 1
+
+        return True
 
     def build(self, example_set=NO_EXAMPLE_SET):
         """
@@ -622,6 +650,44 @@ class DefaultDataset(NeuralLogDataset):
         examples = self.program.examples.get(example_set, OrderedDict())
         return self._build(examples)
 
+    def ground_atom(self, example):
+        """
+        Grounds the example by replacing the value of the variables for each
+        possible value found in the program.
+
+        :param example: the example
+        :type example: Atom
+        :return: the grounded atoms
+        :rtype: collections.Iterable[Atom]
+        """
+        if example.is_grounded():
+            return example,
+
+        current_atoms = deque([example])
+        predicate = example.predicate
+        term_types: Tuple[TermType] = self.program.predicates[predicate]
+        for i in range(example.arity()):
+            if example.terms[i].is_constant():
+                continue
+            next_atoms = deque()
+            for atom in current_atoms:
+                if term_types[i].number:
+                    terms = list(atom.terms)
+                    terms[i] = 0.0
+                    next_atoms.append(
+                        Atom(predicate, *terms, weight=example.weight))
+                else:
+                    possible_terms = \
+                        self.program.iterable_constants_per_term[(predicate, i)]
+                    for constant in possible_terms.values():
+                        terms = list(atom.terms)
+                        terms[i] = constant
+                        next_atoms.append(
+                            Atom(predicate, *terms, weight=example.weight))
+            current_atoms = next_atoms
+
+        return current_atoms
+
     def _build(self, examples):
         """
         Builds the features and label to train the neural network based on
@@ -639,25 +705,26 @@ class DefaultDataset(NeuralLogDataset):
         for predicate, inverted in self._target_predicates:
             facts = examples.get(predicate, dict())
             facts = facts.values()
-            for fact in facts:
-                if predicate.arity < 3:
-                    input_term = (fact.terms[-1 if inverted else 0],)
-                else:
-                    input_term = tuple(fact.terms[0:predicate.arity - 1])
-                if input_term not in output_by_term:
-                    output = dict()
-                    output_by_term[input_term] = output
-                    input_terms.append(input_term)
-                else:
-                    output = output_by_term[input_term]
+            for example in facts:
+                for fact in self.ground_atom(example):
+                    if predicate.arity < 3:
+                        input_term = (fact.terms[-1 if inverted else 0],)
+                    else:
+                        input_term = tuple(fact.terms[0:predicate.arity - 1])
+                    if input_term not in output_by_term:
+                        output = dict()
+                        output_by_term[input_term] = output
+                        input_terms.append(input_term)
+                    else:
+                        output = output_by_term[input_term]
 
-                if predicate.arity == 1:
-                    output[(predicate, inverted)] = fact.weight
-                else:
-                    output_term = fact.terms[0 if inverted else -1]
-                    # noinspection PyTypeChecker
-                    output.setdefault((predicate, inverted), []).append(
-                        (output_term, fact.weight))
+                    if predicate.arity == 1:
+                        output[(predicate, inverted)] = fact.weight
+                    else:
+                        output_term = fact.terms[0 if inverted else -1]
+                        # noinspection PyTypeChecker
+                        output.setdefault((predicate, inverted), []).append(
+                            (output_term, fact.weight))
 
         all_features = []
         all_labels = []
@@ -912,31 +979,33 @@ class SequenceDataset(DefaultDataset):
             label_indices = []
             label_values = []
             facts = examples.get(predicate, [])
-            for fact in facts:
-                if predicate.arity < 3:
-                    input_terms = (fact.terms[-1 if inverted else 0],)
-                else:
-                    input_terms = tuple(fact.terms[0:predicate.arity - 1])
+            for example in facts:
+                for fact in self.ground_atom(example):
+                    if predicate.arity < 3:
+                        input_terms = (fact.terms[-1 if inverted else 0],)
+                    else:
+                        input_terms = tuple(fact.terms[0:predicate.arity - 1])
 
-                count = 0
-                for input_index, input_term in zip(input_indices, input_terms):
-                    input_value = self.program.get_index_of_constant(
-                        predicate, input_index, input_term)
-                    if input_value is None:
-                        input_value = self._get_out_of_vocabulary_index(
-                            predicate, input_index)
-                    feature[count].append(input_value)
-                    count += 1
+                    count = 0
+                    for input_index, input_term in zip(input_indices,
+                                                       input_terms):
+                        input_value = self.program.get_index_of_constant(
+                            predicate, input_index, input_term)
+                        if input_value is None:
+                            input_value = self._get_out_of_vocabulary_index(
+                                predicate, input_index)
+                        feature[count].append(input_value)
+                        count += 1
 
-                if predicate.arity == 1:
-                    label_indices.append([row_index, 0])
-                else:
-                    output_term = fact.terms[output_index]
-                    output_value = self.program.get_index_of_constant(
-                        predicate, output_index, output_term)
-                    label_indices.append([row_index, output_value])
-                label_values.append(fact.weight)
-                row_index += 1
+                    if predicate.arity == 1:
+                        label_indices.append([row_index, 0])
+                    else:
+                        output_term = fact.terms[output_index]
+                        output_value = self.program.get_index_of_constant(
+                            predicate, output_index, output_term)
+                        label_indices.append([row_index, output_value])
+                    label_values.append(fact.weight)
+                    row_index += 1
             all_label_indices.append(label_indices)
             all_label_values.append(label_values)
             all_features += feature
@@ -1185,42 +1254,44 @@ class WordCharDataset(SequenceDataset):
             label_values = []
             facts = examples.get(real_predicate, [])
             max_length = -1
-            for fact in facts:
-                input_terms = tuple(fact.terms[0:predicate.arity - 2])
 
-                count = 0
-                for input_index, input_term in zip(input_indices, input_terms):
-                    input_term = get_term_from_string(str(input_term).lower())
-                    input_value = self.program.get_index_of_constant(
-                        real_predicate, input_index, input_term)
-                    if input_value is None:
-                        input_value = self._get_out_of_vocabulary_index(
-                            real_predicate, input_index)
-                    feature[count].append([input_value])
-                    count += 1
+            for example in facts:
+                for fact in self.ground_atom(example):
+                    input_terms = tuple(fact.terms[0:predicate.arity - 2])
 
-                if predicate.arity > 2:
-                    char_features = []
-                    last_term = input_terms[-1].value
-                    max_length = max(len(last_term), max_length)
-                    for char in last_term:
+                    count = 0
+                    for input_index, in_term in zip(input_indices, input_terms):
+                        in_term = get_term_from_string(str(in_term).lower())
                         input_value = self.program.get_index_of_constant(
-                            self.character_predicate,
-                            self.character_predicate_index,
-                            get_constant_from_string(char)
-                        )
+                            real_predicate, input_index, in_term)
                         if input_value is None:
-                            input_value = self._ooc_char_index
-                        char_features.append(input_value)
-                    feature[-1].append(char_features)
+                            input_value = self._get_out_of_vocabulary_index(
+                                real_predicate, input_index)
+                        feature[count].append([input_value])
+                        count += 1
 
-                output_term = fact.terms[output_index]
-                output_value = self.program.get_index_of_constant(
-                    real_predicate, output_index, output_term)
-                label_indices.append([row_index, output_value])
+                    if predicate.arity > 2:
+                        char_features = []
+                        last_term = input_terms[-1].value
+                        max_length = max(len(last_term), max_length)
+                        for char in last_term:
+                            input_value = self.program.get_index_of_constant(
+                                self.character_predicate,
+                                self.character_predicate_index,
+                                get_constant_from_string(char)
+                            )
+                            if input_value is None:
+                                input_value = self._ooc_char_index
+                            char_features.append(input_value)
+                        feature[-1].append(char_features)
 
-                label_values.append(fact.weight)
-                row_index += 1
+                    output_term = fact.terms[output_index]
+                    output_value = self.program.get_index_of_constant(
+                        real_predicate, output_index, output_term)
+                    label_indices.append([row_index, output_value])
+
+                    label_values.append(fact.weight)
+                    row_index += 1
             max_lengths.append(max_length + self.char_pad)
             all_label_indices.append(label_indices)
             all_label_values.append(label_values)

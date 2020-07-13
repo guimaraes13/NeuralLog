@@ -3,9 +3,10 @@ Represents training examples.
 """
 import collections
 from collections import OrderedDict, UserDict
-from typing import Dict, Any, MutableMapping, Iterable
+from typing import Dict, Any, MutableMapping, Iterable, Set
 
-from src.language.language import Predicate, Atom
+from src.language.language import Predicate, Atom, Variable
+from src.util import OrderedSet
 
 
 class LimitedIterator:
@@ -99,7 +100,7 @@ class Examples(UserDict, MutableMapping[Predicate, Dict[Any, Atom]]):
     def __init__(self, *args):
         super().__init__(OrderedDict(*args))
 
-    def add_all(self, examples):
+    def add_examples(self, examples):
         """
         Adds all the examples.
 
@@ -134,6 +135,9 @@ class Examples(UserDict, MutableMapping[Predicate, Dict[Any, Atom]]):
             return len(self.data.get(predicate, {}))
         else:
             return sum(map(lambda x: len(x), self.data.values()))
+
+    def __bool__(self):
+        return bool(self.size())
 
 
 class ExamplesInferences(UserDict, MutableMapping[Predicate, Dict[Any, float]]):
@@ -186,3 +190,67 @@ class ExamplesInferences(UserDict, MutableMapping[Predicate, Dict[Any, float]]):
         """
         return \
             self.get(example.predicate, dict()).get(example.simple_key(), 0.0)
+
+
+def build_query(atom, variable_index):
+    """
+    Builds a query by replacing the term of `variable_index` of the atom by a
+    variable. It assumes the atom is grounded.
+
+    :param atom: the atom
+    :type atom: Atom
+    :param variable_index: the variable index
+    :type variable_index: int
+    :return: the query
+    :rtype: Atom
+    """
+    terms = list(atom.terms)
+    terms[variable_index] = Variable("X")
+
+    return Atom(atom.predicate, *terms, weight=atom.weight)
+
+
+class GroupedAtoms:
+    """
+    Class to group a set of atoms from a given query.
+    """
+
+    def __init__(self, query, atoms):
+        """
+        Constructs the grouped atoms.
+
+        :param query: the query
+        :type query: Atom
+        :param atoms: the atoms
+        :type atoms: collections.Collection[Atom]
+        """
+        self.query = query
+        self.atoms = atoms
+
+    @staticmethod
+    def group_examples(examples, variable_index=-1):
+        """
+        Groups the examples. It creates a query by replacing the term of index
+        `variable_index` of the example to a variable and then groups all the
+        examples who match the query.
+
+        :param examples: the examples
+        :type examples: collection.Iterable[Atom]
+        :param variable_index: the index of the variable term
+        :type variable_index: int
+        :return: the grouped examples
+        :rtype: collections.Iterable[GroupedAtoms]
+        """
+        examples_by_query: Dict[Atom, Set[Atom]] = dict()
+        for example in examples:
+            query = build_query(example, variable_index)
+            examples_by_query.setdefault(query, OrderedSet()).add(example)
+
+        grouped_atoms = []
+        for query, atoms in examples_by_query.items():
+            grouped_atoms.append(GroupedAtoms(query, atoms))
+
+        return grouped_atoms
+
+    def __repr__(self):
+        return f"{self.query}:\t{self.atoms}"

@@ -98,7 +98,7 @@ class ClauseEvaluationProcess2(Process):
         self.returning_queue.put(self)
 
 
-# TODO: fix this class in order to, at least, run the execution with a timeout
+# TODO: fix this class in order to run the execution with a timeout
 class AsyncTheoryEvaluator(Generic[E]):
     """
     Handles an asynchronous evaluation of a theory.

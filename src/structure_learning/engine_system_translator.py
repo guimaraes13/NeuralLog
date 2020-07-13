@@ -5,18 +5,19 @@ inference engine.
 import collections
 import logging
 import os
+import sys
 from abc import abstractmethod
 from typing import Optional, List, Set
 
 import numpy as np
 
 import src.structure_learning.structure_learning_system as sls
-from src.knowledge.examples import Examples, ExamplesInferences
+from src.knowledge.examples import Examples, ExamplesInferences, ExampleIterator
 from src.knowledge.program import NeuralLogProgram, print_neural_log_program
 from src.language.language import Atom, Term, Clause
 from src.network.network import NeuralLogNetwork
 from src.network.trainer import Trainer
-from src.util import Initializable
+from src.util import Initializable, time_measure
 from src.util.file import read_logic_program_from_file
 
 logger = logging.getLogger(__name__)
@@ -48,8 +49,7 @@ def append_theory(program, theory):
 
 
 # noinspection PyTypeChecker,DuplicatedCode
-def convert_predictions(model, dataset, positive_threshold=None,
-                        is_debug=False):
+def convert_predictions(model, dataset, positive_threshold=None):
     """
     Gets the examples inferred by the `model`, based on the `dataset`.
 
@@ -67,8 +67,6 @@ def convert_predictions(model, dataset, positive_threshold=None,
     inferences = ExamplesInferences()
     empty_entry = None
     for features, labels in dataset:
-        if is_debug:
-            y_scores = model.call(features)
         y_scores = model.predict(features)
         if y_scores is None:
             continue
@@ -86,7 +84,7 @@ def convert_predictions(model, dataset, positive_threshold=None,
             row_scores = y_scores[i]
             if len(row_scores.shape) == 3:
                 row_scores = np.squeeze(row_scores, axis=1)
-            if len(row_scores) == 1:
+            if predicate.arity > 1 and row_scores.shape[-1] == 1:
                 # The network prediction is a scalar, this is, the prediction
                 #   is equal for any output subject.
                 #   As such, we can resize the output to represent this,
@@ -328,14 +326,42 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
     A engine system translator for the NeuralLog language.
     """
 
-    OPTIONAL_FIELDS = {"batch_size": 16}
+    OPTIONAL_FIELDS = {
+        "batch_size": 16,
+        "_last_saved_change": -sys.float_info.max,
+        "_last_relevant_inference": -sys.float_info.max,
+        "_cached_inference": None
+    }
 
     def __init__(self, knowledge_base=None, theory=None, output_path=None):
         super().__init__(knowledge_base, theory, output_path)
-        self.saved_trainer: Optional[Trainer] = None
+        self._saved_trainer: Optional[Trainer] = None
+        self._last_saved_change: float = -sys.float_info.max
+        self._last_relevant_inference: float = -sys.float_info.max
+        self._cached_inference: Optional[NeuralLogProgram] = None
         self.current_trainer: Optional[Trainer] = None
         self.batch_size = self.OPTIONAL_FIELDS["batch_size"]
-        self.debug_mode = False
+
+    @property
+    def saved_trainer(self):
+        """
+        Gets the saved trainer.
+
+        :return: the saved trainer
+        :rtype: Trainer
+        """
+        return self._saved_trainer
+
+    @saved_trainer.setter
+    def saved_trainer(self, value):
+        """
+        Sets the saved trainer.
+
+        :param value: the value
+        :type value: Trainer
+        """
+        self._saved_trainer = value
+        self._last_saved_change = time_measure.performance_time()
 
     # noinspection PyMissingOrEmptyDocstring
     @EngineSystemTranslator.knowledge_base.setter
@@ -358,7 +384,6 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
     def initialize(self):
         super().initialize()
         self._build_model()
-        self.debug_mode = False
 
     def _build_model(self):
         if not self.knowledge_base or not self.theory:
@@ -374,16 +399,13 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
                        positive_threshold=None):
         trainer = self.get_trainer(examples, theory)
 
-        if self.debug_mode:
-            logger.info("Program:\n%s", trainer.neural_program)
         dataset = trainer.build_dataset()
         dataset = dataset.get_dataset(TEMPORARY_SET_NAME, self.batch_size)
         if retrain:
             trainer.compile_module()
             trainer.fit(dataset)
 
-        return convert_predictions(
-            trainer.model, dataset, positive_threshold, self.debug_mode)
+        return convert_predictions(trainer.model, dataset, positive_threshold)
 
     def get_trainer(self, examples, theory=None):
         """
@@ -432,44 +454,47 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
             examples, retrain=retrain,
             theory=appended_clauses, positive_threshold=positive_threshold)
 
-    # IMPROVE: The examples variable is no longer needed since the inference
-    #  know stores the inferred examples
     # noinspection PyMissingOrEmptyDocstring
     def inferred_relevant(self, terms, positive_threshold=None):
-        self._update_example_terms()
-        self.saved_trainer.read_parameters()
-        dataset = self.saved_trainer.neural_dataset.get_dataset(ALL_TERMS_NAME)
-        if dataset is None:
-            return set()
-        inferences = convert_predictions(
-            self.saved_trainer.model, dataset, positive_threshold,
-            self.debug_mode)
-        examples = self.knowledge_base.examples.get(ALL_TERMS_NAME, Examples())
+        if self._last_relevant_inference < self._last_saved_change or \
+                self._cached_inference is None:
+            self._update_example_terms()
+            self.saved_trainer.read_parameters()
+            dataset = \
+                self.saved_trainer.neural_dataset.get_dataset(ALL_TERMS_NAME)
+            self._cached_inference = NeuralLogProgram()
+            if dataset is not None:
+                inferences = convert_predictions(
+                    self.saved_trainer.model, dataset, positive_threshold)
+                self._cached_inference = NeuralLogProgram()
+                for atom in ExampleIterator(inferences.examples):
+                    self._cached_inference.add_fact(atom)
+            self._last_relevant_inference = time_measure.performance_time()
         results = set()
-        for predicate, facts in examples.items():
-            inferred = inferences.get(predicate)
-            if inferred is None:
-                continue
-            for key, atom in facts.items():
-                if key in inferred and not terms.isdisjoint(atom.terms):
-                    results.add(atom)
+        for term in terms:
+            results.update(self._cached_inference.get_atoms_with_term(term))
 
         return results
 
     def _update_example_terms(self):
         layers = []
-        for predicate in self.knowledge_base.clauses_by_predicate:
-            layers.append((predicate, False))
+        program = self.saved_trainer.neural_program
+        for predicate in program.clauses_by_predicate:
             possible_terms = []
             for i in range(predicate.arity - 1):
-                terms = self.knowledge_base.iterable_constants_per_term.get(
+                terms = program.iterable_constants_per_term.get(
                     (predicate, i), dict()).values()
                 possible_terms.append(terms)
             possible_terms.append((sls.NULL_ENTITY,))
 
+            has_example = False
             for terms in permute_terms(*possible_terms):
                 atom = Atom(predicate, *terms, weight=0.0)
-                self.knowledge_base.add_example(atom, ALL_TERMS_NAME, False)
+                program.add_example(atom, ALL_TERMS_NAME, False)
+                has_example = True
+            if has_example:
+                layers.append((predicate, False))
+
         self.saved_trainer.model.build_layers(layers)
 
     # noinspection PyMissingOrEmptyDocstring

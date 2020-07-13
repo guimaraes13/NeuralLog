@@ -545,13 +545,11 @@ class BatchStructureLearning(StructureLearningMethod):
         """
         examples = self._knowledge_base.examples[TRAIN_SET_NAME]
         logger.info("Begin the revision using\t%s example(s)", examples.size())
-        if self.pass_all_examples_at_once:
-            self.learning_system.incoming_example_manager.incoming_examples(
-                ExampleIterator(examples))
-        elif self.examples_batch_size > 1:
+        if self.examples_batch_size > 0:
             self.pass_batch_examples_to_revise(self.examples_batch_size)
         else:
-            self.pass_batch_examples_to_revise(1)
+            self.learning_system.incoming_example_manager.incoming_examples(
+                ExampleIterator(examples))
         logger.info("Ended the revision")
 
     def train_remaining_examples(self):

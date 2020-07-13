@@ -3,6 +3,7 @@ Manages the revision of the theory.
 """
 import logging
 import math
+import sys
 
 import src.knowledge.theory.manager.revision.revision_examples as revision
 import src.structure_learning.structure_learning_system as sls
@@ -34,7 +35,7 @@ class TheoryRevisionManager(Initializable):
 
     OPTIONAL_FIELDS = {
         "train_using_all_examples": True,
-        "last_theory_change": 0.0,
+        "last_theory_change": -sys.float_info.max,
         "theory_evaluation": 0.0
     }
 

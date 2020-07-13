@@ -430,7 +430,7 @@ class Variable(Term):
 
     # noinspection PyMissingOrEmptyDocstring
     def key(self):
-        return Variable, self.value
+        return Variable.__class__.__name__, self.value
 
     # noinspection PyMissingOrEmptyDocstring
     def is_constant(self):

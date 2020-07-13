@@ -1,6 +1,8 @@
 """
 Handles the examples to be used on the theory revision.
 """
+import sys
+
 from src.knowledge.examples import Examples, ExamplesInferences
 from src.knowledge.theory.manager.revision.sample_selector import SampleSelector
 from src.language.language import Atom
@@ -30,7 +32,7 @@ class RevisionExamples:
         self.relevant_examples = Examples()
         self.inferred_values = ExamplesInferences()
         self.not_evaluated_examples = Examples()
-        self.last_inference = 0.0
+        self.last_inference = -sys.float_info.max
 
     def get_training_examples(self, all_examples=True):
         """
