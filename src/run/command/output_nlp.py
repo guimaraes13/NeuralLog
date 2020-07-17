@@ -164,6 +164,8 @@ class OutputNLP(Command):
 
     # noinspection PyMissingOrEmptyDocstring,PyAttributeOutsideInit
     def parse_args(self):
+        super().parse_args()
+
         # Log
         args = self.parser.parse_args(self.args)
         print_args(args, logger)

@@ -61,7 +61,7 @@ class LearnStructure(Command):
     """
 
     def __init__(self, program, args, direct=False):
-        configure_log(LOG_FORMAT, level=logging.INFO)
+        # configure_log(LOG_FORMAT, level=logging.INFO)
         super().__init__(program, args, direct)
 
     # noinspection PyMissingOrEmptyDocstring
@@ -117,6 +117,10 @@ class LearnStructure(Command):
         parser.set_defaults(strictOutput=False)
 
         # Log
+        parser.add_argument("--verbose", "-v",
+                            dest="verbose", action="store_true",
+                            help="If set, increases the logging verbosity.")
+        parser.set_defaults(verbose=False)
         # Log file is always on
         # parser.add_argument("--logFile", "-log", metavar='file',
         #                     type=str, default=None,
@@ -126,9 +130,10 @@ class LearnStructure(Command):
 
     # noinspection PyAttributeOutsideInit,PyMissingOrEmptyDocstring
     def parse_args(self):
-        # Log
         args = self.parser.parse_args(self.args)
-        # log_file = args.logFile
+        level = logging.DEBUG if args.verbose else logging.INFO
+        configure_log(LOG_FORMAT, level=level)
+        super().parse_args()
 
         self.yaml_path = args.yaml
         self.yaml_option_index = None

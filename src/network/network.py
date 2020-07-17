@@ -9,6 +9,7 @@ from typing import Dict, List, Tuple, Any
 import tensorflow as tf
 from tensorflow.python import keras
 from tensorflow.python.training.tracking import data_structures
+from tensorflow_core.python.keras.models import _reset_build_compile_trackers
 
 from src.knowledge.graph import RulePathFinder
 from src.knowledge.program import NeuralLogProgram, ANY_PREDICATE_NAME, \
@@ -382,9 +383,11 @@ class NeuralLogNetwork(keras.Model):
         :type target_predicates: collections.Iterable[Tuple[Predicate, bool]]
         """
         # self.input_sizes = []
+        has_change = False
         for predicate, inverted in target_predicates:
             if (predicate, inverted) in self.predicates:
                 continue
+            has_change = True
             self.input_sizes.append(max(predicate.arity - 1, 1))
             logger.debug("Building output layer for predicate: %s", predicate)
             literal = Literal(Atom(
@@ -408,6 +411,8 @@ class NeuralLogNetwork(keras.Model):
         else:
             # noinspection PyAttributeOutsideInit
             self.call = self.call_multiples_inputs
+
+        _reset_build_compile_trackers(self)
 
     def get_unary_literal_extraction_function(self, predicate):
         """

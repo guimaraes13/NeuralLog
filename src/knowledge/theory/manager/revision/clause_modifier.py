@@ -169,7 +169,7 @@ class AppendLiteralWithUniqueTermModifier(ClauseModifier):
     at the same execution, but the term might already exist in the theory.
     """
 
-    OPTIONAL_FIELDS = ClauseModifier.OPTIONAL_FIELDS
+    OPTIONAL_FIELDS = dict(ClauseModifier.OPTIONAL_FIELDS)
     OPTIONAL_FIELDS.update({
         "_counter": 0,
         "term_prefix": "w_"

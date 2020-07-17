@@ -129,13 +129,13 @@ class MultiprocessingEvaluation(Generic[V, E]):
         for candidate in candidates:
             # noinspection PyBroadException
             try:
-                logger.debug("Evaluating candidate:\t%s", candidate)
                 evaluator = SyncTheoryEvaluator(
                     examples, self.learning_system.theory_evaluator,
                     self.theory_metric, self.evaluation_timeout)
                 evaluator = \
                     self.transformer.transform(evaluator, candidate, examples)
                 current_clause = evaluator.horn_clause
+                logger.info("Evaluating candidate:\t%s", current_clause)
                 async_evaluator: AsyncTheoryEvaluator = evaluator()
                 if not async_evaluator.has_finished:
                     continue

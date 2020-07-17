@@ -42,6 +42,16 @@ class AsyncEvaluationTransformer(ABC, Generic[V, E]):
     Class to encapsulate instances of type `TV` into `AsyncTheoryEvaluator`s.
     """
 
+    def __init__(self, clause_modifiers=None):
+        """
+        Creates an async evaluation transformer.
+
+        :param clause_modifiers: the clause modifiers
+        :type clause_modifiers: Optional[ClauseModifier or List[ClauseModifier]]
+        """
+        self._clause_modifiers = None
+        self.clause_modifiers = clause_modifiers
+
     @abstractmethod
     def transform(self, evaluator, v, examples):
         """
@@ -57,6 +67,32 @@ class AsyncEvaluationTransformer(ABC, Generic[V, E]):
         :rtype: SyncTheoryEvaluator[E] or AsyncTheoryEvaluator[E]
         """
         pass
+
+    @property
+    def clause_modifiers(self):
+        """
+        Gets the clause modifiers.
+
+        :return: the clause modifiers
+        :rtype: List[ClauseModifier]
+        """
+        return self._clause_modifiers
+
+    @clause_modifiers.setter
+    def clause_modifiers(self, value):
+        """
+        Sets the clause modifiers.
+
+        :param value: the clause modifiers
+        :type value: Optional[ClauseModifier or List[ClauseModifier]]
+        """
+        if not value:
+            self._clause_modifiers = []
+        else:
+            if isinstance(value, ClauseModifier):
+                self._clause_modifiers = [value]
+            else:
+                self._clause_modifiers = list(value)
 
 
 class EquivalentHonClauseAsyncTransformer(AsyncEvaluationTransformer[
@@ -84,7 +120,8 @@ class EquivalentHonClauseAsyncTransformer(AsyncEvaluationTransformer[
         :return: the async theory evaluator
         :rtype: SyncTheoryEvaluator[E] or AsyncTheoryEvaluator[E]
         """
-        evaluator.horn_clause = equivalent_horn_clause.horn_clause
+        evaluator.horn_clause = apply_modifiers(
+            self.clause_modifiers, equivalent_horn_clause.horn_clause, examples)
         evaluator.element = equivalent_horn_clause
 
         return evaluator
@@ -105,9 +142,8 @@ class LiteralAppendAsyncTransformer(AsyncEvaluationTransformer[Literal, J]):
         :param clause_modifiers: the clause modifiers
         :type clause_modifiers: Optional[ClauseModifier or List[ClauseModifier]]
         """
+        super.__init__(clause_modifiers)
         self.initial_clause: Optional[HornClause] = initial_clause
-        self._clause_modifiers = None
-        self.clause_modifiers = clause_modifiers
 
     # noinspection PyMissingOrEmptyDocstring
     def transform(self, evaluator, literal, examples):
@@ -132,32 +168,6 @@ class LiteralAppendAsyncTransformer(AsyncEvaluationTransformer[Literal, J]):
 
         return evaluator
 
-    @property
-    def clause_modifiers(self):
-        """
-        Gets the clause modifiers.
-
-        :return: the clause modifiers
-        :rtype: List[ClauseModifier]
-        """
-        return self._clause_modifiers
-
-    @clause_modifiers.setter
-    def clause_modifiers(self, value):
-        """
-        Sets the clause modifiers.
-
-        :param value: the clause modifiers
-        :type value: Optional[ClauseModifier or List[ClauseModifier]]
-        """
-        if not value:
-            self._clause_modifiers = []
-        else:
-            if isinstance(value, ClauseModifier):
-                self._clause_modifiers = [value]
-            else:
-                self._clause_modifiers = list(value)
-
 
 class ConjunctionAppendAsyncTransformer(AsyncEvaluationTransformer[
                                             Set[Literal], K]):
@@ -175,9 +185,8 @@ class ConjunctionAppendAsyncTransformer(AsyncEvaluationTransformer[
         :param clause_modifiers: the clause modifiers
         :type clause_modifiers: Optional[ClauseModifier or List[ClauseModifier]]
         """
+        super.__init__(clause_modifiers)
         self.initial_clause: Optional[HornClause] = initial_clause
-        self._clause_modifiers = None
-        self.clause_modifiers = clause_modifiers
 
     def transform(self, evaluator, conjunction, examples):
         """
@@ -202,29 +211,3 @@ class ConjunctionAppendAsyncTransformer(AsyncEvaluationTransformer[
         evaluator.horn_clause = clause
 
         return evaluator
-
-    @property
-    def clause_modifiers(self):
-        """
-        Gets the clause modifiers.
-
-        :return: the clause modifiers
-        :rtype: List[ClauseModifier]
-        """
-        return self._clause_modifiers
-
-    @clause_modifiers.setter
-    def clause_modifiers(self, value):
-        """
-        Sets the clause modifiers.
-
-        :param value: the clause modifiers
-        :type value: Optional[ClauseModifier or List[ClauseModifier]]
-        """
-        if not value:
-            self._clause_modifiers = []
-        else:
-            if isinstance(value, ClauseModifier):
-                self._clause_modifiers = [value]
-            else:
-                self._clause_modifiers = list(value)

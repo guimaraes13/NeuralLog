@@ -59,7 +59,7 @@ class AddNodeTreeRevisionOperator(TreeRevisionOperator):
     operator.
     """
 
-    OPTIONAL_FIELDS = TreeRevisionOperator.OPTIONAL_FIELDS
+    OPTIONAL_FIELDS = dict(TreeRevisionOperator.OPTIONAL_FIELDS)
     OPTIONAL_FIELDS.update({
         "refine": False,
         "maximum_side_way_movements": -1,
@@ -249,7 +249,7 @@ class AddNodeTreeRevisionOperator(TreeRevisionOperator):
         :return: the best Horn clause found
         :rtype: AsyncTheoryEvaluator or SyncTheoryEvaluator
         """
-        logger.debug("Refining rule:\t%s", initial_clause)
+        logger.info("Refining rule:\t%s", initial_clause)
         side_way_movements = 0
         best_clause = initial_clause
         current_clause = initial_clause

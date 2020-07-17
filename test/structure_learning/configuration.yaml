@@ -11,7 +11,6 @@ output_directory: "structure_learning/data"
 
 load_pre_trained_parameter: false
 examples_batch_size: 2
-pass_all_examples_at_once: false
 train_parameters_on_remaining_examples: false
 
 engine_system_translator: !!python/object:src.structure_learning.engine_system_translator.NeuralLogEngineSystemTranslator {}

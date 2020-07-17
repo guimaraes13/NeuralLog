@@ -36,11 +36,13 @@ class TheoryRevisionManager(Initializable):
     OPTIONAL_FIELDS = {
         "train_using_all_examples": True,
         "last_theory_change": -sys.float_info.max,
-        "theory_evaluation": 0.0
+        "theory_evaluation": 0.0,
+        "improvement_threshold": NO_IMPROVEMENT_THRESHOLD
     }
 
     def __init__(self, learning_system=None, revision_manager=None,
-                 theory_metric=None, train_using_all_examples=None):
+                 theory_metric=None, train_using_all_examples=None,
+                 improvement_threshold=None):
         """
         Creates a theory revision manager.
 
@@ -62,6 +64,10 @@ class TheoryRevisionManager(Initializable):
         if train_using_all_examples is None:
             self.train_using_all_examples = \
                 self.OPTIONAL_FIELDS["train_using_all_examples"]
+        self.improvement_threshold = improvement_threshold
+        if self.improvement_threshold is None:
+            self.improvement_threshold = \
+                self.OPTIONAL_FIELDS["improvement_threshold"]
         self.last_theory_change = self.OPTIONAL_FIELDS["last_theory_change"]
         self.theory_evaluation = self.OPTIONAL_FIELDS["theory_evaluation"]
 
@@ -117,7 +123,7 @@ class TheoryRevisionManager(Initializable):
             return False
 
         return self.apply_operator(
-            operator_evaluator, examples, NO_IMPROVEMENT_THRESHOLD)
+            operator_evaluator, examples, self.improvement_threshold)
 
     def evaluate_current_theory(self, examples):
         """
@@ -191,7 +197,7 @@ class HoeffdingBoundTheoryManager(TheoryRevisionManager):
     `epsilon` is given by the formula `epsilon = sqrt((R^2 * ln(1/delta)/(2n)).
     """
 
-    OPTIONAL_FIELDS = TheoryRevisionManager.OPTIONAL_FIELDS
+    OPTIONAL_FIELDS = dict(TheoryRevisionManager.OPTIONAL_FIELDS)
     OPTIONAL_FIELDS.update({
         "delta": 1.0e-6,
         "delta_update_function": None

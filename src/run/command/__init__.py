@@ -179,7 +179,6 @@ class Command(ABC):
         another CLI
         :type direct: bool
         """
-        configure_log()
         self.direct = direct
         self.program = program
         self.args = args
@@ -202,7 +201,7 @@ class Command(ABC):
         """
         Parses the command line arguments.
         """
-        pass
+        configure_log()
 
     @abstractmethod
     def run(self):

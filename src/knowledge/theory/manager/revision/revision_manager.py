@@ -155,7 +155,7 @@ class BestLeafRevisionManager(RevisionManager):
     Class to select the best leaves to revise, based on some heuristic.
     """
 
-    OPTIONAL_FIELDS = RevisionManager.OPTIONAL_FIELDS
+    OPTIONAL_FIELDS = dict(RevisionManager.OPTIONAL_FIELDS)
     OPTIONAL_FIELDS.update({
         "revision_heuristic": UniformNodeHeuristic(),
         "number_of_leaves_to_revise": -1

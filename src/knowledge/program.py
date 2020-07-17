@@ -1011,6 +1011,7 @@ class NeuralLogProgram:
     def _get_grouped_types(self):
         """
         Gets the groups of types of each predicate term position.
+
         :return: the dictionary of iterable constants per
         (predicate, term position)
         :rtype: list[set[tuple[Predicate, int]]]
@@ -1018,10 +1019,16 @@ class NeuralLogProgram:
         type_sets = list()
         for clauses in self.clauses_by_predicate.values():
             for clause in clauses:
-                term_types = dict()
+                term_types: Dict[Term, Set[Tuple[Predicate, int]]] = dict()
+                body_terms = set()
                 self._find_term_type(clause.head, term_types)
                 for literal in clause.body:
                     self._find_term_type(literal, term_types)
+                    body_terms.update(
+                        filter(lambda x: not x.is_constant(), literal.terms))
+                body_terms.difference_update(clause.head.terms)
+                self._add_output_type_to_free_variables(
+                    clause.head.predicate, term_types, body_terms)
                 type_sets += list(term_types.values())
         examples_predicates = set()
         for examples in self.examples.values():
@@ -1038,6 +1045,27 @@ class NeuralLogProgram:
             type_sets += list(term_types.values())
         return _join_sets_with_common_elements(type_sets)
 
+    @staticmethod
+    def _add_output_type_to_free_variables(
+            head_predicate, term_types, body_terms):
+        """
+        Adds the type of the output variable to free variables in the clause.
+        A free variables is a variables that appears only once in the rule.
+
+        :param head_predicate: the head predicate
+        :type head_predicate: Predicate
+        :param term_types: the term types
+        :type term_types: Dict[Term, Set[Tuple[Predicate, int]]]
+        :param body_terms: the variable terms of the body of the clause,
+        that might be free variables
+        :type body_terms: collections.Iterable[Term]
+        """
+        for term in body_terms:
+            term_type = term_types[term]
+            if len(term_type) < 2:
+                term_type.add((head_predicate, head_predicate.arity - 1))
+
+    # TODO: bound free variables to the last variable in the head of the clause
     def _find_term_type(self, atom, term_types):
         """
         Finds the types of the terms in the atom.

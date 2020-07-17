@@ -114,7 +114,7 @@ class IndependentSampleSelector(SampleSelector):
 
     DEFAULT_RELEVANT_DEPTH = 0
 
-    OPTIONAL_FIELDS = SampleSelector.OPTIONAL_FIELDS
+    OPTIONAL_FIELDS = dict(SampleSelector.OPTIONAL_FIELDS)
     OPTIONAL_FIELDS.update({
         "relevant_depth": DEFAULT_RELEVANT_DEPTH
     })

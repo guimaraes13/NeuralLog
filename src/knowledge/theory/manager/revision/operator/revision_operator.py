@@ -449,7 +449,7 @@ class BottomClauseBoundedRule(RevisionOperator):
     Conference on Intelligent Systems (BRACIS), Natal, 2015, pp. 240-245.
     """
 
-    OPTIONAL_FIELDS = RevisionOperator.OPTIONAL_FIELDS
+    OPTIONAL_FIELDS = dict(RevisionOperator.OPTIONAL_FIELDS)
     OPTIONAL_FIELDS.update({
         "variable_generator": None,
         "relevant_depth": 0,
@@ -608,12 +608,11 @@ class BottomClauseBoundedRule(RevisionOperator):
         super().initialize()
         if self.variable_generator is None:
             self.variable_generator = DEFAULT_VARIABLE_GENERATOR()
+        transformer = EquivalentHonClauseAsyncTransformer(self.clause_modifiers)
         # noinspection PyAttributeOutsideInit
         self.multiprocessing = MultiprocessingEvaluation(
             self.learning_system, self.theory_metric,
-            EquivalentHonClauseAsyncTransformer(),
-            self.evaluation_timeout, self.number_of_process
-        )
+            transformer, self.evaluation_timeout, self.number_of_process)
 
     # noinspection PyMissingOrEmptyDocstring
     def perform_operation(self, targets):
@@ -675,7 +674,7 @@ class BottomClauseBoundedRule(RevisionOperator):
             bottom_clause = self.build_bottom_clause(example)
             horn_clause = \
                 self.build_rule_from_bottom_clause(targets, bottom_clause)
-            horn_clause = self.apply_clause_modifiers(horn_clause, targets)
+            # horn_clause = self.apply_clause_modifiers(horn_clause, targets)
             if horn_clause:
                 horn_clause.provenance = LearnedClause(str(self))
                 theory.add_clauses([horn_clause])
@@ -772,7 +771,7 @@ class BottomClauseBoundedRule(RevisionOperator):
         current_clause = initial_clause
         remove_equivalent_candidates(candidates, initial_clause.element)
         side_way_movements = 0
-        logger.debug("Refining rule:\t%s", initial_clause.horn_clause)
+        logger.info("Refining rule:\t%s", initial_clause.horn_clause)
         while not self.is_to_stop_by_side_way_movements(side_way_movements) \
                 and candidates:
             remove_last_literal_equivalent_candidates(
@@ -872,7 +871,7 @@ class CombinedBottomClauseBoundedRule(BottomClauseBoundedRule):
                             len(bottom_clause.body))
                 new_rule = self.build_rule_from_bottom_clause(
                     targets, bottom_clause)
-                new_rule = self.apply_clause_modifiers(new_rule, examples)
+                # new_rule = self.apply_clause_modifiers(new_rule, examples)
                 theory.add_clauses([new_rule])
                 theory.build_program()
                 logger.info("Rule appended to the theory:\t%s", new_rule)
@@ -944,7 +943,7 @@ class CombinedBottomClauseBreadthSearch(CombinedBottomClauseBoundedRule):
     clauses and the `n + 1` last clauses; returning the first `n` clauses.
     """
 
-    OPTIONAL_FIELDS = CombinedBottomClauseBoundedRule.OPTIONAL_FIELDS
+    OPTIONAL_FIELDS = dict(CombinedBottomClauseBoundedRule.OPTIONAL_FIELDS)
     OPTIONAL_FIELDS.update({
         "maximum_size": 2,
         "strict_to_maximum_size": False
@@ -1050,10 +1049,10 @@ class CombinedBottomClauseBreadthSearch(CombinedBottomClauseBoundedRule):
         candidate_literals = list(candidate_literals)
         horn_clauses = self.refine_rules(
             candidate_literals, targets, bottom_clause)
-        for clause in horn_clauses:
-            modified_clause = self.apply_clause_modifiers(clause, targets)
-            theory.add_clauses([modified_clause])
-            logger.info("Rule appended to the theory:\t%s", modified_clause)
+        # for clause in horn_clauses:
+        #     modified_clause = self.apply_clause_modifiers(clause, targets)
+        theory.add_clauses(horn_clauses)
+        logger.info("Rule appended to the theory:\t%s", horn_clauses)
         theory.build_program()
 
     def refine_rules(self, candidates, targets, bottom_clause):

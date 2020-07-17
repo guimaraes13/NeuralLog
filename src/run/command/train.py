@@ -266,6 +266,8 @@ class Train(Command):
 
     # noinspection PyMissingOrEmptyDocstring,PyAttributeOutsideInit
     def parse_args(self):
+        super().parse_args()
+
         # Log
         args = self.parser.parse_args(self.args)
         log_file = args.logFile

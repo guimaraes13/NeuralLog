@@ -245,7 +245,7 @@ class LiteralAppendOperator(RevisionOperator, Generic[V]):
     examples, in order to improve the evaluation of the rule on those examples.
     """
 
-    OPTIONAL_FIELDS = RevisionOperator.OPTIONAL_FIELDS
+    OPTIONAL_FIELDS = dict(RevisionOperator.OPTIONAL_FIELDS)
     OPTIONAL_FIELDS.update({
         "number_of_process": DEFAULT_NUMBER_OF_PROCESS,
         "evaluation_timeout": DEFAULT_EVALUATION_TIMEOUT,
@@ -545,7 +545,7 @@ class PathFinderAppendOperator(LiteralAppendOperator[Set[Literal]]):
     output terms.
     """
 
-    OPTIONAL_FIELDS = LiteralAppendOperator.OPTIONAL_FIELDS
+    OPTIONAL_FIELDS = dict(LiteralAppendOperator.OPTIONAL_FIELDS)
     OPTIONAL_FIELDS.update({
         "destination_index": -1,
         "maximum_path_length": -1

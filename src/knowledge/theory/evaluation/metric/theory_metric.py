@@ -181,7 +181,7 @@ class AccumulatorMetric(TheoryMetric, Generic[J, K]):
     K: The type of the value that is accumulated to the initial value.
     """
 
-    OPTIONAL_FIELDS = TheoryMetric.OPTIONAL_FIELDS
+    OPTIONAL_FIELDS = dict(TheoryMetric.OPTIONAL_FIELDS)
     OPTIONAL_FIELDS.update({
         "ABSENT_PREDICTION_VALUE": 0.0
     })
@@ -287,7 +287,7 @@ class ListAccumulator(AccumulatorMetric[Tuple[List[float], List[float]],
     compute curve metrics.
     """
 
-    OPTIONAL_FIELDS = AccumulatorMetric.OPTIONAL_FIELDS
+    OPTIONAL_FIELDS = dict(AccumulatorMetric.OPTIONAL_FIELDS)
     OPTIONAL_FIELDS.update({
         "ABSENT_PREDICTION_VALUE": -sys.float_info.max
     })
