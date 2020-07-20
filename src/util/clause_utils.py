@@ -29,14 +29,11 @@ def to_variable_atom(atom, variable_generator=None, variable_map=None):
         variable_map = dict()
     terms = []
     for term in atom.terms:
-        if isinstance(term, Number):
-            terms.append(term)
-        else:
-            variable = variable_map.get(term)
-            if variable is None:
-                variable = get_term_from_string(next(variable_generator))
-            variable_map[term] = variable
-            terms.append(variable)
+        variable = variable_map.get(term)
+        if variable is None:
+            variable = get_term_from_string(next(variable_generator))
+        variable_map[term] = variable
+        terms.append(variable)
 
     return Atom(atom.predicate, *terms)
 

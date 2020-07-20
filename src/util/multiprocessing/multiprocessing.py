@@ -100,7 +100,7 @@ class MultiprocessingEvaluation(Generic[V, E]):
                         evaluation, clause.real_time, clause.horn_clause
                     )
         except Exception:
-            logger.exception("Error when evaluating the clause, reason:")
+            logger.exception("Error when evaluating the candidates, reason:")
 
         return best_clause
 
@@ -151,12 +151,12 @@ class MultiprocessingEvaluation(Generic[V, E]):
                     best_evaluator = async_evaluator
             except (CancelledError, TimeoutError):
                 logger.exception(
-                    "Evaluation of the theory timed out after %d seconds.",
-                    self.evaluation_timeout)
-                logger.warning("Clause:\t%s", current_clause)
+                    "Evaluation of the clause %s timed out after %d seconds.",
+                    current_clause, self.evaluation_timeout)
+                # logger.warning("Clause:\t%s", current_clause)
             except Exception:
-                logger.exception("Error when evaluating the clause, reason:")
-                logger.warning("Clause:\t%s", current_clause)
+                logger.exception(
+                    "Error when evaluating the clause.\n%s\n", current_clause)
         logger.info("[  END  ]\tSequential evaluation.")
         return best_evaluator
 
@@ -230,9 +230,11 @@ class MultiprocessingEvaluation(Generic[V, E]):
         best_evaluator = None
         successful_runs = 0
         for future in futures:
+            current_clause = None
             # noinspection PyBroadException
             try:
                 async_evaluator = future.result(0)
+                current_clause = async_evaluator.horn_clause
                 if not async_evaluator.has_finished:
                     continue
                 successful_runs += 1
@@ -246,10 +248,21 @@ class MultiprocessingEvaluation(Generic[V, E]):
                     best_evaluation = evaluation
                     best_evaluator = async_evaluator
             except (CancelledError, TimeoutError):
-                logger.exception(
-                    "Evaluation of the theory timed out after %d seconds.",
-                    self.evaluation_timeout)
+                if current_clause is None:
+                    logger.exception(
+                        "Evaluation of the theory timed out after %d seconds.",
+                        self.evaluation_timeout)
+                else:
+                    logger.exception(
+                        "Evaluation of the clause %s timed out after"
+                        " %d seconds.", current_clause, self.evaluation_timeout)
             except Exception:
-                logger.exception("Error when evaluating the clause, reason:")
+                if current_clause is None:
+                    logger.exception(
+                        "Error when evaluating the clause, reason:")
+                else:
+                    logger.exception(
+                        "Error when evaluating the clause.\n%s\n",
+                        current_clause)
 
         return best_evaluator
