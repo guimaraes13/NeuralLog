@@ -142,7 +142,7 @@ class LiteralAppendAsyncTransformer(AsyncEvaluationTransformer[Literal, J]):
         :param clause_modifiers: the clause modifiers
         :type clause_modifiers: Optional[ClauseModifier or List[ClauseModifier]]
         """
-        super.__init__(clause_modifiers)
+        super().__init__(clause_modifiers)
         self.initial_clause: Optional[HornClause] = initial_clause
 
     # noinspection PyMissingOrEmptyDocstring
@@ -185,7 +185,7 @@ class ConjunctionAppendAsyncTransformer(AsyncEvaluationTransformer[
         :param clause_modifiers: the clause modifiers
         :type clause_modifiers: Optional[ClauseModifier or List[ClauseModifier]]
         """
-        super.__init__(clause_modifiers)
+        super().__init__(clause_modifiers)
         self.initial_clause: Optional[HornClause] = initial_clause
 
     def transform(self, evaluator, conjunction, examples):

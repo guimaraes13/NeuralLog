@@ -9,6 +9,7 @@ from typing import Dict, List, Tuple, Any
 import tensorflow as tf
 from tensorflow.python import keras
 from tensorflow.python.training.tracking import data_structures
+# noinspection PyProtectedMember
 from tensorflow_core.python.keras.models import _reset_build_compile_trackers
 
 from src.knowledge.graph import RulePathFinder

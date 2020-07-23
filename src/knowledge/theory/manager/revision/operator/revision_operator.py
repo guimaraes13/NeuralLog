@@ -409,7 +409,7 @@ class RevisionOperator(Initializable):
         """
         pass
 
-    def theory_revision_accepted(self, revised_theory):
+    def theory_revision_accepted(self, revised_theory, examples):
         """
         Method to send a feedback to the revision operator, telling
         that the
@@ -417,6 +417,8 @@ class RevisionOperator(Initializable):
 
         :param revised_theory: the revised theory
         :type revised_theory: NeuralLogProgram
+        :param examples: the examples used on the revision
+        :type examples: Examples
         """
         pass
 

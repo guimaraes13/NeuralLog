@@ -4,8 +4,8 @@ Useful methods to deal with Horn clauses.
 from collections import Collection, Iterable
 from typing import Set, List, Callable, TypeVar
 
-from src.language.language import Literal, Atom, Number, get_term_from_string, \
-    HornClause, Term
+from src.language.language import Literal, Atom, Term, get_term_from_string, \
+    HornClause
 from src.util.variable_generator import VariableGenerator
 
 

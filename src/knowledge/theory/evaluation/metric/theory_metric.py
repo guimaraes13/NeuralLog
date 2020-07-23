@@ -1,21 +1,19 @@
 """
 The metrics to evaluate the system on examples.
 """
-
+import collections
+import math
+import sys
+from abc import abstractmethod
 from typing import TypeVar, Generic, List, Tuple, Dict, Any
 
 import sklearn
 
-"""
-Handles the theory metrics.
-"""
-import math
-import sys
-from abc import abstractmethod
-
 from src.knowledge.examples import Examples, ExamplesInferences
 from src.language.language import Atom
 from src.util import Initializable
+
+POSITIVE_LABEL = 1.0
 
 
 class TheoryMetric(Initializable):
@@ -337,6 +335,38 @@ class ListAccumulator(AccumulatorMetric[Tuple[List[float], List[float]],
         pass
 
 
+def get_negative_label(values):
+    """
+    Returns the label of the negative examples.
+
+    :param values: the labels
+    :type values: collections.Iterable[float]
+    :return: the label of the negative example
+    :rtype: Optional[float]
+    """
+    for value in values:
+        if value <= 0.0:
+            return value
+
+    return None
+
+
+def get_positive_label(values):
+    """
+    Returns the label of the positive examples.
+
+    :param values: the labels
+    :type values: collections.Iterable[float]
+    :return: the label of the positive example
+    :rtype: Optional[float]
+    """
+    for value in values:
+        if value > 0.0:
+            return value
+
+    return None
+
+
 def append_default_values(*results):
     """
     Appends a positive and a negative example to results in order to
@@ -345,9 +375,16 @@ def append_default_values(*results):
     :param results: the true and predicted results
     :type results: List
     """
-    for result in results:
-        result.append(0.0)
-        result.append(1.0)
+    negative_label = get_negative_label(results[0])
+    if negative_label is None or get_positive_label(results[0]) is None:
+        # There is only on class in the labels.
+        # Append an example of each class to avoid errors when calculating
+        # the area under the ROC curve.
+        if negative_label is None:
+            negative_label = 0.0
+        for result in results:
+            result.append(negative_label)
+            result.append(POSITIVE_LABEL)
 
 
 class RocCurveMetric(ListAccumulator):
@@ -357,6 +394,12 @@ class RocCurveMetric(ListAccumulator):
 
     # noinspection PyMissingOrEmptyDocstring
     def calculate_result(self, result):
+        # In the case where there is only on class in the result, the area
+        # under the ROC curve will not be defined.
+        # In this case, it appends a positive and a negative correct
+        # classified example to the result.
+        # This is not ideal, since it would distort the metric, however,
+        # this distortion should be negligible for a large set of examples.
         append_default_values(*result)
         return sklearn.metrics.roc_auc_score(*result)
 

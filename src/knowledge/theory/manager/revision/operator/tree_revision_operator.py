@@ -148,7 +148,7 @@ class AddNodeTreeRevisionOperator(TreeRevisionOperator):
     # noinspection PyMissingOrEmptyDocstring
     def perform_operation(self, targets):
         revision_leaf = self.tree_theory.get_revision_leaf()
-        logger.debug("Trying to refine rule:\t%s", revision_leaf)
+        logger.debug("Trying to revise rule:\t%s", revision_leaf)
         if revision_leaf.is_root:
             # This is the root node
             return self.add_rule_to_theory(revision_leaf, targets)
@@ -302,10 +302,10 @@ class AddNodeTreeRevisionOperator(TreeRevisionOperator):
         return 0 <= self.maximum_side_way_movements < side_way_movements
 
     # noinspection PyMissingOrEmptyDocstring
-    def theory_revision_accepted(self, revised_theory):
+    def theory_revision_accepted(self, revised_theory, examples):
         revision_leaf = self.tree_theory.get_revision_leaf()
-        self.tree_theory.remove_example_from_leaf(
-            revision_leaf.element.head.predicate, revision_leaf)
+        for predicate in examples:
+            self.tree_theory.remove_example_from_leaf(predicate, revision_leaf)
         if revision_leaf.is_default_child:
             revision_leaf = revision_leaf.parent
         if revision_leaf.is_root and \
@@ -362,7 +362,7 @@ class RemoveNodeTreeRevisionOperator(TreeRevisionOperator):
     # noinspection PyMissingOrEmptyDocstring
     def perform_operation(self, targets):
         revision_leaf = self.tree_theory.get_revision_leaf()
-        logger.debug("Trying to refine rule:\t%s", revision_leaf)
+        logger.debug("Trying to revise rule:\t%s", revision_leaf)
         if revision_leaf.is_root:
             # Root case
             # This is the root node
@@ -438,10 +438,10 @@ class RemoveNodeTreeRevisionOperator(TreeRevisionOperator):
         return modified_theory
 
     # noinspection PyMissingOrEmptyDocstring
-    def theory_revision_accepted(self, revised_theory):
+    def theory_revision_accepted(self, revised_theory, examples):
         revision_leaf = self.tree_theory.get_revision_leaf()
-        predicate = revision_leaf.element.head.predicate
-        self.tree_theory.remove_example_from_leaf(predicate, revision_leaf)
+        for predicate in examples:
+            self.tree_theory.remove_example_from_leaf(predicate, revision_leaf)
         if revision_leaf.is_root:
             # Root case
             revision_leaf.element.body.clear()
@@ -454,7 +454,9 @@ class RemoveNodeTreeRevisionOperator(TreeRevisionOperator):
         else:
             # Remove Rule case
             TreeTheory.remove_node_from_tree(revision_leaf)
-            self.tree_theory.remove_example_from_leaf(predicate, revision_leaf)
+            for predicate in examples:
+                self.tree_theory.remove_example_from_leaf(
+                    predicate, revision_leaf)
 
     def remove_literal_from_tree(self, revision_node):
         """

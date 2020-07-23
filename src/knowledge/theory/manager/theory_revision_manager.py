@@ -155,8 +155,9 @@ class TheoryRevisionManager(Initializable):
         theory; otherwise, `False`
         :rtype: bool
         """
+        relevant_examples = examples.relevant_examples
         revised_metric = operator_evaluator.evaluate_operator(
-            examples.relevant_examples, self.theory_metric)
+            relevant_examples, self.theory_metric)
         logger.debug("Revised theory evaluation:\t%f", revised_metric)
         improvement = self.theory_metric.difference(
             revised_metric, self.theory_evaluation)
@@ -173,7 +174,8 @@ class TheoryRevisionManager(Initializable):
                 self.learning_system.theory = revised_theory
                 self.learning_system.train_parameters(training_examples)
                 self.learning_system.save_trained_parameters()
-                operator_evaluator.theory_revision_accepted(revised_theory)
+                operator_evaluator.theory_revision_accepted(
+                    revised_theory, relevant_examples)
                 log_message = "Theory modification accepted. Improvement of " \
                               "%.3f, over %.3f, threshold of %.3f."
                 self.last_theory_change = time_measure.performance_time()

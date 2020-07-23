@@ -3,12 +3,13 @@ Modifies proposed clauses.
 """
 import re
 from abc import abstractmethod
+from typing import Optional
 
 import src.knowledge.theory.manager.revision.operator.revision_operator as ro
 import src.structure_learning.structure_learning_system as sls
 from src.knowledge.examples import Examples
 from src.language.language import HornClause, Literal, Atom, \
-    get_term_from_string
+    get_term_from_string, Predicate
 from src.util import Initializable
 
 
@@ -122,7 +123,13 @@ class AppendLiteralModifier(ClauseModifier):
     of the head of the clause, to be in the appended literal.
     """
 
-    def __init__(self, learning_system=None, predicate=None, term_index=None):
+    OPTIONAL_FIELDS = dict(ClauseModifier.OPTIONAL_FIELDS)
+    OPTIONAL_FIELDS.update({
+        "append_at_beginning": False
+    })
+
+    def __init__(self, learning_system=None, predicate=None, term_index=None,
+                 append_at_beginning=None):
         """
         Creates a clause modifier.
 
@@ -133,10 +140,18 @@ class AppendLiteralModifier(ClauseModifier):
         :param term_index: the index of a term in the head of the clause,
         to be used as the term of the appended literal
         :type term_index: Optional[int]
+        :param append_at_beginning: if `True`, appends the literal at the
+        beginning of the clause's body
+        :type append_at_beginning: Optional[bool]
         """
         super().__init__(learning_system)
         self.predicate = predicate
         self.term_index = term_index
+
+        self.append_at_beginning = append_at_beginning
+        if self.append_at_beginning is None:
+            self.append_at_beginning = \
+                self.OPTIONAL_FIELDS["append_at_beginning"]
 
     # noinspection PyMissingOrEmptyDocstring
     def required_fields(self):
@@ -150,7 +165,10 @@ class AppendLiteralModifier(ClauseModifier):
             literal = Literal(
                 Atom(self.predicate, clause.head.terms[self.term_index]))
         if literal not in clause.body:
-            clause.body.append(literal)
+            if self.append_at_beginning:
+                clause.body.insert(0, literal)
+            else:
+                clause.body.append(literal)
             if isinstance(clause.provenance, ro.LearnedClause):
                 clause.provenance.add_modifier(self)
         return clause
@@ -172,10 +190,12 @@ class AppendLiteralWithUniqueTermModifier(ClauseModifier):
     OPTIONAL_FIELDS = dict(ClauseModifier.OPTIONAL_FIELDS)
     OPTIONAL_FIELDS.update({
         "_counter": 0,
-        "term_prefix": "w_"
+        "term_prefix": "w_",
+        "append_at_beginning": False
     })
 
-    def __init__(self, learning_system=None, predicate=None, term_prefix=None):
+    def __init__(self, learning_system=None, predicate=None, term_prefix=None,
+                 append_at_beginning=None):
         """
         Creates a clause modifier.
 
@@ -185,27 +205,60 @@ class AppendLiteralWithUniqueTermModifier(ClauseModifier):
         :type predicate: Optional[str]
         :param term_prefix: the prefix of the term
         :type term_prefix: Optional[str]
+        :param append_at_beginning: if `True`, appends the literal at the
+        beginning of the clause's body
+        :type append_at_beginning: Optional[bool]
         """
         super().__init__(learning_system)
         self._counter = self.OPTIONAL_FIELDS["_counter"]
         self.predicate = predicate
+        self.literal_predicate: Optional[Predicate] = None
         self.term_prefix = term_prefix
         if self.term_prefix is None:
             self.term_prefix = self.OPTIONAL_FIELDS["term_prefix"]
+
+        self.append_at_beginning = append_at_beginning
+        if self.append_at_beginning is None:
+            self.append_at_beginning = \
+                self.OPTIONAL_FIELDS["append_at_beginning"]
 
     # noinspection PyMissingOrEmptyDocstring
     def required_fields(self):
         return super().required_fields() + ["predicate"]
 
+    # noinspection PyMissingOrEmptyDocstring,PyAttributeOutsideInit
+    def initialize(self):
+        super().initialize()
+        self.literal_predicate = Predicate(self.predicate, 1)
+
+    def _contains_predicate(self, clause):
+        """
+        Checks if the clause contains the predicate to be added.
+
+        :param clause: the clause
+        :type clause: HornClause
+        :return: `True`, if the clause contains the predicate
+        :rtype: bool
+        """
+        for literal in clause.body:
+            if self.literal_predicate == literal.predicate:
+                return True
+
+        return False
+
     # noinspection PyMissingOrEmptyDocstring
     def modify_clause(self, clause, examples):
-        literal = Literal(
-            Atom(self.predicate,
-                 get_term_from_string(self.term_prefix + str(self._counter))))
-        if literal.predicate not in map(lambda x: x.predicate, clause.body):
-            clause.body.append(literal)
+        if not self._contains_predicate(clause):
+            literal = Literal(Atom(self.predicate,
+                                   get_term_from_string(
+                                       self.term_prefix + str(self._counter))))
+            if self.append_at_beginning:
+                clause.body.insert(0, literal)
+            else:
+                clause.body.append(literal)
             if isinstance(clause.provenance, ro.LearnedClause):
                 clause.provenance.add_modifier(self)
+            self._counter += 1
         return clause
 
     def __repr__(self):

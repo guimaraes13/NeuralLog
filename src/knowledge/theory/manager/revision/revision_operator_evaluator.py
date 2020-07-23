@@ -81,15 +81,18 @@ class RevisionOperatorEvaluator(Initializable):
 
         return self.revision_operator.perform_operation(examples)
 
-    def theory_revision_accepted(self, revised_theory):
+    def theory_revision_accepted(self, revised_theory, examples):
         """
         Method to send a feedback to the revision operator, telling that the
         revision was accepted.
 
         :param revised_theory: the revised theory
         :type revised_theory: NeuralLogProgram
+        :param examples: the examples used on the revision
+        :type examples: Examples
         """
-        self.revision_operator.theory_revision_accepted(revised_theory)
+        self.revision_operator.theory_revision_accepted(
+            revised_theory, examples)
 
     def clear_cached_theory(self):
         """

@@ -321,7 +321,7 @@ class TreeTheory:
         :return: the removed set of examples
         :rtype: RevisionExamples
         """
-        return self.leaf_examples_map.get(predicate).pop(leaf, None)
+        return self.leaf_examples_map.get(predicate, dict()).pop(leaf, None)
 
     def get_example_from_leaf(self, predicate, leaf):
         """
@@ -537,7 +537,7 @@ class TreeExampleManager(IncomingExampleManager):
             examples = [examples]
         self.place_examples(modified_leaves, examples)
         logger.debug(
-            "%s\twew example(s) placed at the leaves of the tree", count)
+            "%s\tnew example(s) placed at the leaves of the tree", count)
         return modified_leaves
 
     def place_examples(self, modified_leaves_map, examples):
