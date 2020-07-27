@@ -195,7 +195,7 @@ class StructureLearningSystem(Initializable):
         :type retrain: bool
         :param clauses: clauses to be appended to the current theory,
         for evaluation proposes only
-        :type clauses: collections.Iterable[HornClauses]
+        :type clauses: collections.Iterable[Clause]
         :param positive_threshold: if set, only the examples whose inference
         are above the threshold will be considered as positive. If not set,
         only the examples whose score is above the score of the `__null__`

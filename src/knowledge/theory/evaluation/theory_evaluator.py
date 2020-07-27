@@ -3,7 +3,7 @@ Evaluates the theory.
 """
 import collections
 from collections import OrderedDict
-from typing import List, Dict
+from typing import List, Dict, Iterable
 
 from src.knowledge.examples import ExamplesInferences, Examples
 from src.knowledge.program import NeuralLogProgram
@@ -97,7 +97,7 @@ class TheoryEvaluator(Initializable):
         :param metric: the metric
         :type metric: TheoryMetric
         :param clauses: the clauses to be appended
-        :type clauses: collections.Iterable[HornClause]
+        :type clauses: Iterable[Clause]
         :return: the evaluation of the theory
         :rtype: float
         """

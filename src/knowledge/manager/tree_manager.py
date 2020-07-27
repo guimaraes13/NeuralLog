@@ -368,6 +368,62 @@ class TreeTheory:
             return self.target_predicates[self.current_index]
         return self.target_predicates[index]
 
+    def remove_literal_from_tree(self, revision_node):
+        """
+        Removes the literal from the tree and passes it examples to its parent.
+
+        :param revision_node: the literal node to remove
+        :type revision_node: Node[HornClause]
+        """
+        predicate = revision_node.element.head.predicate
+        if revision_node.is_leaf:
+            # Gets the examples from the last literal, which has been deleted
+            examples_from_leaf = self.get_example_from_leaf(
+                predicate, revision_node)
+            # Unbinds the examples from the leaf that will be removed from
+            #  the tree
+            self.remove_example_from_leaf(predicate, revision_node)
+            # Removes the leaf from the tree
+            TreeTheory.remove_node_from_tree(revision_node)
+            # Links the examples to the removed leaf's parent
+            self.get_leaf_example_map_from_tree(
+                predicate)[revision_node.parent] = examples_from_leaf
+
+    def remove_rule_from_tree(self, revision_leaf):
+        """
+        Removes the rule from the tree and all examples it holds.
+
+        :param revision_leaf: the leaf node of the rule
+        :type revision_leaf: Node[HornClause]
+        """
+        predicate = revision_leaf.element.head.predicate
+        grouped_examples = Examples()
+        current_leaf: Node[HornClause] = revision_leaf
+        while True:
+            previous_leaf = current_leaf
+            current_leaf = current_leaf.parent
+            unproved_examples: re.RevisionExamples = self.get_example_from_leaf(
+                predicate, current_leaf.default_child)
+            grouped_examples.add_examples(
+                unproved_examples.get_training_examples(True))
+            self.remove_example_from_leaf(predicate, current_leaf.default_child)
+            if len(current_leaf.children) != 1 or current_leaf.parent is None:
+                continue
+
+        self.remove_example_from_leaf(predicate, revision_leaf)
+        if current_leaf.is_root and len(current_leaf.children) == 1:
+            # Root case
+            current_leaf.element.body.clear()
+            current_leaf.element.body.append(FALSE_LITERAL)
+
+        revision_examples = re.RevisionExamples(
+            self.learning_system, unproved_examples.sample_selector.copy())
+        revision_examples.add_examples(grouped_examples)
+
+        self.get_leaf_example_map_from_tree(predicate)[current_leaf] = \
+            revision_examples
+        TreeTheory.remove_node_from_tree(previous_leaf)
+
     @staticmethod
     def is_default_theory(node):
         """

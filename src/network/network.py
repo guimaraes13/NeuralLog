@@ -229,9 +229,9 @@ class NeuralLogNetwork(keras.Model):
         :param program: the NeuralLog program
         :type program: NeuralLogProgram
         :param train: if `False`, all the literals will be considered as not
-        trainable/learnable, this is useful to build neural networks for
-        inference only. In this way, the unknown facts will be treated as
-        zeros, instead of being randomly initialized
+        trainable, this is useful to build neural networks for inference
+        only. In this way, the unknown facts will be treated as zeros, instead
+        of being randomly initialized
         :param inverse_relations: if `True`, also creates the layers for the
         inverse relations.
         :type inverse_relations: bool
@@ -383,12 +383,9 @@ class NeuralLogNetwork(keras.Model):
         predicate and whether or not it is inverted.
         :type target_predicates: collections.Iterable[Tuple[Predicate, bool]]
         """
-        # self.input_sizes = []
-        has_change = False
         for predicate, inverted in target_predicates:
             if (predicate, inverted) in self.predicates:
                 continue
-            has_change = True
             self.input_sizes.append(max(predicate.arity - 1, 1))
             logger.debug("Building output layer for predicate: %s", predicate)
             literal = Literal(Atom(

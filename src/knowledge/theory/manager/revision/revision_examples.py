@@ -3,11 +3,10 @@ Handles the examples to be used on the theory revision.
 """
 import sys
 
-from src.knowledge.examples import Examples, ExamplesInferences
+import src.structure_learning.structure_learning_system as sls
+from src.knowledge.examples import Examples, ExamplesInferences, ExampleIterator
 from src.knowledge.theory.manager.revision.sample_selector import SampleSelector
 from src.language.language import Atom
-from src.structure_learning.structure_learning_system import \
-    StructureLearningSystem
 from src.util import time_measure
 
 
@@ -21,7 +20,7 @@ class RevisionExamples:
         Creates the revision examples.
 
         :param learning_system: the learning system
-        :type learning_system: StructureLearningSystem
+        :type learning_system: sls.StructureLearningSystem
         :param sample_selector: the sample selector
         :type sample_selector: SampleSelector
         """
@@ -93,8 +92,11 @@ class RevisionExamples:
         Adds the examples to the set of revision examples.
 
         :param examples: the examples
-        :type examples: collections.Iterable[Atom]
+        :type examples: collections.Iterable[Atom] or Examples
         """
+        if isinstance(examples, Examples):
+            examples = ExampleIterator(examples)
+
         for example in examples:
             self.add_example(example)
 

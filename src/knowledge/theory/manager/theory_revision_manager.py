@@ -116,7 +116,7 @@ class TheoryRevisionManager(Initializable):
         logger.debug("Calling the revision on %d examples.", number_of_examples)
         operator_evaluator = operator_selector.select_operator(
             examples.get_training_examples(self.train_using_all_examples),
-            self.theory_metric)
+            self.theory_metric, minimum_threshold=self.improvement_threshold)
         logger.debug("Operator selected for revision:\t%s",
                      operator_evaluator.revision_operator)
         if operator_selector is None:
@@ -290,7 +290,7 @@ class HoeffdingBoundTheoryManager(TheoryRevisionManager):
         logger.debug("Calling the revision on %d examples.", number_of_examples)
         operator_evaluator = operator_selector.select_operator(
             examples.get_training_examples(self.train_using_all_examples),
-            self.theory_metric)
+            self.theory_metric, minimum_threshold=epsilon)
         logger.debug("Operator selected for revision:\t%s",
                      operator_evaluator.revision_operator)
         if operator_selector is None:

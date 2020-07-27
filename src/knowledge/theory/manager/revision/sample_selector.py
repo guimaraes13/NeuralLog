@@ -7,8 +7,7 @@ from typing import Set
 
 import src.knowledge.theory.manager.revision.operator.revision_operator as ro
 from src.language.language import Atom
-from src.structure_learning.structure_learning_system import \
-    StructureLearningSystem
+import src.structure_learning.structure_learning_system as sls
 from src.util import Initializable, reset_field_error, InitializationException
 
 
@@ -23,7 +22,7 @@ class SampleSelector(Initializable):
         Creates a SampleSelector.
 
         :param learning_system: the learning system
-        :type learning_system: StructureLearningSystem
+        :type learning_system: sls.StructureLearningSystem
         """
         self._learning_system = learning_system
 
@@ -84,7 +83,7 @@ class AllRelevantSampleSelector(SampleSelector):
         Creates a AllRelevantSampleSelector.
 
         :param learning_system: the learning system
-        :type learning_system: StructureLearningSystem
+        :type learning_system: sls.StructureLearningSystem
         """
         super().__init__(learning_system)
 

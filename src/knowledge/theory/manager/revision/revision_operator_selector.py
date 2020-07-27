@@ -45,7 +45,7 @@ class RevisionOperatorSelector(Initializable):
         return ["learning_system", "operator_evaluators"]
 
     @abstractmethod
-    def select_operator(self, examples, theory_metric):
+    def select_operator(self, examples, theory_metric, minimum_threshold=None):
         """
         Selects the best operator to revise the theory, based on the examples
         and the metric.
@@ -54,6 +54,10 @@ class RevisionOperatorSelector(Initializable):
         :type examples: Examples
         :param theory_metric: the theory metric
         :type theory_metric: TheoryMetric
+        :param minimum_threshold: a minimum threshold to consider by the
+        operator. Implementations of this class could use this threshold in
+        order to improve performance by skipping evaluating candidates
+        :type minimum_threshold: Optional[float]
         :return: the best revision operator
         :rtype: RevisionOperatorEvaluator
         """
@@ -71,7 +75,7 @@ class SelectFirstRevisionOperator(RevisionOperatorSelector):
         self._operator = next(iter(self.operator_evaluators))
 
     # noinspection PyMissingOrEmptyDocstring
-    def select_operator(self, examples, theory_metric):
+    def select_operator(self, examples, theory_metric, minimum_threshold=None):
         return self._operator
 
 
@@ -91,7 +95,7 @@ class BestRevisionOperatorSelector(RevisionOperatorSelector):
                 BestSelector(self.operator_evaluators)
 
     # noinspection PyMissingOrEmptyDocstring,PyAttributeOutsideInit
-    def select_operator(self, examples, theory_metric):
+    def select_operator(self, examples, theory_metric, minimum_threshold=None):
         return self.selector.select_operator(examples, theory_metric)
 
 
@@ -102,7 +106,7 @@ class RevisionOperatorEvaluatorSelector(ABC):
     """
 
     @abstractmethod
-    def select_operator(self, targets, metric):
+    def select_operator(self, targets, metric, minimum_threshold=None):
         """
         Selects the proper operator, based on the target examples and the
         metric.
@@ -111,6 +115,10 @@ class RevisionOperatorEvaluatorSelector(ABC):
         :type targets: Examples
         :param metric: the metric
         :type metric: TheoryMetric
+        :param minimum_threshold: a minimum threshold to consider by the
+        operator. Implementations of this class could use this threshold in
+        order to improve performance by skipping evaluating candidates
+        :type minimum_threshold: Optional[float]
         :return: the proper revision operator evaluator
         :rtype: RevisionOperatorEvaluator
         """
@@ -132,7 +140,7 @@ class SingleRevisionOperatorEvaluator(RevisionOperatorEvaluatorSelector):
         self.operator_evaluator = next(iter(operator_evaluators))
 
     # noinspection PyMissingOrEmptyDocstring
-    def select_operator(self, targets, metric):
+    def select_operator(self, targets, metric, minimum_threshold=None):
         if self.operator_evaluator is not None:
             self.operator_evaluator.clear_cached_theory()
         return self.operator_evaluator
@@ -154,14 +162,15 @@ class BestSelector(RevisionOperatorEvaluatorSelector):
         self.preferred_operator = next(iter(operator_evaluators))
 
     # noinspection PyMissingOrEmptyDocstring
-    def select_operator(self, targets, metric):
+    def select_operator(self, targets, metric, minimum_threshold=None):
         best_evaluator = self.preferred_operator
         best_evaluation = metric.default_value
 
         for evaluator in self.operator_evaluators:
             try:
                 evaluator.clear_cached_theory()
-                current = evaluator.evaluate_operator(targets, metric)
+                current = evaluator.evaluate_operator(
+                    targets, metric, minimum_threshold)
                 if metric.compare(current, best_evaluation) > 0:
                     best_evaluation = current
                     best_evaluator = evaluator

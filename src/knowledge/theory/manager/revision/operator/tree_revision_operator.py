@@ -146,7 +146,7 @@ class AddNodeTreeRevisionOperator(TreeRevisionOperator):
         self.append_operator.initialize()
 
     # noinspection PyMissingOrEmptyDocstring
-    def perform_operation(self, targets):
+    def perform_operation(self, targets, minimum_threshold=None):
         revision_leaf = self.tree_theory.get_revision_leaf()
         logger.debug("Trying to revise rule:\t%s", revision_leaf)
         if revision_leaf.is_root:
@@ -360,7 +360,7 @@ class RemoveNodeTreeRevisionOperator(TreeRevisionOperator):
     """
 
     # noinspection PyMissingOrEmptyDocstring
-    def perform_operation(self, targets):
+    def perform_operation(self, targets, minimum_threshold=None):
         revision_leaf = self.tree_theory.get_revision_leaf()
         logger.debug("Trying to revise rule:\t%s", revision_leaf)
         if revision_leaf.is_root:
@@ -449,32 +449,10 @@ class RemoveNodeTreeRevisionOperator(TreeRevisionOperator):
         elif revision_leaf.is_default_child and \
                 len(revision_leaf.parent.children) == 1:
             # Remove Literal case
-            revision_node = next(iter(revision_leaf.parent.children))
-            self.remove_literal_from_tree(revision_node)
+            self.tree_theory.remove_literal_from_tree(revision_leaf)
         else:
             # Remove Rule case
             TreeTheory.remove_node_from_tree(revision_leaf)
             for predicate in examples:
                 self.tree_theory.remove_example_from_leaf(
                     predicate, revision_leaf)
-
-    def remove_literal_from_tree(self, revision_node):
-        """
-        Removes the literal from the tree and passes it examples to its parent.
-
-        :param revision_node: the literal node to remove
-        :type revision_node: Node[HornClause]
-        """
-        predicate = revision_node.element.head.predicate
-        if revision_node.is_leaf:
-            # Gets the examples from the last literal, which has been deleted
-            examples_from_leaf = self.tree_theory.get_example_from_leaf(
-                predicate, revision_node)
-            # Unbinds the examples from the leaf that will be removed from
-            #  the tree
-            self.tree_theory.remove_example_from_leaf(predicate, revision_node)
-            # Removes the leaf from the tree
-            TreeTheory.remove_node_from_tree(revision_node)
-            # Links the examples to the removed leaf's parent
-            self.tree_theory.get_leaf_example_map_from_tree(
-                predicate)[revision_node.parent] = examples_from_leaf

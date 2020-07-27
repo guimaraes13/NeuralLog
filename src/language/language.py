@@ -820,7 +820,7 @@ class AtomClause(Clause):
         :param atom: the atom
         :type atom: Atom
         """
-        self.atom = atom
+        self.atom = Atom(atom.predicate, *atom.terms, weight=atom.weight)
         super(AtomClause, self).__init__(atom.provenance)
 
     # noinspection PyMissingOrEmptyDocstring

@@ -105,8 +105,11 @@ class Examples(UserDict, MutableMapping[Predicate, Dict[Any, Atom]]):
         Adds all the examples.
 
         :param examples: the examples
-        :type examples: collection.Iterable[Atom]
+        :type examples: collection.Iterable[Atom] or Examples
         """
+        if isinstance(examples, Examples):
+            examples = ExampleIterator(examples)
+
         for example in examples:
             self.add_example(example)
 

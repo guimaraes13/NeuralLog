@@ -325,7 +325,7 @@ class LiteralAppendOperator(RevisionOperator, Generic[V]):
             self.positive_threshold = self.OPTIONAL_FIELDS["positive_threshold"]
 
     # noinspection PyMissingOrEmptyDocstring
-    def perform_operation(self, targets):
+    def perform_operation(self, targets, minimum_threshold=None):
         theory = self.learning_system.theory.copy()
         initial_clause = self.build_empty_clause(targets)
         if not initial_clause:

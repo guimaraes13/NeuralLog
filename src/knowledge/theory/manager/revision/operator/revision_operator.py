@@ -398,12 +398,16 @@ class RevisionOperator(Initializable):
         return ["learning_system", "theory_metric"]
 
     @abstractmethod
-    def perform_operation(self, targets):
+    def perform_operation(self, targets, minimum_threshold=None):
         """
         Applies the operation on the theory, given the target examples.
 
         :param targets: the target examples
         :type targets: Examples
+        :param minimum_threshold: a minimum threshold to consider by the
+        operator. Implementations of this class could use this threshold in
+        order to improve performance by skipping evaluating candidates
+        :type minimum_threshold: Optional[float]
         :return: the revised theory
         :rtype: NeuralLogProgram or None
         """
@@ -617,7 +621,7 @@ class BottomClauseBoundedRule(RevisionOperator):
             transformer, self.evaluation_timeout, self.number_of_process)
 
     # noinspection PyMissingOrEmptyDocstring
-    def perform_operation(self, targets):
+    def perform_operation(self, targets, minimum_threshold=None):
         try:
             logger.info("Performing operation on\t%d examples.", targets.size())
             theory = self.learning_system.theory.copy()
@@ -663,11 +667,11 @@ class BottomClauseBoundedRule(RevisionOperator):
         :rtype: bool
         """
         try:
-            if not is_positive(example) or \
-                    inferred_examples.contains_example(example):
+            positive = is_positive(example)
+            if not positive or inferred_examples.contains_example(example):
                 # The inferred examples contains only the examples whose
                 # weight is greater than the null weight
-                if is_positive(example):
+                if positive:
                     logger.debug("Skipping covered example:\t%s", example)
                 # It skips negatives or covered positive examples
                 return
@@ -842,7 +846,7 @@ class CombinedBottomClauseBoundedRule(BottomClauseBoundedRule):
     """
 
     # noinspection PyMissingOrEmptyDocstring
-    def perform_operation(self, targets):
+    def perform_operation(self, targets, minimum_threshold=None):
         try:
             logger.info("Performing operation on\t%d examples.", len(targets))
             theory = self.learning_system.theory.copy()

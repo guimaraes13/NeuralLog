@@ -41,7 +41,8 @@ class RevisionOperatorEvaluator(Initializable):
     def required_fields(self):
         return ["revision_operator"]
 
-    def evaluate_operator(self, examples, theory_metric):
+    def evaluate_operator(self, examples, theory_metric,
+                          minimum_threshold=None):
         """
         Evaluates the operator in the examples, based on the metric.
 
@@ -49,12 +50,17 @@ class RevisionOperatorEvaluator(Initializable):
         :type examples: Examples
         :param theory_metric: the metric
         :type theory_metric: TheoryMetric
+        :param minimum_threshold: a minimum threshold to consider by the
+        operator. Implementations of this class could use this threshold in
+        order to improve performance by skipping evaluating candidates
+        :type minimum_threshold: Optional[float]
         :return: the evaluation of the operator
         :rtype: float
         """
         if not self.is_revised:
             self.updated_theory = \
-                self.revision_operator.perform_operation(examples)
+                self.revision_operator.perform_operation(
+                    examples, minimum_threshold)
             self.is_revised = True
 
         if self.updated_theory is None:

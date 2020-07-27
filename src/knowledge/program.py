@@ -28,7 +28,8 @@ NO_EXAMPLE_SET = ":none:"
 MAX_NUMBER_OF_ARGUMENTS = -1
 
 PREDICATE_TYPE_MATCH = re.compile("\\$([a-zA-Z_-][a-zA-Z0-9_-]*)"
-                                  "/([1-9][0-9]*)(\\[([0-9]+)\\](\\[.+\\])?)?")
+                                  "/([0-9]|[1-9][0-9]+)"
+                                  "(\\[([0-9]+)\\](\\[.+\\])?)?")
 
 KT = TypeVar('KT')  # Key type.
 VT = TypeVar('VT')  # Value type.
@@ -683,9 +684,11 @@ class NeuralLogProgram:
     Represents a NeuralLog language.
     """
 
+    LEARN_BUILTIN_PREDICATE = "learn"
+
     BUILTIN_PREDICATES = {
         "example": [Predicate("example", -1)],
-        "learn": [Predicate("learn", 1)],
+        LEARN_BUILTIN_PREDICATE: [Predicate(LEARN_BUILTIN_PREDICATE, 1)],
         "set_parameter": [Predicate("set_parameter", -1)],
         "set_predicate_parameter": [Predicate("set_predicate_parameter", -1)],
         "mega_example": [Predicate("mega_example", -1)]
@@ -820,7 +823,7 @@ class NeuralLogProgram:
                 if trainable.equivalent(predicate):
                     expanded_trainable.add(predicate)
                     self.logic_predicates.add(predicate)
-        self.trainable_predicates = expanded_trainable
+        self.trainable_predicates.update(expanded_trainable)
         # noinspection PyTypeChecker
         self.functional_predicates = \
             self.predicates.keys() - self.logic_predicates
@@ -1065,7 +1068,6 @@ class NeuralLogProgram:
             if len(term_type) < 2:
                 term_type.add((head_predicate, head_predicate.arity - 1))
 
-    # TODO: bound free variables to the last variable in the head of the clause
     def _find_term_type(self, atom, term_types):
         """
         Finds the types of the terms in the atom.
@@ -1946,12 +1948,12 @@ DEFAULT_PARAMETERS = [
 
     ("initial_value",
      {"class_name": "random_normal", "config": {"mean": 0.5, "stddev": 0.125}},
-     "initializer for learnable predicates. This initializer will be used to "
-     "initialize facts from learnable predicates that are not in the "
+     "initializer for trainable predicates. This initializer will be used to "
+     "initialize facts from trainable predicates that are not in the "
      "knowledge base."),
 
     ("value_constraint", {},
-     "A function to be applied to the weights of the learnable predicates in "
+     "A function to be applied to the weights of the trainable predicates in "
      "order to restrict its value. This function must take as input the "
      "tensor representing the unconstrained weights and return another tensor "
      "(of same shape) with the constrained values."),

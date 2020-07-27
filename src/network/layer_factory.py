@@ -191,9 +191,9 @@ class LayerFactory:
         :param layer_name_format: the format of the layer name
         :type layer_name_format: str
         :param train: if `False`, all the literals will be considered as not
-        trainable/learnable, this is useful to build neural networks for
-        inference only. In this way, the unknown facts will be treated as
-        zeros, instead of being randomly initialized
+        trainable, this is useful to build neural networks for inference only.
+        In this way, the unknown facts will be treated as zeros, instead of
+        being randomly initialized
         :type train: bool
         :param regularizer: the regularizer
         :type regularizer: callable
