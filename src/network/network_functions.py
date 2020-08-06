@@ -696,12 +696,23 @@ class EmptyLayer(NeuralLogLayer):
     """
 
     def __init__(self, name, **kwargs):
+        input_size = kwargs.pop("input_size", None)
+        output_size = kwargs.pop("output_size", None)
         super(EmptyLayer, self).__init__(name, **kwargs)
-        self.zero = tf.constant(0.0)
+        if input_size and output_size:
+            self.zero = tf.SparseTensor(
+                [[0, 0]], [0.0], [input_size, output_size])
+        else:
+            self.zero = tf.constant(0.0)
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, **kwargs):
-        return tf.multiply(inputs, self.zero)
+        if isinstance(self.zero, tf.SparseTensor):
+            result = tf.sparse.sparse_dense_matmul(
+                self.zero, inputs, adjoint_a=True, adjoint_b=True)
+            return tf.transpose(result)
+        else:
+            return tf.multiply(inputs, self.zero)
 
     # noinspection PyTypeChecker,PyMissingOrEmptyDocstring
     def get_config(self):

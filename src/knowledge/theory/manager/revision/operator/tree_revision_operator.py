@@ -7,7 +7,7 @@ from typing import Optional, Set
 
 from src.knowledge.examples import Examples
 from src.knowledge.manager.tree_manager import TreeTheory, Node, \
-    FALSE_LITERAL, TRUE_LITERAL
+    FALSE_LITERAL, add_clause_to_tree
 from src.knowledge.program import NeuralLogProgram
 from src.knowledge.theory.manager.revision.operator.literal_appender_operator \
     import \
@@ -306,17 +306,7 @@ class AddNodeTreeRevisionOperator(TreeRevisionOperator):
         revision_leaf = self.tree_theory.get_revision_leaf()
         for predicate in examples:
             self.tree_theory.remove_example_from_leaf(predicate, revision_leaf)
-        if revision_leaf.is_default_child:
-            revision_leaf = revision_leaf.parent
-        if revision_leaf.is_root and \
-                TreeTheory.is_default_theory(revision_leaf):
-            revision_leaf.element.body.clear()
-            revision_leaf.element.body.append(TRUE_LITERAL)
-            initial_body = []
-        else:
-            initial_body = revision_leaf.element.body
-        TreeTheory.add_nodes_to_tree(
-            self.revised_clause, revision_leaf, initial_body)
+        add_clause_to_tree(self.revised_clause, revision_leaf)
 
     @staticmethod
     def build_redundant_literals(node):

@@ -5,11 +5,10 @@ import collections
 from collections import OrderedDict
 from typing import List, Dict, Iterable
 
+import src.structure_learning.structure_learning_system as sls
 from src.knowledge.examples import ExamplesInferences, Examples
 from src.knowledge.program import NeuralLogProgram
 from src.knowledge.theory.evaluation.metric.theory_metric import TheoryMetric
-from src.language.language import HornClause
-import src.structure_learning.structure_learning_system as sls
 from src.util import Initializable
 
 

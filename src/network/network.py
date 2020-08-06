@@ -383,6 +383,7 @@ class NeuralLogNetwork(keras.Model):
         predicate and whether or not it is inverted.
         :type target_predicates: collections.Iterable[Tuple[Predicate, bool]]
         """
+        has_change = False
         for predicate, inverted in target_predicates:
             if (predicate, inverted) in self.predicates:
                 continue
@@ -401,6 +402,7 @@ class NeuralLogNetwork(keras.Model):
             # noinspection PyUnresolvedReferences
             self.predicates.append((predicate, inverted))
             self.predicate_layers.append(predicate_layer)
+            has_change = True
 
         if len(self.predicate_layers) == 0:
             self.call = self.call_no_input
@@ -410,7 +412,8 @@ class NeuralLogNetwork(keras.Model):
             # noinspection PyAttributeOutsideInit
             self.call = self.call_multiples_inputs
 
-        _reset_build_compile_trackers(self)
+        if has_change:
+            _reset_build_compile_trackers(self)
 
     def get_unary_literal_extraction_function(self, predicate):
         """
@@ -531,7 +534,17 @@ class NeuralLogNetwork(keras.Model):
                 input_clauses[rule] = clause
                 inputs.append(rule)
         else:
-            inputs = [self.empty_layer]
+            # inputs = [self.empty_layer]
+            name = "empty_layer_{}".format(
+                get_standardised_name(renamed_literal.__str__()))
+            input_size = self.program.get_constant_size(
+                renamed_literal.predicate, 0)
+            output_size = self.program.get_constant_size(
+                renamed_literal.predicate, -1)
+            if inverted:
+                input_size, output_size = output_size, input_size
+            inputs = [EmptyLayer(
+                name, input_size=input_size, output_size=output_size)]
 
         if len(inputs) == 0:
             # There is not rules or facts for the literal.

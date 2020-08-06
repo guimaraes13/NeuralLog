@@ -818,8 +818,8 @@ class NeuralLogProgram:
 
     def _expand_clauses(self):
         expanded_trainable = set()
-        for predicate in self.predicates.keys():
-            for trainable in self.trainable_predicates:
+        for trainable in self.trainable_predicates:
+            for predicate in self.predicates.keys():
                 if trainable.equivalent(predicate):
                     expanded_trainable.add(predicate)
                     self.logic_predicates.add(predicate)
@@ -1136,8 +1136,10 @@ class NeuralLogProgram:
         :return: the constant size of the predicate term
         :rtype: int
         """
-        return len(self.iterable_constants_per_term.get((predicate, index),
-                                                        dict()))
+        if index < 0:
+            index = predicate.arity + index
+        return len(
+            self.iterable_constants_per_term.get((predicate, index), dict()))
 
     def is_iterable_constant(self, atom, term_index):
         """

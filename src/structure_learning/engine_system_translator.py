@@ -68,6 +68,7 @@ def convert_predictions(model, dataset, positive_threshold=None):
     inferences = ExamplesInferences()
     empty_entry = None
     for features, labels in dataset:
+        y_scores = model.call(features)
         y_scores = model.predict(features)
         if y_scores is None:
             continue

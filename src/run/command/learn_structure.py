@@ -12,6 +12,7 @@ import yaml
 import resources
 import src.knowledge.manager.tree_manager
 import src.knowledge.theory.manager.revision.operator.tree_revision_operator
+import src.knowledge.theory.manager.revision.operator.meta_revision_operator
 from src.run import configure_log
 from src.run.command import Command, command, create_log_file
 from src.structure_learning.structure_learning_method import \

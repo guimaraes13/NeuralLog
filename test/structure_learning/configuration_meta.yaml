@@ -1,0 +1,46 @@
+!!python/object:src.structure_learning.structure_learning_method.BatchStructureLearning
+
+knowledge_base_file_paths:
+  - "structure_learning/kinship.pl"
+#theory_file_paths:
+example_file_paths:
+  - "structure_learning/kinship_examples_1.pl"
+test_file_paths:
+  - "structure_learning/kinship_examples_2.pl"
+output_directory: "structure_learning/data"
+
+load_pre_trained_parameter: false
+examples_batch_size: 2
+train_parameters_on_remaining_examples: false
+
+engine_system_translator: !!python/object:src.structure_learning.engine_system_translator.NeuralLogEngineSystemTranslator {}
+
+theory_metrics:
+  - !!python/object:src.knowledge.theory.evaluation.metric.theory_metric.RocCurveMetric {}
+  - !!python/object:src.knowledge.theory.evaluation.metric.theory_metric.PrecisionRecallCurveMetric {}
+  - !!python/object:src.knowledge.theory.evaluation.metric.theory_metric.LikelihoodMetric {}
+  - !!python/object:src.knowledge.theory.evaluation.metric.theory_metric.LogLikelihoodMetric {}
+
+revision_operator_selector: !!python/object:src.knowledge.theory.manager.revision.revision_operator_selector.BestRevisionOperatorSelector {}
+
+theory_evaluator: !!python/object:src.knowledge.theory.evaluation.theory_evaluator.TheoryEvaluator {}
+
+theory_revision_manager: !!python/object:src.knowledge.theory.manager.theory_revision_manager.TheoryRevisionManager
+  theory_metric: !!python/object:src.knowledge.theory.evaluation.metric.theory_metric.RocCurveMetric {}
+
+incoming_example_manager: !!python/object:src.knowledge.manager.example_manager.ReviseAllIncomingExample {}
+
+revision_manager: !!python/object:src.knowledge.theory.manager.revision.revision_manager.RevisionManager {}
+
+revision_operator_evaluators:
+  - !!python/object:src.knowledge.theory.manager.revision.revision_operator_evaluator.RevisionOperatorEvaluator
+    revision_operator: !!python/object:src.knowledge.theory.manager.revision.operator.meta_revision_operator.MetaRevisionOperator
+      theory_metric: !!python/object:src.knowledge.theory.evaluation.metric.theory_metric.RocCurveMetric {}
+      maximum_depth: 1
+      meta_program: |
+        P(X, Y) :- true.    % removes a literal from the body
+        P(X, Y) :- false.   % removes a clause
+        P(X, Y) :- Q(X, Y). % adds or replace a literal from the body, closing
+        P(X, Y) :- Q(X, Z). % adds or replace a literal from the body, openning
+        P(X, Y) :- Q(X, Z), R(Z, Y). % Chain
+        P(X, Y) :- Q(X, Z), P(Z, Y). % Tail

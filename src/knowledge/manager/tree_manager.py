@@ -40,6 +40,27 @@ def group_examples_by_predicate(examples):
     return grouped_examples
 
 
+def add_clause_to_tree(revised_clause, revision_leaf):
+    """
+    Adds the revised clause to the tree.
+
+    :param revised_clause: the revised clause
+    :type revised_clause: HornClause
+    :param revision_leaf: the revised tree node
+    :type revision_leaf: Node[HornClause]
+    """
+
+    if revision_leaf.is_default_child:
+        revision_leaf = revision_leaf.parent
+    if revision_leaf.is_root and TreeTheory.is_default_theory(revision_leaf):
+        revision_leaf.element.body.clear()
+        revision_leaf.element.body.append(TRUE_LITERAL)
+        initial_body = []
+    else:
+        initial_body = revision_leaf.element.body
+    TreeTheory.add_nodes_to_tree(revised_clause, revision_leaf, initial_body)
+
+
 class Node(Generic[E]):
     """
     Class to manage a node of the TreeTheory data.
