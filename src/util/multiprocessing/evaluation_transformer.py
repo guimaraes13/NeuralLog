@@ -47,7 +47,8 @@ class AsyncEvaluationTransformer(ABC, Generic[V, E]):
         Creates an async evaluation transformer.
 
         :param clause_modifiers: the clause modifiers
-        :type clause_modifiers: Optional[ClauseModifier or List[ClauseModifier]]
+        :type clause_modifiers: ClauseModifier or Collection[ClauseModifier] or
+        None
         """
         self._clause_modifiers = None
         self.clause_modifiers = clause_modifiers
@@ -138,9 +139,10 @@ class LiteralAppendAsyncTransformer(AsyncEvaluationTransformer[Literal, J]):
         Creates a Literal Append Async Transformer.
 
         :param initial_clause: the initial clause
-        :type initial_clause: Optional[HornClause]
+        :type initial_clause: HornClause or None
         :param clause_modifiers: the clause modifiers
-        :type clause_modifiers: Optional[ClauseModifier or List[ClauseModifier]]
+        :type clause_modifiers: ClauseModifier or Collection[ClauseModifier] or
+        None
         """
         super().__init__(clause_modifiers)
         self.initial_clause: Optional[HornClause] = initial_clause
@@ -181,9 +183,10 @@ class ConjunctionAppendAsyncTransformer(AsyncEvaluationTransformer[
         Creates a Literal Append Async Transformer.
 
         :param initial_clause: the initial clause
-        :type initial_clause: Optional[HornClause]
+        :type initial_clause: HornClause or None
         :param clause_modifiers: the clause modifiers
-        :type clause_modifiers: Optional[ClauseModifier or List[ClauseModifier]]
+        :type clause_modifiers: ClauseModifier or Collection[ClauseModifier] or
+        None
         """
         super().__init__(clause_modifiers)
         self.initial_clause: Optional[HornClause] = initial_clause

@@ -27,6 +27,7 @@ NO_EXAMPLE_SET = ":none:"
 
 MAX_NUMBER_OF_ARGUMENTS = -1
 
+# noinspection RegExpRedundantEscape
 PREDICATE_TYPE_MATCH = re.compile("\\$([a-zA-Z_-][a-zA-Z0-9_-]*)"
                                   "/([0-9]|[1-9][0-9]+)"
                                   "(\\[([0-9]+)\\](\\[.+\\])?)?")

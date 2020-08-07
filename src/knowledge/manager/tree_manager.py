@@ -71,11 +71,11 @@ class Node(Generic[E]):
         Constructs a node.
 
         :param parent: the parent of the node
-        :type parent: Optional[Node[E]]
+        :type parent: Node[E] or None
         :param element: the element of the node
         :type element: E
         :param default_child_element: the default child element
-        :type default_child_element: Optional[E]
+        :type default_child_element: E or None
         """
         self.parent: Optional[Node] = parent
         self.element: E = element
@@ -180,7 +180,7 @@ class Node(Generic[E]):
         if not isinstance(other, Node):
             return False
 
-        if self.parent != other.parent:
+        if id(self.parent) != id(other.parent):
             return False
 
         if self.children != other.children:
@@ -233,7 +233,7 @@ class TreeTheory:
         Initializes the tree with the theory.
 
         :param theory: the theory
-        :type theory: Optional[NeuralLogProgram]
+        :type theory: NeuralLogProgram or None
         """
         if not hasattr(self, "initial_modifiers") or \
                 self.initial_modifiers is None:
@@ -363,7 +363,7 @@ class TreeTheory:
         current revision leaf.
 
         :param index: the index
-        :type index: Optional[int]
+        :type index: int or None
         :return: the revision leaf
         :rtype: Node[HornClause]
         """
@@ -379,7 +379,7 @@ class TreeTheory:
         current target predicate.
 
         :param index: the index
-        :type index: Optional[int]
+        :type index: int or None
         :return: the revision leaf
         :rtype: Predicate
         """

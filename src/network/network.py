@@ -25,7 +25,7 @@ from src.network.network_functions import get_literal_function, \
     InvertedFactLayer, SpecificFactLayer, LiteralLayer, FunctionLayer, \
     AnyLiteralLayer, RuleLayer, ExtractUnaryLiteralLayer, DiagonalRuleLayer, \
     EmptyLayer, get_literal_layer, GraphRuleLayer, NeuralLogLoss, \
-    SizedEmptyLayer
+    SizedEmptyLayer, NeuralLogLayer
 
 # WARNING: Do not support literals with same variable in the head of rules.
 # WARNING: Do not support constants in the head of rules.
@@ -249,7 +249,7 @@ class NeuralLogNetwork(keras.Model):
             data_structures.NoDependency(dict())
         "The fact layer by literal"
 
-        self._rule_layers: Dict[Tuple[HornClause, bool], RuleLayer] = \
+        self._rule_layers: Dict[Tuple[HornClause, bool], NeuralLogLayer] = \
             data_structures.NoDependency(dict())
         "The rule layer by clause"
 
@@ -514,7 +514,7 @@ class NeuralLogNetwork(keras.Model):
             if (predicate in self.program.facts_by_predicate or
                     predicate in self.program.trainable_predicates):
                 inputs = [self._build_fact(renamed_literal, inverted=inverted)]
-            input_clauses = dict()  # type: Dict[RuleLayer, HornClause]
+            input_clauses: Dict[RuleLayer, HornClause] = dict()
             for clause in self.program.clauses_by_predicate.get(
                     predicate, []):
                 if is_clause_fact(clause):
@@ -584,7 +584,7 @@ class NeuralLogNetwork(keras.Model):
         generic term to the specific one
         :type substitution: dict[Term, Term]
         :return: the specific rule
-        :rtype: SpecificFactLayer
+        :rtype: RuleLayer
         """
         predicate = literal.predicate
         substitution_terms = dict()
@@ -628,6 +628,7 @@ class NeuralLogNetwork(keras.Model):
                     literal, destination_index)
                 output_extract_func = \
                     self.layer_factory.get_output_extract_function(predicate)
+            # noinspection PyTypeChecker
             rule = SpecificFactLayer(
                 layer_name, rule,
                 input_constants=input_constants,

@@ -71,9 +71,9 @@ class ClauseHeadPredicateModifier(ClauseModifier):
         :param old_predicate: the old predicate, a regex to match the term to
         be substituted, if the regex return a group, it will be appended to
         the new predicate ter
-        :type old_predicate: Optional[str]
+        :type old_predicate: str or None
         :param new_predicate: the new predicate
-        :type new_predicate: Optional[int]
+        :type new_predicate: str or None
         """
         super().__init__(learning_system)
         if old_predicate is not None:
@@ -128,15 +128,15 @@ class AppendLiteralModifier(ClauseModifier):
         "append_at_beginning": False
     })
 
-    def __init__(self, learning_system=None, predicate=None, term_index=None,
-                 append_at_beginning=None):
+    def __init__(self, learning_system=None, predicate=None,
+                 term_index=None, append_at_beginning=None):
         """
         Creates a clause modifier.
 
         :param learning_system: the learning system
         :type learning_system: sls.StructureLearningSystem
         :param predicate: the predicate of the literal to append
-        :type predicate: Optional[str]
+        :type predicate: str or None
         :param term_index: the index of a term in the head of the clause,
         to be used as the term of the appended literal
         :type term_index: Optional[int]
@@ -194,15 +194,15 @@ class AppendLiteralWithUniqueTermModifier(ClauseModifier):
         "append_at_beginning": False
     })
 
-    def __init__(self, learning_system=None, predicate=None, term_prefix=None,
-                 append_at_beginning=None):
+    def __init__(self, learning_system=None, predicate=None,
+                 term_prefix=None, append_at_beginning=None):
         """
         Creates a clause modifier.
 
         :param learning_system: the learning system
         :type learning_system: sls.StructureLearningSystem
         :param predicate: the predicate of the literal to append
-        :type predicate: Optional[str]
+        :type predicate: str or None
         :param term_prefix: the prefix of the term
         :type term_prefix: Optional[str]
         :param append_at_beginning: if `True`, appends the literal at the

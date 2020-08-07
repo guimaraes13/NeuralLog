@@ -1,7 +1,6 @@
 """
 Handle the revision operators based on Meta Logic Programs.
 """
-import copy
 import logging
 import re
 from collections import deque
@@ -12,7 +11,7 @@ import src.knowledge.theory.manager.revision.operator.revision_operator as ro
 from src.knowledge.examples import Examples, ExampleIterator
 from src.knowledge.graph import RulePathFinder, RuleGraph
 from src.knowledge.manager.tree_manager import TreeTheory, Node, \
-    FALSE_LITERAL, add_clause_to_tree
+    FALSE_LITERAL, add_clause_to_tree, TRUE_LITERAL
 from src.knowledge.program import NeuralLogProgram, get_predicate_from_string
 from src.knowledge.theory import TheoryRevisionException
 from src.language.language import Atom, HornClause, Predicate, Variable, \
@@ -25,8 +24,9 @@ from src.util.language import get_unify_map
 from src.util.variable_generator import VariableGenerator, PredicateGenerator, \
     PermutationGenerator
 
-VARIABLE_PREDICATE_NAME = "A"
+NEW_PREDICATE_NAME = "__new_pred__"
 
+# noinspection RegExpRedundantEscape
 META_PREDICATE_TYPE_MATCH = re.compile("\\$([A-Z][a-zA-Z0-9_-]*)"
                                        "(/([0-9]|[1-9][0-9]+))?"
                                        "(\\[([0-9]+)\\](\\[(.+)\\])?)?")
@@ -587,6 +587,20 @@ class MetaRevisionOperator(ro.RevisionOperator):
         # or the `perform_operation_on_example`.
         pass
 
+    # TODO:
+    #  If it is a false leaf:
+    #   - If the last literal is not connect to the output, create a new
+    #       literal, replacing their variables by its input variable and the
+    #       output of the rule;
+    #   - If the last literal is connected to the output, create a new
+    #       literal if the same variables as the last one;
+    #  If it is a non-false leaf:
+    #   - If the last literal is not connect to the output, uses the same
+    #       literal, replacing their variables by its input variable and the
+    #       output of the rule;
+    #   - If the last literal is connected to the output, uses the same literal;
+    # TODO: verify if this is what happens. Revision on a false node appends
+    #  literals. Revision on a non-false node replaces the node by the literals.
     @staticmethod
     def _build_target_atom(revision_leaf):
         """
@@ -604,23 +618,30 @@ class MetaRevisionOperator(ro.RevisionOperator):
         :return: the target atom
         :rtype: Atom
         """
+
         if revision_leaf.is_default_child:
             horn_clause = revision_leaf.parent.element
+            predicate_name = NEW_PREDICATE_NAME
         else:
             horn_clause = revision_leaf.element
+            predicate_name = horn_clause.body[-1].predicate.name
         last_literal = horn_clause.body[-1]
         output_term = horn_clause.head.terms[-1]
         arity = last_literal.arity()
-        if arity == 0 or output_term in last_literal.terms:
-            # The target atom is propositional or it connects to the
-            # output of the rule, it will be the target
-            target_atom = last_literal
+        if arity == 0:
+            # The target atom is propositional,
+            # send the head of the rule instead
+            target_atom = Atom(NEW_PREDICATE_NAME, *horn_clause.head.terms)
+        elif output_term in last_literal.terms:
+            # The target atom is connects to the output of the rule,
+            # it will be the target
+            target_atom = Atom(predicate_name, *last_literal.terms)
         elif arity != 2:
             # The target atom does not connect to the output of the rule,
             # the target will be a generic atom connecting the output of
             # the last atom to the output of the rule
             target_atom = Atom(
-                VARIABLE_PREDICATE_NAME, last_literal.terms[-1], output_term)
+                predicate_name, last_literal.terms[-1], output_term)
         else:
             # The target atom does not connect to the output of the rule,
             # the target should be a generic atom connecting the output of
@@ -632,7 +653,7 @@ class MetaRevisionOperator(ro.RevisionOperator):
             # We should always be able to find the input of the target,
             # however, we will assume that the last term is the input,
             # if the loop below does not found it
-            input_term = last_literal.terms[-1]
+            input_term = last_literal.terms[0]
             for edge in rule_graph.edges:
                 if edge.literal.arity() != 2 or \
                         output_term != edge.get_output_term():
@@ -641,7 +662,7 @@ class MetaRevisionOperator(ro.RevisionOperator):
                 if possible_input in last_literal.terms:
                     input_term = possible_input
                     break
-            target_atom = Atom(VARIABLE_PREDICATE_NAME, input_term, output_term)
+            target_atom = Atom(predicate_name, input_term, output_term)
         return target_atom
 
     def revise_node(self, target_atom, targets, minimum_threshold,
@@ -659,10 +680,12 @@ class MetaRevisionOperator(ro.RevisionOperator):
         operator. If set, the first program which improves the current theory
         above the threshold is returned. If not set, the best found program is
         returned
-        :type minimum_threshold: Optional[float]
+        :type minimum_threshold: float or None
         :param extract_theory_function: a function to extract the theory, based
         on the first clause of the found program
-        :type extract_theory_function: function
+        :type extract_theory_function: (Sequence[Clause], Node[HornClause],
+        Examples) -> (NeuralLogProgram, HornClause or None, HornClause or
+        Literal or None) or None
         :return: the revised theory
         :rtype: NeuralLogProgram or None
         """
@@ -671,11 +694,13 @@ class MetaRevisionOperator(ro.RevisionOperator):
         inferred_examples = self.learning_system.infer_examples(targets)
         current_evaluation = self.theory_metric.compute_metric(
             targets, inferred_examples)
-
+        self._update_logic_predicates(self.learning_system.theory)
         clean_predicate_generator = \
             PredicateGenerator(avoid_terms=self._avoid_predicates)
         best_theory = None
         best_evaluation = current_evaluation
+        best_revised_clause = None
+        best_removed_item = None
         for node in self.apply_higher_order_program(target_atom):
             predicate_generator = clean_predicate_generator.clean_copy()
             meta_clauses = extract_meta_program(node)
@@ -691,10 +716,11 @@ class MetaRevisionOperator(ro.RevisionOperator):
                     continue
                 # noinspection PyTypeChecker
 
-                current_theory = extract_theory_function(
-                    program, revision_leaf, targets)
-                if current_theory is None:
+                extracted_theory = \
+                    extract_theory_function(program, revision_leaf, targets)
+                if extracted_theory is None:
                     continue
+                current_theory, revised_clause, removed_item = extracted_theory
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug(
                         "Evaluating theory modified by program:\n%s",
@@ -704,22 +730,34 @@ class MetaRevisionOperator(ro.RevisionOperator):
                         targets, self.theory_metric, current_theory)
                 improvement = \
                     self.theory_metric.compare(evaluation, best_evaluation)
+                logger.debug(
+                    "Program evaluation of %.3f, with improvement of %.3f "
+                    "over the current theory", evaluation, improvement)
                 if minimum_threshold is None:
                     if improvement > 0.0:
                         best_evaluation = evaluation
                         best_theory = current_theory
+                        best_revised_clause = revised_clause
+                        best_removed_item = best_removed_item
                 else:
                     if improvement > minimum_threshold:
+                        self.revised_clause = revised_clause
+                        self.removed_item = removed_item
                         return current_theory
 
+        self.revised_clause = best_revised_clause
+        self.removed_item = best_removed_item
         return best_theory
 
-    # noinspection PyUnusedLocal
+    # noinspection PyUnusedLocal,DuplicatedCode
     def _build_root_node_theory(self, program, revision_leaf, targets):
         """
         Builds a theory, from the found program, in order to revise the current
         theory from a false leaf node.
 
+        If it built a valid theory, it returns a tuple containing the theory,
+        the revised clause (if any) and the removed item (if any).
+
         :param program: the found logic program
         :type program: Sequence[Clause]
         :param revision_leaf: the revision leaf
@@ -727,7 +765,8 @@ class MetaRevisionOperator(ro.RevisionOperator):
         :param targets: the target examples
         :type targets: Examples
         :return: the revised theory
-        :rtype: NeuralLogProgram or None
+        :rtype: (NeuralLogProgram, HornClause or None, HornClause or Literal
+        or None) or None
         """
         # noinspection PyTypeChecker
         first_clause: HornClause = program[0]
@@ -735,19 +774,26 @@ class MetaRevisionOperator(ro.RevisionOperator):
         if FALSE_LITERAL in first_clause.body:
             return None
 
-        new_clause = self.apply_clause_modifiers(first_clause, targets)
-        self.revised_clause = new_clause
+        body = filter(lambda x: x != TRUE_LITERAL, first_clause.body)
+        new_clause = HornClause(first_clause.head, *body)
+        new_clause = self.apply_clause_modifiers(new_clause, targets)
+        revised_clause = new_clause
 
         current_theory = self.learning_system.theory.copy()
         current_theory.add_clauses([new_clause])
         current_theory.add_clauses(program[1:])
-        return current_theory
 
+        return current_theory, revised_clause, None
+
+    # noinspection DuplicatedCode
     def _build_false_leaf_theory(self, program, revision_leaf, targets):
         """
         Builds a theory, from the found program, in order to revise the current
         theory from a false leaf node.
 
+        If it built a valid theory, it returns a tuple containing the theory,
+        the revised clause (if any) and the removed item (if any).
+
         :param program: the found logic program
         :type program: Sequence[Clause]
         :param revision_leaf: the revision leaf
@@ -755,7 +801,8 @@ class MetaRevisionOperator(ro.RevisionOperator):
         :param targets: the target examples
         :type targets: Examples
         :return: the revised theory
-        :rtype: NeuralLogProgram or None
+        :rtype: (NeuralLogProgram, HornClause or None, HornClause or Literal
+        or None) or None
         """
         # noinspection PyTypeChecker
         first_clause: HornClause = program[0]
@@ -763,26 +810,36 @@ class MetaRevisionOperator(ro.RevisionOperator):
         if FALSE_LITERAL in first_clause.body:
             return None
 
-        if VARIABLE_PREDICATE_NAME in \
+        if NEW_PREDICATE_NAME in \
                 map(lambda x: x.predicate.name, first_clause.body):
             # This program attempted to use a placeholder predicate, skip it
             return None
 
-        new_clause = copy.deepcopy(revision_leaf.parent.element)
-        new_clause.body.extend(first_clause.body)
+        original_clause: HornClause = revision_leaf.parent.element
+        body = original_clause.body
+        if len(body) == 1 and body[0] == FALSE_LITERAL:
+            body = first_clause.body
+        else:
+            body = body + first_clause.body
+        body = filter(lambda x: x != TRUE_LITERAL, body)
+        new_clause = HornClause(original_clause.head, *body)
         new_clause = self.apply_clause_modifiers(new_clause, targets)
-        self.revised_clause = new_clause
+        revised_clause = new_clause
 
         current_theory = self.learning_system.theory.copy()
         current_theory.add_clauses([new_clause])
         current_theory.add_clauses(program[1:])
-        return current_theory
+
+        return current_theory, revised_clause, None
 
     def _build_literal_leaf_theory(self, program, revision_leaf, targets):
         """
         Builds a theory, from the found program, in order to revise the current
         theory from a literal leaf node.
 
+        If it built a valid theory, it returns a tuple containing the theory,
+        the revised clause (if any) and the removed item (if any).
+
         :param program: the found logic program
         :type program: Sequence[Clause]
         :param revision_leaf: the revision leaf
@@ -790,11 +847,12 @@ class MetaRevisionOperator(ro.RevisionOperator):
         :param targets: the target examples
         :type targets: Examples
         :return: the revised theory
-        :rtype: NeuralLogProgram or None
+        :rtype: (NeuralLogProgram, HornClause or None, HornClause or Literal
+        or None) or None
         """
         # noinspection PyTypeChecker
         first_clause: HornClause = program[0]
-        if VARIABLE_PREDICATE_NAME in \
+        if NEW_PREDICATE_NAME in \
                 map(lambda x: x.predicate.name, first_clause.body):
             # This program attempted to use a placeholder predicate, skip it
             return None
@@ -806,26 +864,22 @@ class MetaRevisionOperator(ro.RevisionOperator):
         if FALSE_LITERAL in first_clause.body:
             # the program added a false literal to the clause, just remove
             # the clause
-            self.removed_item = original_clause
-            self.revised_clause = original_clause
+            removed_item = original_clause
+            revised_clause = original_clause
         else:
             # the program appends predicates to the clause
-            new_clause = copy.deepcopy(original_clause)
-            if first_clause.head.predicate.name != VARIABLE_PREDICATE_NAME:
-                # the program replaces a literal from the clause by a
-                # non-false, possibly empty, set of literals
-                new_clause.body.remove()
-                removed_literal = Literal(first_clause.head)
-                new_clause.body.remove(removed_literal)
-                new_clause.body.remove()
-                self.removed_item = removed_literal
-            new_clause.body.extend(first_clause.body)
+            # the program replaces a literal from the clause by a
+            # non-false, possibly empty, set of literals
+            removed_item = original_clause.body[-1]
+            body = original_clause.body[:-1] + first_clause.body
+            body = filter(lambda x: x != TRUE_LITERAL, body)
+            new_clause = HornClause(original_clause.head, *body)
             new_clause = self.apply_clause_modifiers(new_clause, targets)
-            self.revised_clause = new_clause
+            revised_clause = new_clause
             current_theory.add_clauses([new_clause])
             current_theory.add_clauses(program[1:])
 
-        return current_theory
+        return current_theory, revised_clause, removed_item
 
     def perform_operation_on_tree(self, targets, minimum_threshold=None):
         """
@@ -836,7 +890,7 @@ class MetaRevisionOperator(ro.RevisionOperator):
         :param minimum_threshold: a minimum threshold to consider by the
         operator. Implementations of this class could use this threshold in
         order to improve performance by skipping evaluating candidates
-        :type minimum_threshold: Optional[float]
+        :type minimum_threshold: float or None
         :return: the revised theory
         :rtype: NeuralLogProgram or None
         """
@@ -858,7 +912,7 @@ class MetaRevisionOperator(ro.RevisionOperator):
                 return self.revise_node(target_atom, targets, minimum_threshold,
                                         self._build_false_leaf_theory)
             else:
-                # This node represents a rule, it is a literal addition
+                # This node represents a rule, it is a literal replacement
                 # operation
                 return self.revise_node(target_atom, targets, minimum_threshold,
                                         self._build_literal_leaf_theory)
@@ -872,7 +926,7 @@ class MetaRevisionOperator(ro.RevisionOperator):
         :param minimum_threshold: a minimum threshold to consider by the
         operator. Implementations of this class could use this threshold in
         order to improve performance by skipping evaluating candidates
-        :type minimum_threshold: Optional[float]
+        :type minimum_threshold: float or None
         :return: the revised theory
         :rtype: NeuralLogProgram or None
         """
@@ -908,9 +962,9 @@ class MetaRevisionOperator(ro.RevisionOperator):
         except KnowledgeException as e:
             raise TheoryRevisionException("Error when revising the theory.", e)
 
-    def perform_operation_for_example(
-            self, example, theory, targets,
-            inferred_examples, current_evaluation, minimum_threshold):
+    def perform_operation_for_example(self, example, theory, targets,
+                                      inferred_examples, current_evaluation,
+                                      minimum_threshold):
         """
         Performs the operation for a single examples.
 
@@ -928,7 +982,7 @@ class MetaRevisionOperator(ro.RevisionOperator):
         :param minimum_threshold: a minimum threshold to consider by the
         operator. Implementations of this class could use this threshold in
         order to improve performance by skipping evaluating candidates
-        :type minimum_threshold: Optional[float]
+        :type minimum_threshold: float or None
         :return: `True`, if the theory has changed.
         :rtype: bool
         """
@@ -972,7 +1026,7 @@ class MetaRevisionOperator(ro.RevisionOperator):
         :type current_evaluation: float
         :param minimum_threshold: the minimum threshold to early stop the
         evaluation of candidate programs
-        :type minimum_threshold: Optional[float]
+        :type minimum_threshold: float or None
         :return: if `minimum_threshold` is None, returns the best evaluated
         program found, from the example; otherwise, returns the first program
         whose the improvement over the current theory is bigger than the
@@ -1010,6 +1064,9 @@ class MetaRevisionOperator(ro.RevisionOperator):
                         examples, self.theory_metric, current_program)
                 improvement = \
                     self.theory_metric.compare(evaluation, best_evaluation)
+                logger.debug(
+                    "Program evaluation of %.3f, with improvement of %.3f "
+                    "over the current theory", evaluation, improvement)
                 if minimum_threshold is None:
                     if improvement > 0.0:
                         best_evaluation = evaluation
@@ -1032,8 +1089,8 @@ class MetaRevisionOperator(ro.RevisionOperator):
         """
         queue: deque[SLDNode] = deque()
         "Holds all the nodes at the deepest level"
-
-        root = SLDNode([copy.deepcopy(target_atom)])  # The root (level 0)
+        atom = Atom(target_atom.predicate, *target_atom.terms)
+        root = SLDNode([atom])  # The root (level 0)
         for clause in self.meta_clauses:
             for node in apply_clause_to_node(root, clause, True):
                 queue.append(node)

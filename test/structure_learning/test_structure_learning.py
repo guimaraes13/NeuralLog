@@ -5,26 +5,30 @@ import logging
 import os
 import unittest
 
-from src.language.language import Predicate, HornClause, Atom, Variable, Literal
+from src.language.language import Predicate
+from src.language.parser.ply.neural_log_parser import NeuralLogLexer, \
+    NeuralLogParser
 from src.run import configure_log
 from src.run.command.learn_structure import load_yaml_configuration, LOG_FORMAT
 
 PARENT = Predicate("parent", 2)
 
 RESOURCES = "structure_learning"
-CONFIGURATION = "configuration.yaml"
-PROGRAM = "kinship.pl"
-EXAMPLES_1 = "kinship_examples_1.pl"
-EXAMPLES_2 = "kinship_examples_2.pl"
 
-CLAUSES = {
-    HornClause(
-        Atom(PARENT, Variable("A"), Variable("B")),
-        Literal(Atom(Predicate("father", 2), Variable("A"), Variable("B")))),
-    HornClause(
-        Atom(PARENT, Variable("A"), Variable("B")),
-        Literal(Atom(Predicate("mother", 2), Variable("A"), Variable("B"))))
-}
+
+def _read_program(program):
+    """
+    Reads the meta program.
+
+    :return: the list of meta clauses
+    :rtype: List[HornClause]
+    """
+    lexer = NeuralLogLexer()
+    parser = NeuralLogParser(lexer)
+    parser.parser.parse(input=program, lexer=lexer)
+    parser.expand_placeholders()
+    # noinspection PyTypeChecker
+    return set(parser.get_clauses())
 
 
 class TestStructureLearning(unittest.TestCase):
@@ -33,21 +37,60 @@ class TestStructureLearning(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         configure_log(LOG_FORMAT, level=logging.DEBUG)
-        cls.learning_method = \
-            load_yaml_configuration(os.path.join(RESOURCES, CONFIGURATION))
 
-    def test_structure_learning(self):
-        self.learning_method.initialize()
-        self.learning_method.run()
-        clauses = self.learning_method.theory.clauses_by_predicate.get(PARENT)
+    def _test_structure_learning(
+            self, configuration, expected_clauses, assert_equals=True):
+        learning_method = \
+            load_yaml_configuration(os.path.join(RESOURCES, configuration))
+        learning_method.initialize()
+        learning_method.run()
+        clauses = learning_method.theory.clauses_by_predicate.get(PARENT)
         self.assertIsNotNone(
             clauses, "Expected two clauses in the theory, but it is none.")
-        expected = len(CLAUSES)
+        expected = len(expected_clauses)
         found = len(clauses)
         self.assertEqual(
             expected, found,
             "Expected {} clause, but {} found".format(expected, found))
-        expected = "\n".join(map(lambda x: str(x), CLAUSES))
+        expected = "\n".join(map(lambda x: str(x), expected_clauses))
         found = "\n".join(map(lambda x: str(x), clauses))
-        self.assertTrue(CLAUSES.issuperset(clauses),
-                        "Expected:\n{}\n\n{}".format(expected, found))
+        if assert_equals:
+            self.assertTrue(expected_clauses.issuperset(clauses),
+                            "Expected:\n{}\n\n{}".format(expected, found))
+
+    def test_structure_learning(self):
+        program = """
+            parent(A, B) :- father(A, B).
+            parent(A, B) :- mother(A, B).
+        """
+
+        self._test_structure_learning(
+            "configuration.yaml", _read_program(program))
+
+    def test_tree_structure_learning(self):
+        program = """
+            parent(X0, X1) :- father(X0, X1).
+            parent(X0, X1) :- mother(X0, X1).
+        """
+
+        self._test_structure_learning(
+            "configuration_tree.yaml", _read_program(program),
+            assert_equals=False)
+
+    def test_meta_structure_learning(self):
+        program = """
+            parent(X0, X1) :- father(X0, X1).
+            parent(X0, X1) :- mother(X0, X1).
+        """
+
+        self._test_structure_learning(
+            "configuration_meta.yaml", _read_program(program))
+
+    def test_meta_tree_structure_learning(self):
+        program = """
+            parent(X0, X1) :- father(X0, X1).
+            parent(X0, X1) :- mother(X0, X1).
+        """
+
+        self._test_structure_learning(
+            "configuration_meta_tree.yaml", _read_program(program))

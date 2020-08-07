@@ -68,7 +68,6 @@ def convert_predictions(model, dataset, positive_threshold=None):
     inferences = ExamplesInferences()
     empty_entry = None
     for features, labels in dataset:
-        y_scores = model.call(features)
         y_scores = model.predict(features)
         if y_scores is None:
             continue
@@ -227,7 +226,7 @@ class EngineSystemTranslator(Initializable):
         :type retrain: bool
         :param theory: If not `None`, use this theory instead of the current
         theory of the engine system
-        :type theory: Optional[NeuralLogProgram or collections.Iterable[Clause]]
+        :type theory: NeuralLogProgram or collections.Iterable[Clause] or None
         :param positive_threshold: if set, only the examples whose inference
         are above the threshold will be considered as positive. If not set,
         only the examples whose score is above the score of the `__null__`
@@ -416,7 +415,7 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
         :param examples: the examples
         :type examples: Examples or Atom
         :param theory: the theory
-        :type theory: Optional[NeuralLogProgram or collections.Iterable[Clause]]
+        :type theory: NeuralLogProgram or collections.Iterable[Clause] or None
         :return: the trainer
         :rtype: Trainer
         """
@@ -448,7 +447,7 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
     def infer_examples_appending_clauses(
             self, examples, clauses, retrain=False, positive_threshold=None):
         # noinspection PyTypeChecker
-        appended_clauses = list()
+        appended_clauses: List[Clause] = list()
         for theory_clauses in self.theory.clauses_by_predicate.values():
             appended_clauses.extend(theory_clauses)
         appended_clauses.extend(clauses)

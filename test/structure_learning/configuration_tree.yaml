@@ -1,0 +1,66 @@
+!!python/object:src.structure_learning.structure_learning_method.BatchStructureLearning
+
+knowledge_base_file_paths:
+  - "structure_learning/kinship.pl"
+#theory_file_paths:
+example_file_paths:
+  - "structure_learning/kinship_examples_1_tree.pl"
+test_file_paths:
+  - "structure_learning/kinship_examples_2.pl"
+output_directory: "structure_learning/data"
+
+load_pre_trained_parameter: false
+examples_batch_size: 4
+train_parameters_on_remaining_examples: false
+
+engine_system_translator: !!python/object:src.structure_learning.engine_system_translator.NeuralLogEngineSystemTranslator {}
+
+theory_metrics:
+  - !!python/object:src.knowledge.theory.evaluation.metric.theory_metric.RocCurveMetric {}
+  - !!python/object:src.knowledge.theory.evaluation.metric.theory_metric.PrecisionRecallCurveMetric {}
+  - !!python/object:src.knowledge.theory.evaluation.metric.theory_metric.LikelihoodMetric {}
+  - !!python/object:src.knowledge.theory.evaluation.metric.theory_metric.LogLikelihoodMetric {}
+
+revision_operator_selector: !!python/object:src.knowledge.theory.manager.revision.revision_operator_selector.BestRevisionOperatorSelector {}
+
+theory_evaluator: !!python/object:src.knowledge.theory.evaluation.theory_evaluator.TheoryEvaluator {}
+
+theory_revision_manager: !!python/object:src.knowledge.theory.manager.theory_revision_manager.TheoryRevisionManager
+  theory_metric: &metric !!python/object:src.knowledge.theory.evaluation.metric.theory_metric.RocCurveMetric {}
+
+incoming_example_manager: !!python/object:src.knowledge.manager.tree_manager.TreeExampleManager
+  tree_theory: &tree !!python/object:src.knowledge.manager.tree_manager.TreeTheory {}
+
+revision_manager: !!python/object:src.knowledge.theory.manager.revision.revision_manager.BestLeafRevisionManager
+  tree_theory: *tree
+  number_of_leaves_to_revise: -1
+  revision_heuristic: !!python/object:src.knowledge.theory.manager.revision.revision_manager.RepairableNodeHeuristic {}
+
+revision_operator_evaluators:
+  - !!python/object:src.knowledge.theory.manager.revision.revision_operator_evaluator.RevisionOperatorEvaluator
+    revision_operator: !!python/object:src.knowledge.theory.manager.revision.operator.tree_revision_operator.RemoveNodeTreeRevisionOperator
+      theory_metric: *metric
+      tree_theory: *tree
+  - !!python/object:src.knowledge.theory.manager.revision.revision_operator_evaluator.RevisionOperatorEvaluator
+    revision_operator: !!python/object:src.knowledge.theory.manager.revision.operator.tree_revision_operator.AddNodeTreeRevisionOperator
+      theory_metric: *metric
+      tree_theory: *tree
+      maximum_side_way_movements: false
+      refine: true
+      append_operator: !!python/object:src.knowledge.theory.manager.revision.operator.literal_appender_operator.PathFinderAppendOperator
+        theory_metric: *metric
+        relevant_depth: 1
+        maximum_based_examples: 1
+        positive_threshold: 0.5
+  - !!python/object:src.knowledge.theory.manager.revision.revision_operator_evaluator.RevisionOperatorEvaluator
+    revision_operator: !!python/object:src.knowledge.theory.manager.revision.operator.tree_revision_operator.AddNodeTreeRevisionOperator
+      theory_metric: *metric
+      tree_theory: *tree
+      maximum_side_way_movements: false
+      refine: true
+      append_operator: !!python/object:src.knowledge.theory.manager.revision.operator.literal_appender_operator.RelevantLiteralAppendOperator
+        theory_metric: *metric
+        relevant_depth: 1
+        maximum_based_examples: -1
+        positive_threshold: 0.5
+

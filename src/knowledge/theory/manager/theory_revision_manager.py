@@ -192,7 +192,7 @@ class HoeffdingBoundTheoryManager(TheoryRevisionManager):
     bound.
 
     The theory will be updated only if the improvement on the sample is
-    greater than the Hoeffding'g bound.
+    greater than the Hoeffding's bound.
 
     For a given value `delta` in [0, 1], a metric whose range size is `R`,
     and a sample containing `n` independent examples; the Hoeffding's bound

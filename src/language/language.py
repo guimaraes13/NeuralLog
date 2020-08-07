@@ -28,7 +28,7 @@ def get_term_from_string(string):
     """
     if string[0].isupper():
         return Variable(string)
-    elif string[0].islower():
+    elif string[0].islower() or string[0] == "_":
         return Constant(string)
     elif string[0] == string[-1] and (string[0] == "'" or string[0] == '"'):
         return Quote(string)

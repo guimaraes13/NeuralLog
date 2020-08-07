@@ -3,7 +3,7 @@ File to define custom functions to use in the network.
 """
 from collections import deque
 from functools import reduce
-from typing import Dict
+from typing import Dict, Callable
 
 import tensorflow as tf
 import tensorflow.keras
@@ -77,12 +77,12 @@ def neural_log_loss_function(identifier):
     :rtype: function
     """
 
-    def registry_loss(func):
+    def registry_loss(func: Callable):
         """
         Function to registry the NeuralLog loss function.
 
         :param func: the function
-        :type func: function
+        :type func: Callable
         :return: the registry function
         :rtype: function
         """
