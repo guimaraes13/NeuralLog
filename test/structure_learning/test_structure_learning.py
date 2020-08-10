@@ -4,6 +4,7 @@ Tests the structure learning.
 import logging
 import os
 import unittest
+from functools import reduce
 
 from src.language.language import Predicate
 from src.language.parser.ply.neural_log_parser import NeuralLogLexer, \
@@ -44,7 +45,8 @@ class TestStructureLearning(unittest.TestCase):
             load_yaml_configuration(os.path.join(RESOURCES, configuration))
         learning_method.initialize()
         learning_method.run()
-        clauses = learning_method.theory.clauses_by_predicate.get(PARENT)
+        clauses = learning_method.theory.clauses_by_predicate.values()
+        clauses = reduce(lambda x, y: x | set(y), clauses, set())
         self.assertIsNotNone(
             clauses, "Expected two clauses in the theory, but it is none.")
         expected = len(expected_clauses)
@@ -85,6 +87,16 @@ class TestStructureLearning(unittest.TestCase):
 
         self._test_structure_learning(
             "configuration_meta.yaml", _read_program(program))
+
+    def test_meta_structure_learning_invention(self):
+        program = """
+            parent(X0, X1) :- f0(X0, X1).
+            f0(X0, X1) :- father(X0, X1).
+            f0(X0, X1) :- mother(X0, X1).
+        """
+
+        self._test_structure_learning(
+            "configuration_meta_2.yaml", _read_program(program))
 
     def test_meta_tree_structure_learning(self):
         program = """

@@ -96,7 +96,8 @@ class BestRevisionOperatorSelector(RevisionOperatorSelector):
 
     # noinspection PyMissingOrEmptyDocstring,PyAttributeOutsideInit
     def select_operator(self, examples, theory_metric, minimum_threshold=None):
-        return self.selector.select_operator(examples, theory_metric)
+        return self.selector.select_operator(
+            examples, theory_metric, minimum_threshold)
 
 
 class RevisionOperatorEvaluatorSelector(ABC):

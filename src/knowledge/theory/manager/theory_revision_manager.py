@@ -157,7 +157,7 @@ class TheoryRevisionManager(Initializable):
         """
         relevant_examples = examples.relevant_examples
         revised_metric = operator_evaluator.evaluate_operator(
-            relevant_examples, self.theory_metric)
+            relevant_examples, self.theory_metric, improvement_threshold)
         logger.debug("Revised theory evaluation:\t%f", revised_metric)
         improvement = self.theory_metric.difference(
             revised_metric, self.theory_evaluation)

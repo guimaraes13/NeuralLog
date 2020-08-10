@@ -468,8 +468,10 @@ def apply_clause_to_node(node, clause, unify_constant_predicate=True):
         renamed_head = Atom(goal.predicate, *renamed_terms)
 
         renamed_clause = HornClause(renamed_head, *renamed_body)
+        # new_values = \
+        #     node.values[:i] + tuple(renamed_body) + node.values[i + 1:]
         new_values = \
-            node.values[:i] + tuple(renamed_body) + node.values[i + 1:]
+            node.values[:i] + tuple(renamed_body) + node.values[i:]
         new_node = SLDNode(new_values, renamed_clause, node)
         yield new_node
 
@@ -483,12 +485,13 @@ class MetaRevisionOperator(ro.RevisionOperator):
     OPTIONAL_FIELDS = dict(ro.RevisionOperator.OPTIONAL_FIELDS)
     OPTIONAL_FIELDS.update({
         "maximum_depth": 0,
+        "find_best_theory": False,
         "tree_theory": None
     })
 
     def __init__(self, learning_system=None, theory_metric=None,
                  clause_modifiers=None, meta_program=None, maximum_depth=None,
-                 tree_theory=None):
+                 tree_theory=None, find_best_theory=None):
         super().__init__(learning_system, theory_metric, clause_modifiers)
 
         self.meta_program: str = meta_program
@@ -507,6 +510,15 @@ class MetaRevisionOperator(ro.RevisionOperator):
 
         self.revised_clause: Optional[HornClause] = None
         self.removed_item: Union[HornClause, Literal, None] = None
+
+        self.find_best_theory = find_best_theory
+        """
+        If true, it ignores the minimum threshold and returns the best found 
+        theory.
+        """
+
+        if self.find_best_theory is None:
+            self.find_best_theory = self.OPTIONAL_FIELDS["find_best_theory"]
 
     def _read_program(self):
         """
@@ -530,10 +542,6 @@ class MetaRevisionOperator(ro.RevisionOperator):
     def initialize(self):
         super().initialize()
         self.meta_clauses: List[HornClause] = self._read_program()
-        if self.tree_theory is None:
-            self.perform_operation = self.perform_operation_on_examples
-        else:
-            self.perform_operation = self.perform_operation_on_tree
         self.revised_clause = None
         self.removed_item = None
 
@@ -582,25 +590,14 @@ class MetaRevisionOperator(ro.RevisionOperator):
 
     # noinspection PyMissingOrEmptyDocstring
     def perform_operation(self, targets, minimum_threshold=None):
-        # Placeholder for the `perform_operation` function.
-        # The real implementation will be either the `perform_operation_on_tree`
-        # or the `perform_operation_on_example`.
-        pass
+        if self.find_best_theory:
+            minimum_threshold = None
+        if self.tree_theory is None:
+            return \
+                self.perform_operation_on_examples(targets, minimum_threshold)
+        else:
+            return self.perform_operation_on_tree(targets, minimum_threshold)
 
-    # TODO:
-    #  If it is a false leaf:
-    #   - If the last literal is not connect to the output, create a new
-    #       literal, replacing their variables by its input variable and the
-    #       output of the rule;
-    #   - If the last literal is connected to the output, create a new
-    #       literal if the same variables as the last one;
-    #  If it is a non-false leaf:
-    #   - If the last literal is not connect to the output, uses the same
-    #       literal, replacing their variables by its input variable and the
-    #       output of the rule;
-    #   - If the last literal is connected to the output, uses the same literal;
-    # TODO: verify if this is what happens. Revision on a false node appends
-    #  literals. Revision on a non-false node replaces the node by the literals.
     @staticmethod
     def _build_target_atom(revision_leaf):
         """
@@ -722,28 +719,39 @@ class MetaRevisionOperator(ro.RevisionOperator):
                     continue
                 current_theory, revised_clause, removed_item = extracted_theory
                 if logger.isEnabledFor(logging.DEBUG):
+                    # logger.debug(
+                    #     "Evaluating theory modified by program:\n%s",
+                    #     "\n".join(map(lambda x: str(x), program)))
+                    logger.debug("Evaluating theory:\n%s",
+                                 current_theory)
+                # noinspection PyBroadException
+                try:
+                    evaluation = \
+                        self.theory_evaluator.evaluate_theory(
+                            targets, self.theory_metric, current_theory)
+                    improvement = \
+                        self.theory_metric.compare(evaluation, best_evaluation)
                     logger.debug(
-                        "Evaluating theory modified by program:\n%s",
-                        "\n".join(map(lambda x: str(x), program)))
-                evaluation = \
-                    self.theory_evaluator.evaluate_theory(
-                        targets, self.theory_metric, current_theory)
-                improvement = \
-                    self.theory_metric.compare(evaluation, best_evaluation)
-                logger.debug(
-                    "Program evaluation of %.3f, with improvement of %.3f "
-                    "over the current theory", evaluation, improvement)
-                if minimum_threshold is None:
-                    if improvement > 0.0:
-                        best_evaluation = evaluation
-                        best_theory = current_theory
-                        best_revised_clause = revised_clause
-                        best_removed_item = best_removed_item
-                else:
-                    if improvement > minimum_threshold:
+                        "Program evaluation of %.3f, with improvement of %.3f "
+                        "over the current theory", evaluation, improvement)
+                    if evaluation == self.theory_metric.get_maximum_value():
                         self.revised_clause = revised_clause
                         self.removed_item = removed_item
                         return current_theory
+                    if minimum_threshold is None:
+                        if improvement > 0.0:
+                            best_evaluation = evaluation
+                            best_theory = current_theory
+                            best_revised_clause = revised_clause
+                            best_removed_item = best_removed_item
+                    else:
+                        if improvement > minimum_threshold:
+                            self.revised_clause = revised_clause
+                            self.removed_item = removed_item
+                            return current_theory
+                except Exception:
+                    logger.exception(
+                        "Error evaluating theory:\n%s", current_theory)
 
         self.revised_clause = best_revised_clause
         self.removed_item = best_removed_item
@@ -823,6 +831,8 @@ class MetaRevisionOperator(ro.RevisionOperator):
             body = body + first_clause.body
         body = filter(lambda x: x != TRUE_LITERAL, body)
         new_clause = HornClause(original_clause.head, *body)
+        if len(new_clause.body) == 0:
+            return None
         new_clause = self.apply_clause_modifiers(new_clause, targets)
         revised_clause = new_clause
 
@@ -874,6 +884,8 @@ class MetaRevisionOperator(ro.RevisionOperator):
             body = original_clause.body[:-1] + first_clause.body
             body = filter(lambda x: x != TRUE_LITERAL, body)
             new_clause = HornClause(original_clause.head, *body)
+            if len(new_clause.body) == 0:
+                return None
             new_clause = self.apply_clause_modifiers(new_clause, targets)
             revised_clause = new_clause
             current_theory.add_clauses([new_clause])
@@ -1059,21 +1071,28 @@ class MetaRevisionOperator(ro.RevisionOperator):
                     logger.debug(
                         "Evaluating appending the program:\n%s",
                         "\n".join(map(lambda x: str(x), current_program)))
-                evaluation = \
-                    self.theory_evaluator.evaluate_theory_appending_clause(
-                        examples, self.theory_metric, current_program)
-                improvement = \
-                    self.theory_metric.compare(evaluation, best_evaluation)
-                logger.debug(
-                    "Program evaluation of %.3f, with improvement of %.3f "
-                    "over the current theory", evaluation, improvement)
-                if minimum_threshold is None:
-                    if improvement > 0.0:
-                        best_evaluation = evaluation
-                        best_program = current_program
-                else:
-                    if improvement > minimum_threshold:
+                # noinspection PyBroadException
+                try:
+                    evaluation = \
+                        self.theory_evaluator.evaluate_theory_appending_clause(
+                            examples, self.theory_metric, current_program)
+                    improvement = \
+                        self.theory_metric.compare(evaluation, best_evaluation)
+                    logger.debug(
+                        "Program evaluation of %.3f, with improvement of %.3f "
+                        "over the current theory", evaluation, improvement)
+                    if evaluation == self.theory_metric.get_maximum_value():
                         return current_program
+                    if minimum_threshold is None:
+                        if improvement > 0.0:
+                            best_evaluation = evaluation
+                            best_program = current_program
+                    else:
+                        if improvement > minimum_threshold:
+                            return current_program
+                except Exception:
+                    logger.exception(
+                        "Error evaluating theory:\n%s", current_program)
 
         return best_program
 
