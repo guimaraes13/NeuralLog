@@ -3,7 +3,7 @@ The methods to call the structure learning.
 """
 import logging
 import os
-from abc import abstractmethod
+from abc import ABC
 from enum import Enum
 from typing import List
 
@@ -87,52 +87,35 @@ def default_theory_metrics():
     ]
 
 
-class StructureLearningMethod(Initializable):
+class RunTimestamps(Enum):
+    """
+    A enumerator of the names for run timestamps.
+    """
+
+    BEGIN = "Begin"
+    BEGIN_INITIALIZE = "Begin initializing"
+    END_INITIALIZE = "End initializing"
+    BEGIN_READ_KNOWLEDGE_BASE = "Begin reading the knowledge base"
+    END_READ_KNOWLEDGE_BASE = "End reading the knowledge base"
+    BEGIN_READ_THEORY = "Begin reading the theory"
+    END_READ_THEORY = "End reading the theory"
+    BEGIN_READ_EXAMPLES = "Begin reading the examples"
+    END_READ_EXAMPLES = "End reading the examples"
+    BEGIN_BUILD_ENGINE_TRANSLATOR = "Begin building the engine translator"
+    END_BUILD_ENGINE_TRANSLATOR = "End building the engine translator"
+    BEGIN_TRAIN = "Begin training"
+    END_TRAIN = "End training"
+    BEGIN_EVALUATION = "Begin evaluating"
+    END_EVALUATION = "End evaluating"
+    BEGIN_DISK_OUTPUT = "Begin disk output"
+    END_DISK_OUTPUT = "End disk output"
+    END = "Finished"
+
+
+class StructureLearningMethod(Initializable, ABC):
     """
     Class to perform the structure learning.
     """
-
-    OPTIONAL_FIELDS = {"theory_file_paths": ()}
-
-    def __init__(self,
-                 knowledge_base_file_paths,
-                 example_file_paths,
-                 output_directory,
-                 theory_file_paths=None):
-        """
-        Creates an structure learning method.
-
-        :param knowledge_base_file_paths: the path of the knowledge base files
-        :type knowledge_base_file_paths: list[str]
-        :param theory_file_paths: the path of the theory files
-        :type theory_file_paths: Optional[collections.Iterable[str]]
-        :param example_file_paths: the path of example files
-        :type example_file_paths: list[str]
-        :param output_directory: the output directory
-        :type output_directory: str
-        """
-        self.time_measure = TimeMeasure()
-        self.time_measure.add_measure(RunTimestamps.BEGIN)
-        self.knowledge_base_file_paths = knowledge_base_file_paths
-        if not theory_file_paths:
-            self.theory_file_paths = \
-                list(self.OPTIONAL_FIELDS["theory_file_paths"])
-        self.example_file_paths = example_file_paths
-        self.output_directory = output_directory
-
-    # noinspection PyMissingOrEmptyDocstring
-    def required_fields(self):
-        return [
-            "knowledge_base_file_paths", "example_file_paths",
-            "output_directory"
-        ]
-
-    @abstractmethod
-    def run(self):
-        """
-        Runs the structure learning method.
-        """
-        pass
 
 
 class BatchStructureLearning(StructureLearningMethod):
@@ -145,7 +128,6 @@ class BatchStructureLearning(StructureLearningMethod):
         "test_file_paths": (),
         "load_pre_trained_parameter": False,
         "examples_batch_size": 1,
-        "pass_all_examples_at_once": False,
         "train_parameters_on_remaining_examples": False,
         "theory_revision_manager": None,
         "theory_evaluator": None,
@@ -166,7 +148,6 @@ class BatchStructureLearning(StructureLearningMethod):
                  test_file_paths=None,
                  load_pre_trained_parameter=None,
                  examples_batch_size=None,
-                 pass_all_examples_at_once=None,
                  train_parameters_on_remaining_examples=None,
                  theory_revision_manager=None,
                  theory_evaluator=None,
@@ -196,10 +177,6 @@ class BatchStructureLearning(StructureLearningMethod):
         :type load_pre_trained_parameter: Optional[bool]
         :param examples_batch_size: the example batch size
         :type examples_batch_size: Optional[int]
-        :param pass_all_examples_at_once: if `True`, all the examples will be
-        passed to be revised at once; otherwise, will be passed a batch at a
-        time
-        :type pass_all_examples_at_once: Optional[bool]
         :param train_parameters_on_remaining_examples: if `True`, it trains the
         parameters of the engine system translator on the remaining examples
         that were not used on the revision.
@@ -222,42 +199,40 @@ class BatchStructureLearning(StructureLearningMethod):
         # :param clause_modifiers: a iterable of clause modifiers
         # :type clause_modifiers: Optional[collections.Iterable[ClauseModifier]]
         """
-        super(BatchStructureLearning, self).__init__(
-            knowledge_base_file_paths,
-            example_file_paths,
-            output_directory,
-            theory_file_paths
-        )
+        super(BatchStructureLearning, self).__init__()
+        self.time_measure = TimeMeasure()
+        self.time_measure.add_measure(RunTimestamps.BEGIN)
+        self.knowledge_base_file_paths = knowledge_base_file_paths
+        if theory_file_paths is None:
+            self.theory_file_paths = \
+                list(self.OPTIONAL_FIELDS["theory_file_paths"])
+        self.example_file_paths = example_file_paths
+        self.output_directory = output_directory
 
         self.engine_system_translator = engine_system_translator
 
         self.theory_file_paths = theory_file_paths
-        if not theory_file_paths:
+        if theory_file_paths is None:
             self.theory_file_paths = \
                 list(self.OPTIONAL_FIELDS["theory_file_paths"])
 
         self.test_file_paths = test_file_paths
-        if not test_file_paths:
+        if test_file_paths is None:
             self.test_file_paths = self.OPTIONAL_FIELDS["test_file_paths"]
 
         self.load_pre_trained_parameter = load_pre_trained_parameter
-        if not load_pre_trained_parameter:
+        if load_pre_trained_parameter is None:
             self.load_pre_trained_parameter = \
                 self.OPTIONAL_FIELDS["load_pre_trained_parameter"]
 
         self.examples_batch_size = examples_batch_size
-        if not examples_batch_size:
+        if examples_batch_size is None:
             self.examples_batch_size = \
                 self.OPTIONAL_FIELDS["examples_batch_size"]
 
-        self.pass_all_examples_at_once = pass_all_examples_at_once
-        if not pass_all_examples_at_once:
-            self.pass_all_examples_at_once = \
-                self.OPTIONAL_FIELDS["pass_all_examples_at_once"]
-
         self.train_parameters_on_remaining_examples = \
             train_parameters_on_remaining_examples
-        if not train_parameters_on_remaining_examples:
+        if train_parameters_on_remaining_examples is None:
             self.train_parameters_on_remaining_examples = \
                 self.OPTIONAL_FIELDS["train_parameters_on_remaining_examples"]
 
@@ -287,7 +262,8 @@ class BatchStructureLearning(StructureLearningMethod):
 
     # noinspection PyMissingOrEmptyDocstring
     def required_fields(self):
-        return super().required_fields() + ["engine_system_translator"]
+        return ["knowledge_base_file_paths", "example_file_paths",
+                "output_directory", "engine_system_translator"]
 
     # noinspection PyMissingOrEmptyDocstring,PyAttributeOutsideInit
     def initialize(self):
@@ -657,26 +633,126 @@ class BatchStructureLearning(StructureLearningMethod):
         return description.strip()
 
 
-class RunTimestamps(Enum):
+class IterativeStructureLearning(StructureLearningMethod):
     """
-    A enumerator of the names for run timestamps.
+    Class to learn the logic program from iterations of examples.
     """
 
-    BEGIN = "Begin"
-    BEGIN_INITIALIZE = "Begin initializing"
-    END_INITIALIZE = "End initializing"
-    BEGIN_READ_KNOWLEDGE_BASE = "Begin reading the knowledge base"
-    END_READ_KNOWLEDGE_BASE = "End reading the knowledge base"
-    BEGIN_READ_THEORY = "Begin reading the theory"
-    END_READ_THEORY = "End reading the theory"
-    BEGIN_READ_EXAMPLES = "Begin reading the examples"
-    END_READ_EXAMPLES = "End reading the examples"
-    BEGIN_BUILD_ENGINE_TRANSLATOR = "Begin building the engine translator"
-    END_BUILD_ENGINE_TRANSLATOR = "End building the engine translator"
-    BEGIN_TRAIN = "Begin training"
-    END_TRAIN = "End training"
-    BEGIN_EVALUATION = "Begin evaluating"
-    END_EVALUATION = "End evaluating"
-    BEGIN_DISK_OUTPUT = "Begin disk output"
-    END_DISK_OUTPUT = "End disk output"
-    END = "Finished"
+    OPTIONAL_FIELDS = {
+        "iteration_prefix": "ITERATION_",
+        "logic_file_extension": ".pl",
+        "load_pre_trained_parameter": False,
+        "train_parameters_on_remaining_examples": False,
+        "theory_revision_manager": None,
+        "theory_evaluator": None,
+        "incoming_example_manager": None,
+        "revision_manager": None,
+        "theory_metrics": None,
+        "revision_operator_selector": None,
+        "revision_operator_evaluators": None,
+        "clause_modifiers": None,
+    }
+
+    def __init__(self,
+                 data_directory,
+                 output_directory,
+                 engine_system_translator,
+                 iteration_prefix=None,
+                 logic_file_extension=None,
+                 load_pre_trained_parameter=None,
+                 train_parameters_on_remaining_examples=None,
+                 theory_revision_manager=None,
+                 theory_evaluator=None,
+                 incoming_example_manager=None,
+                 revision_manager=None,
+                 theory_metrics=None,
+                 revision_operator_selector=None,
+                 revision_operator_evaluators=None,
+                 ):
+        """
+        Creates a batch structure learning method.
+
+        :param data_directory: the path of the data directory
+        :type data_directory: str
+        :param output_directory: the output directory
+        :type output_directory: str
+        :param engine_system_translator: the engine system translator
+        :type engine_system_translator: EngineSystemTranslator
+        :param iteration_prefix: the iteration prefix
+        :type iteration_prefix: Optional[str]
+        :param logic_file_extension: the logic file extension
+        :type logic_file_extension: Optional[str]
+        :param load_pre_trained_parameter: if it is to load the pre-trained
+        parameters
+        :type load_pre_trained_parameter: Optional[bool]
+        :param train_parameters_on_remaining_examples: if `True`, it trains the
+        parameters of the engine system translator on the remaining examples
+        that were not used on the revision.
+        :type train_parameters_on_remaining_examples: Optional[bool]
+        :param theory_revision_manager: the theory revision manager
+        :type theory_revision_manager: Optional[TheoryRevisionManager]
+        :param theory_evaluator: the theory evaluator
+        :type theory_evaluator: Optional[TheoryEvaluator]
+        :param incoming_example_manager: the incoming example manager
+        :type incoming_example_manager: Optional[IncomingExampleManager]
+        :param revision_manager: the revision manager
+        :type revision_manager: Optional[RevisionManager]
+        :param theory_metrics: the theory metrics
+        :type theory_metrics: Optional[List[TheoryMetric]]
+        :param revision_operator_selector: the revision operator selector
+        :type revision_operator_selector: Optional[RevisionOperatorSelector]
+        :param revision_operator_evaluators: the revision operator evaluators
+        :type revision_operator_evaluators:
+            Optional[List[RevisionOperatorEvaluator]]
+        # :param clause_modifiers: a iterable of clause modifiers
+        # :type clause_modifiers: Optional[collections.Iterable[ClauseModifier]]
+        """
+        super(IterativeStructureLearning, self).__init__()
+        self.time_measure = TimeMeasure()
+        self.time_measure.add_measure(RunTimestamps.BEGIN)
+        self.data_directory = data_directory
+        self.output_directory = output_directory
+
+        self.engine_system_translator = engine_system_translator
+
+        self.iteration_prefix = iteration_prefix
+        if iteration_prefix is None:
+            self.iteration_prefix = self.OPTIONAL_FIELDS["iteration_prefix"]
+
+        self.logic_file_extension = logic_file_extension
+        if logic_file_extension is None:
+            self.logic_file_extension = \
+                self.OPTIONAL_FIELDS["logic_file_extension"]
+
+        self.load_pre_trained_parameter = load_pre_trained_parameter
+        if load_pre_trained_parameter is None:
+            self.load_pre_trained_parameter = \
+                self.OPTIONAL_FIELDS["load_pre_trained_parameter"]
+
+        self.train_parameters_on_remaining_examples = \
+            train_parameters_on_remaining_examples
+        if train_parameters_on_remaining_examples is None:
+            self.train_parameters_on_remaining_examples = \
+                self.OPTIONAL_FIELDS["train_parameters_on_remaining_examples"]
+
+        self.theory_revision_manager = theory_revision_manager
+        self.theory_evaluator = theory_evaluator
+        self.incoming_example_manager = incoming_example_manager
+        self.revision_manager = revision_manager
+        self.theory_metrics = theory_metrics
+        self.revision_operator_selector = revision_operator_selector
+        self.revision_operator_evaluators = revision_operator_evaluators
+
+    # noinspection PyMissingOrEmptyDocstring
+    def required_fields(self):
+        return ["data_directory",
+                "output_directory", "engine_system_translator"]
+
+    # TODO: implement
+    # noinspection PyMissingOrEmptyDocstring,PyAttributeOutsideInit
+    def initialize(self):
+        super().initialize()
+
+    # noinspection PyMissingOrEmptyDocstring
+    def run(self):
+        pass
