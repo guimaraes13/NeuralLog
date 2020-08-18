@@ -64,6 +64,7 @@ def decorate_factory_function():
     return decorator
 
 
+# noinspection PyPep8
 def get_initial_value_by_name(initializer, shape):
     """
     Gets the initializer by name or config.
@@ -76,6 +77,7 @@ def get_initial_value_by_name(initializer, shape):
     :rtype: function
     """
     initializer = get_initializer(initializer)
+    # noinspection PyPep8
     initial_value = lambda: initializer(shape)
     return initial_value
 
@@ -248,6 +250,7 @@ class LayerFactory:
                     term_types.append(FactoryTermType.CONSTANT)
             else:
                 term_types.append(FactoryTermType.VARIABLE)
+        # noinspection PyPep8
         trainable = self.train and \
                     atom.predicate in self.program.trainable_predicates
         key = TensorFunctionKey(atom.arity(),

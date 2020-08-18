@@ -167,8 +167,10 @@ def is_clause_fact(clause):
     if body.negated:
         return False
 
-    return clause.head.predicate == body.predicate and \
-           clause.head.terms == body.terms
+    if clause.head.predicate != body.predicate:
+        return False
+
+    return clause.head.terms == body.terms
 
 
 def log_equivalent_clause(current_clause, older_clause):

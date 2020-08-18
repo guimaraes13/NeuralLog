@@ -2,11 +2,12 @@
 The core of the structure learning system.
 """
 import collections
-from typing import Set
+from typing import Set, Dict
 
 import src.knowledge.manager.example_manager as manager
 from src.knowledge.examples import Examples, ExamplesInferences
 from src.knowledge.program import NeuralLogProgram
+from src.knowledge.theory.evaluation.metric.theory_metric import TheoryMetric
 from src.knowledge.theory.evaluation.theory_evaluator import TheoryEvaluator
 from src.knowledge.theory.manager.theory_revision_manager import \
     TheoryRevisionManager
@@ -249,7 +250,7 @@ class StructureLearningSystem(Initializable):
         :param examples: the examples
         :type examples: Examples
         :param inferences: the inferences
-        :type inferences: ExamplesInference
+        :type inferences: ExamplesInferences
         :return: a dictionary of evaluations per metric
         :rtype: Dict[TheoryMetric, float]
         """

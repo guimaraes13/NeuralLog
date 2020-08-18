@@ -1,6 +1,8 @@
 """
 Contains useful method to read and write files.
 """
+import sys
+
 from src.knowledge.examples import ExamplesInferences, ExampleIterator
 from src.language.language import AtomClause
 from src.language.parser.ply.neural_log_parser import NeuralLogLexer, \
@@ -24,7 +26,8 @@ def read_logic_program_from_file(filepath):
     return clauses
 
 
-def print_predictions_to_file(examples, predictions, filepath):
+def print_predictions_to_file(examples, predictions, filepath,
+                              default_value=-sys.float_info.max):
     """
     Prints the `predictions` to the file in `filepath`.
 
@@ -34,12 +37,16 @@ def print_predictions_to_file(examples, predictions, filepath):
     :type predictions: ExamplesInferences
     :param filepath: the file path
     :type filepath: str
+    :param default_value: the default value to save not inferred examples
+    :type default_value: float
     """
     output = open(filepath, "w")
     for atom in ExampleIterator(examples):
+        clause = AtomClause(atom)
         if predictions.contains_example(atom):
-            clause = AtomClause(atom)
             clause.atom.weight = predictions.get_value_for_example(atom)
-            output.write(str(clause))
-            output.write("\n")
+        else:
+            clause.atom.weight = default_value
+        output.write(str(clause))
+        output.write("\n")
     output.close()

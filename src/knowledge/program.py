@@ -159,6 +159,7 @@ def print_neural_log_program(program, writer=sys.stdout):
     :type program: NeuralLogProgram
     :param writer: the writer. Default is to print to the standard output
     """
+    # noinspection PyPep8
     key = lambda x: (x.arity, x.name)
     for predicate in sorted(program.facts_by_predicate.keys(), key=key):
         for item in program.facts_by_predicate[predicate].values():
@@ -686,14 +687,18 @@ class NeuralLogProgram:
     """
 
     LEARN_BUILTIN_PREDICATE = "learn"
+    EXAMPLE_PREDICATE = "example"
+    MEGA_EXAMPLE_PREDICATE = "mega_example"
 
     BUILTIN_PREDICATES = {
-        "example": [Predicate("example", -1)],
+        EXAMPLE_PREDICATE: [Predicate(EXAMPLE_PREDICATE, -1)],
         LEARN_BUILTIN_PREDICATE: [Predicate(LEARN_BUILTIN_PREDICATE, 1)],
         "set_parameter": [Predicate("set_parameter", -1)],
         "set_predicate_parameter": [Predicate("set_predicate_parameter", -1)],
-        "mega_example": [Predicate("mega_example", -1)]
+        MEGA_EXAMPLE_PREDICATE: [Predicate(MEGA_EXAMPLE_PREDICATE, -1)]
     }
+
+    EXAMPLES_PREDICATES = [EXAMPLE_PREDICATE, MEGA_EXAMPLE_PREDICATE]
 
     builtin = build_builtin_predicate()
 
@@ -1505,7 +1510,7 @@ class NeuralLogProgram:
             return value
 
     # noinspection PyUnusedLocal
-    @builtin("example")
+    @builtin(EXAMPLE_PREDICATE)
     def _example(self, example, *args, **kwargs):
         """
         Process the builtin `example` predicate.
@@ -1565,7 +1570,7 @@ class NeuralLogProgram:
         self.logic_predicates.add(atom.predicate)
 
     # noinspection PyUnusedLocal,DuplicatedCode
-    @builtin("mega_example")
+    @builtin(MEGA_EXAMPLE_PREDICATE)
     def _mega_example(self, example, *args, **kwargs):
         """
         Process the builtin `mega_example` predicate.

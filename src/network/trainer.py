@@ -240,6 +240,7 @@ class Trainer:
         loss_function = self.parameters["loss_function"]
         label_function = None
         if self.parameters["clip_labels"]:
+            # noinspection PyPep8
             label_function = lambda x: tf.clip_by_value(x, clip_value_min=0.0,
                                                         clip_value_max=1.0)
         if isinstance(loss_function, dict):

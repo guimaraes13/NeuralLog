@@ -87,8 +87,8 @@ class ClauseEvaluationProcess2(Process):
         self.begin_performance = time_measure.performance_time()
         self.begin_real = time_measure.process_time()
         self.evaluation = \
-            self.shared_dict["theory_evaluator"]. \
-                evaluate_theory_appending_clause(
+            self.shared_dict[
+                "theory_evaluator"].evaluate_theory_appending_clause(
                 self.shared_dict["examples"],
                 self.shared_dict["theory_metric"],
                 self.shared_dict["horn_clause"]

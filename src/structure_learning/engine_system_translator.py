@@ -212,6 +212,15 @@ class EngineSystemTranslator(Initializable):
         self._output_path = value
 
     @abstractmethod
+    def build_model(self):
+        """
+        Builds the model based on the current knowledge base and the theory.
+        This method must be called whenever the knowledge base or the theory
+        change.
+        """
+        pass
+
+    @abstractmethod
     def infer_examples(self, examples, retrain=False, theory=None,
                        positive_threshold=None):
         """
@@ -369,13 +378,13 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
     def knowledge_base(self, value: NeuralLogProgram):
         self._knowledge_base = value.copy()
         self.knowledge_base.parameters.setdefault("inverse_relations", False)
-        self._build_model()
+        self.build_model()
 
     # noinspection PyMissingOrEmptyDocstring
     @EngineSystemTranslator.theory.setter
     def theory(self, value):
         self._theory = value
-        self._build_model()
+        self.build_model()
 
     # noinspection PyMissingOrEmptyDocstring
     def required_fields(self):
@@ -384,9 +393,14 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
     # noinspection PyMissingOrEmptyDocstring
     def initialize(self):
         super().initialize()
-        self._build_model()
+        self.build_model()
 
-    def _build_model(self):
+    def build_model(self):
+        """
+        Builds the model based on the current knowledge base and the theory.
+        This method must be called whenever the knowledge base or the theory
+        change.
+        """
         if not self.knowledge_base or not self.theory:
             return
         program = self.knowledge_base.copy()

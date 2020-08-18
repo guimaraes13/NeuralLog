@@ -962,6 +962,7 @@ class TermType:
         :return: true if they are compatible, false otherwise.
         :rtype: bool
         """
+        # noinspection PyPep8
         return self.number is None or other.number is None \
                or self.number == other.number
 

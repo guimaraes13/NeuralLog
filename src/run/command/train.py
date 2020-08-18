@@ -358,8 +358,8 @@ class Train(Command):
         start_func = time.perf_counter()
         logger.info("Building model...")
         self.trainer = Trainer(self.neural_program, self.output_path)
-        self.neural_dataset = self.trainer.build_dataset()
         self.trainer.init_model()
+        self.neural_dataset = self.trainer.build_dataset()
         self.model = self.trainer.model
         self.model.build_layers(self.neural_dataset.get_target_predicates())
         self._read_parameters()

@@ -2,7 +2,7 @@
 Measures training statistics.
 """
 from functools import reduce
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, TypeVar, Generic
 
 from src.knowledge.theory.evaluation.metric.theory_metric import TheoryMetric
 from src.util.time_measure import TimeMeasure
@@ -112,3 +112,52 @@ class RunStatistics:
         message += f"\tTotal Run Time:\t{self.time_measure}\n"
 
         return message
+
+
+T = TypeVar('T')
+
+
+class IterationStatistics(Generic[T]):
+    """
+    Class to hold the statistics of an iteration experiment. The idea is to
+    serialize this class using the yaml library, in order to be able to consult
+    the statistics of a run in a way that is both human and machine friendly.
+    """
+
+    def __init__(self, number_of_iterations=None):
+        self.number_of_iterations: Optional[float] = number_of_iterations
+        self.iteration_prefix = ""
+
+        self.iteration_knowledge_sizes = []
+        self.iteration_examples_sizes = []
+
+        self.iteration_train_evaluation = []
+        self.iteration_test_evaluation = []
+
+        self.time_measure: TimeMeasure[T] = TimeMeasure()
+
+    # TODO: implement
+
+    def add_iteration_train_evaluation(self, evaluations):
+        """
+        Adds the iteration train evaluations to the statistics.
+
+        :param evaluations: the evaluations
+        :type evaluations: Dict[TheoryMetric, float]
+        """
+        self.iteration_train_evaluation.append(evaluations)
+
+    def add_iteration_test_evaluation(self, evaluations):
+        """
+        Adds the iteration test evaluations to the statistics.
+
+        :param evaluations: the evaluations
+        :type evaluations: Dict[TheoryMetric, float]
+        """
+        self.iteration_test_evaluation.append(evaluations)
+
+    def __repr__(self):
+        sorted_metrics = self.get_sorted_metrics()
+        description = ""
+
+        return description.strip()
