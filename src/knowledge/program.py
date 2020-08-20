@@ -18,6 +18,7 @@ from src.language.language import Number, TermType, Predicate, Atom, \
     PredicateTypeError, \
     UnsupportedMatrixRepresentation, Literal, \
     get_constant_from_string, KnowledgeException, get_variable_atom
+from src.util import OrderedSet
 
 TRUE_PREDICATE = "true"
 FALSE_PREDICATE = "false"
@@ -741,6 +742,9 @@ class NeuralLogProgram:
         self.clauses_by_predicate: Dict[Predicate, List[HornClause]] = dict()
         "The clauses by predicate"
 
+        self.builtin_facts: Set[AtomClause] = OrderedSet()
+        "The builtin facts"
+
         self.constants: Set[Term] = set()
         "All the constants"
 
@@ -803,6 +807,7 @@ class NeuralLogProgram:
             if isinstance(clause, AtomClause):
                 if self._is_builtin_predicate(clause.atom.predicate):
                     self.is_up_to_date = False
+                    self.builtin_facts.add(clause)
                     self._process_builtin_clause(clause, *args, **kwargs)
                     continue
 

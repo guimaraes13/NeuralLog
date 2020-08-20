@@ -250,9 +250,8 @@ class LayerFactory:
                     term_types.append(FactoryTermType.CONSTANT)
             else:
                 term_types.append(FactoryTermType.VARIABLE)
-        # noinspection PyPep8
-        trainable = self.train and \
-                    atom.predicate in self.program.trainable_predicates
+        trainable = \
+            self.train and atom.predicate in self.program.trainable_predicates
         key = TensorFunctionKey(atom.arity(),
                                 self.program.get_true_arity(atom.predicate),
                                 trainable, *term_types)

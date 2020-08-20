@@ -915,9 +915,10 @@ class IterativeStructureLearning(StructureLearningMethod):
     def build_statistics(self):
         self.time_stamp_factory = IterationTimeStampFactory()
         self.iteration_statistics = IterationStatistics()
+        self.iteration_statistics.iteration_names = self.iteration_directories
         self.iteration_statistics.number_of_iterations = \
             len(self.iteration_knowledge)
-        self.iteration_statistics.iteration_prefix = self.iteration_prefix
+        self.iteration_statistics.iteration_names = self.iteration_prefix
         self.iteration_statistics.time_measure = self.time_measure
 
     def add_iteration_knowledge(self, index):

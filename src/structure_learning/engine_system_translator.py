@@ -42,9 +42,9 @@ def append_theory(program, theory):
     """
     if theory is not None:
         if isinstance(theory, NeuralLogProgram):
-            # TODO: Also consider the builtin facts of the theory
             for clauses in theory.clauses_by_predicate.values():
                 program.add_clauses(clauses)
+            program.add_clauses(theory.builtin_facts)
         else:
             program.add_clauses(theory)
 

@@ -785,6 +785,10 @@ class MetaRevisionOperator(ro.RevisionOperator):
         body = filter(lambda x: x != TRUE_LITERAL, first_clause.body)
         new_clause = HornClause(first_clause.head, *body)
         new_clause = self.apply_clause_modifiers(new_clause, targets)
+        if len(new_clause.body) == 1 and \
+                Literal(new_clause.head) == new_clause.body[0]:
+            return None
+
         revised_clause = new_clause
 
         current_theory = self.learning_system.theory.copy()
@@ -834,6 +838,9 @@ class MetaRevisionOperator(ro.RevisionOperator):
         if len(new_clause.body) == 0:
             return None
         new_clause = self.apply_clause_modifiers(new_clause, targets)
+        if len(new_clause.body) == 1 and \
+                Literal(new_clause.head) == new_clause.body[0]:
+            return None
         revised_clause = new_clause
 
         current_theory = self.learning_system.theory.copy()
@@ -842,6 +849,7 @@ class MetaRevisionOperator(ro.RevisionOperator):
 
         return current_theory, revised_clause, None
 
+    # noinspection DuplicatedCode
     def _build_literal_leaf_theory(self, program, revision_leaf, targets):
         """
         Builds a theory, from the found program, in order to revise the current
@@ -887,6 +895,9 @@ class MetaRevisionOperator(ro.RevisionOperator):
             if len(new_clause.body) == 0:
                 return None
             new_clause = self.apply_clause_modifiers(new_clause, targets)
+            if len(new_clause.body) == 1 and \
+                    Literal(new_clause.head) == new_clause.body[0]:
+                return None
             revised_clause = new_clause
             current_theory.add_clauses([new_clause])
             current_theory.add_clauses(program[1:])
