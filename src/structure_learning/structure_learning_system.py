@@ -120,12 +120,10 @@ class StructureLearningSystem(Initializable):
     # noinspection PyMissingOrEmptyDocstring
     @property
     def knowledge_base(self):
-        return self._knowledge_base
+        return self.engine_system_translator.knowledge_base
 
     @knowledge_base.setter
     def knowledge_base(self, value: NeuralLogProgram):
-        self._knowledge_base = value.copy()
-        add_null_atoms(self._knowledge_base)
         self.engine_system_translator.knowledge_base = value
 
     @property
@@ -136,11 +134,10 @@ class StructureLearningSystem(Initializable):
         :return: the theory
         :rtype: NeuralLogProgram
         """
-        return self._theory
+        return self.engine_system_translator.theory
 
     @theory.setter
     def theory(self, value):
-        self._theory = value
         self.engine_system_translator.theory = value
 
     def revise_theory(self, revision_examples):
@@ -273,3 +270,5 @@ class StructureLearningSystem(Initializable):
         :type working_directory: str
         """
         self.engine_system_translator.load_parameters(working_directory)
+        self.knowledge_base = self.engine_system_translator.knowledge_base
+        self.theory = self.engine_system_translator.theory

@@ -6,10 +6,7 @@ iteration_prefix:
 output_directory:
 
 logic_file_extension: .pl
-
 load_pre_trained_parameter: false
-examples_batch_size: 10
-
 train_parameters_on_remaining_examples: false
 
 engine_system_translator: !!python/object:src.structure_learning.engine_system_translator.NeuralLogEngineSystemTranslator {}

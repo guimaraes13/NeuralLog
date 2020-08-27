@@ -257,6 +257,9 @@ class LearnStructureIterative(LearnStructure):
         parser.add_argument("--dataDirectory", "-d", metavar="data",
                             type=str, required=False, default=None,
                             help="The data directory.")
+        parser.add_argument("--theory", "-t", metavar="theory.pl",
+                            type=str, required=False, default=None, nargs="*",
+                            help="The theory file(s).")
         parser.add_argument("--iterationPrefix", "-i", metavar="ITERATION_",
                             type=str, required=False, default=None,
                             help="The prefix of the iteration directories.")
@@ -328,6 +331,9 @@ class LearnStructureIterative(LearnStructure):
         if args.dataDirectory is not None:
             self.learning_method.data_directory = args.dataDirectory
 
+        if args.theory is not None:
+            self.learning_method.theory_file_paths = args.theory
+
         if args.iterationPrefix is not None:
             self.learning_method.iteration_prefix = args.iterationPrefix
 
@@ -347,7 +353,8 @@ class LearnStructureIterative(LearnStructure):
         if not os.path.isdir(self.output_directory):
             os.makedirs(self.output_directory, exist_ok=True)
 
-        if self.learning_method.output_directory is None:
+        if not hasattr(self.learning_method, "output_directory") or \
+                self.learning_method.output_directory is None:
             self.learning_method.output_directory = self.output_directory
         self.save_configuration()
         src.util.print_args(args, logger)

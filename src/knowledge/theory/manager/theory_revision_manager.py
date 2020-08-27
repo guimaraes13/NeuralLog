@@ -211,11 +211,11 @@ class HoeffdingBoundTheoryManager(TheoryRevisionManager):
         super().__init__(learning_system, revision_manager, theory_metric,
                          train_using_all_examples)
 
-        self._delta = delta
+        self.delta = delta
         "The delta value to compute the Hoeffding's bound."
 
-        if self._delta is None:
-            self._delta = self.OPTIONAL_FIELDS["delta"]
+        if self.delta is None:
+            self.delta = self.OPTIONAL_FIELDS["delta"]
 
         self.delta_update_function = delta_update_function
         """
@@ -225,14 +225,14 @@ class HoeffdingBoundTheoryManager(TheoryRevisionManager):
         self._delta_function = None
 
     @property
-    def delta(self):
+    def current_delta(self):
         """
         The delta value to compute the Hoeffding's bound.
         """
-        return self._delta
+        return self.delta
 
-    @delta.setter
-    def delta(self, value):
+    @current_delta.setter
+    def current_delta(self, value):
         self.set_delta(value)
 
     def set_delta(self, value):
@@ -247,7 +247,7 @@ class HoeffdingBoundTheoryManager(TheoryRevisionManager):
         :rtype: bool
         """
         if 0.0 <= value <= 1.0:
-            self._delta = value
+            self.delta = value
             return True
         return False
 
@@ -280,9 +280,11 @@ class HoeffdingBoundTheoryManager(TheoryRevisionManager):
             self.theory_metric.get_best_possible_improvement(
                 self.theory_evaluation)
         if best_possible_improvement < epsilon:
-            logger.debug(
+            logger.info(
                 "Skipping the revision on examples, there are not enough "
-                "examples to exceed the threshold.")
+                "examples to exceed the threshold. Current evaluation:\t%f, "
+                "threshold of %f.", self.theory_evaluation, epsilon
+            )
             return False
 
         number_of_examples = examples.get_number_of_examples(
@@ -312,15 +314,15 @@ class HoeffdingBoundTheoryManager(TheoryRevisionManager):
         :return: the Hoeffding's bound
         :rtype: float
         """
-        return math.sqrt((metric_range * metric_range * -math.log(self.delta)) /
-                         (2 * sample_size))
+        return math.sqrt((metric_range * metric_range *
+                          -math.log(self.current_delta)) / (2 * sample_size))
 
     def update_delta(self):
         """
         Updates the delta each time a revision is accepted, given a specified
         function f: R -> R, defined in `self.delta_update_function`.
         """
-        old_delta = self.delta
+        old_delta = self.current_delta
         new_delta = self._delta_function(old_delta)
         if self.set_delta(new_delta):
             logger.debug("Delta updated from\t%f to\t%f", old_delta, new_delta)

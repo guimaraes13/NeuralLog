@@ -758,6 +758,12 @@ class NeuralLogProgram:
         self.logic_predicates: Set[Predicate] = set()
         "The logic predicates"
 
+        self.clause_predicates: Set[Predicate] = set()
+        "The clause predicates"
+
+        self.fact_predicates: Set[Predicate] = set()
+        "The fact predicates"
+
         self.functional_predicates: Set[Predicate] = set()
         "The functional predicates"
 
@@ -802,7 +808,11 @@ class NeuralLogProgram:
         :param clauses: the clauses
         :type clauses: collections.Iterable[Clause]
         :raise ClauseMalformedException: case the clause is malformed
+        :return: the total number of processed clauses, it includes facts,
+        rules, examples and parameters
+        :rtype: int
         """
+        total = 0
         for clause in clauses:
             if isinstance(clause, AtomClause):
                 if self._is_builtin_predicate(clause.atom.predicate):
@@ -819,15 +829,19 @@ class NeuralLogProgram:
                 if clause in clauses_for_predicate:
                     return
                 self._add_predicate(clause.head)
-                self.logic_predicates.add(clause.head.predicate)
+                self.clause_predicates.add(clause.head.predicate)
                 for atom in clause.body:
                     self._add_predicate(atom)
                 clauses_for_predicate.append(clause)
                 self.is_up_to_date = False
             else:
                 raise ClauseMalformedException(clause)
+            total += 1
+
+        return total
 
     def _expand_clauses(self):
+        self.logic_predicates = set(self.fact_predicates)
         expanded_trainable = set()
         for trainable in self.trainable_predicates:
             for predicate in self.predicates.keys():
@@ -835,9 +849,54 @@ class NeuralLogProgram:
                     expanded_trainable.add(predicate)
                     self.logic_predicates.add(predicate)
         self.trainable_predicates.update(expanded_trainable)
+        self._update_logic_predicates()
+        # self.logic_predicates.update(self.clause_predicates)
         # noinspection PyTypeChecker
         self.functional_predicates = \
             self.predicates.keys() - self.logic_predicates
+
+    def _update_logic_predicates(self):
+        """
+        Updates the set of logic predicates by adding predicates that appears
+        in
+        logic rules.
+
+        A rule is considered to be `logic` if it contains at least a logic
+        predicate. A predicate is considered `logic` if it appears in an
+        example, in a fact or in the head of a logic rule.
+        """
+        for predicate in self.clauses_by_predicate:
+            if self.is_logic_predicate(predicate):
+                self.logic_predicates.add(predicate)
+
+    def is_logic_predicate(self, predicate, dependence=()):
+        """
+        Checks whether a predicate is logic. A predicate is considered `logic`
+        if it appears in an example, in a fact or in the head of a logic rule.
+
+        :param predicate: the predicate
+        :type predicate: Predicate
+        :param dependence: the dependence predicates, predicates in the head
+        of rules used to prove the current predicate, in order to avoid cycles
+        :type dependence: Collection[Predicate]
+        :return: `True`, if the predicate is logic; otherwise `False`
+        :rtype: bool
+        """
+        if predicate in self.logic_predicates:
+            return True
+        if predicate in self.fact_predicates:
+            return True
+        if predicate in dependence:
+            return False
+        dependence = set(dependence)
+        for clause in self.clauses_by_predicate.get(predicate, ()):
+            new_dependence = set(dependence)
+            new_dependence.add(clause.head.predicate)
+            for literal in clause.body:
+                if self.is_logic_predicate(literal.predicate, new_dependence):
+                    return True
+
+        return False
 
     def add_fact(self, atom, report_replacement=False):
         """
@@ -870,7 +929,7 @@ class NeuralLogProgram:
                                old_atom, atom)
         fact_dict[atom.simple_key()] = atom
         self._update_atoms_by_term(atom)
-        self.logic_predicates.add(atom.predicate)
+        self.fact_predicates.add(atom.predicate)
         self.is_up_to_date = atom == old_atom
 
     def _update_atoms_by_term(self, atom):
@@ -1572,7 +1631,7 @@ class NeuralLogProgram:
                                atom, atom.provenance)
         example_dict[key] = atom
         self._add_predicate(atom)
-        self.logic_predicates.add(atom.predicate)
+        self.fact_predicates.add(atom.predicate)
 
     # noinspection PyUnusedLocal,DuplicatedCode
     @builtin(MEGA_EXAMPLE_PREDICATE)
@@ -1598,7 +1657,7 @@ class NeuralLogProgram:
         example_dict = example_dict.setdefault(atom.predicate, [])
         example_dict.append(atom)
         self._add_predicate(atom)
-        self.logic_predicates.add(atom.predicate)
+        self.fact_predicates.add(atom.predicate)
 
     # noinspection PyUnusedLocal
     @builtin("learn")

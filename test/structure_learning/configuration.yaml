@@ -35,6 +35,6 @@ revision_manager: !!python/object:src.knowledge.theory.manager.revision.revision
 revision_operator_evaluators:
   - !!python/object:src.knowledge.theory.manager.revision.revision_operator_evaluator.RevisionOperatorEvaluator
     revision_operator: !!python/object:src.knowledge.theory.manager.revision.operator.revision_operator.BottomClauseBoundedRule
-      theory_metric: !!python/object:src.knowledge.theory.evaluation.metric.theory_metric.RocCurveMetric {}
+      theory_metric: !!python/object:src.knowledge.theory.evaluation.metric.theory_metric.PrecisionRecallCurveMetric {}
       relevant_depth: 0
       refine: true

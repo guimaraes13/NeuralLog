@@ -126,7 +126,7 @@ class IterationStatistics(Generic[T]):
 
     def __init__(self, number_of_iterations=None):
         self.number_of_iterations: Optional[float] = number_of_iterations
-        self.iteration_names = ""
+        self.iteration_names = []
 
         self.iteration_knowledge_sizes = []
         self.iteration_examples_sizes = []

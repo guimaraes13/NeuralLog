@@ -232,10 +232,8 @@ def get_initial_clause_head(initial_clause_head, target_predicate):
     :rtype: Atom
     """
     if target_predicate:
-        initial_clause_head = \
-            Atom(target_predicate, *initial_clause_head.terms)
-    else:
-        initial_clause_head = initial_clause_head
+        return Atom(target_predicate, *initial_clause_head.terms)
+
     return initial_clause_head
 
 
@@ -483,11 +481,12 @@ class RelevantLiteralAppendOperator(LiteralAppendOperator[Literal]):
     # noinspection PyMissingOrEmptyDocstring,DuplicatedCode
     def build_extended_horn_clause(self, examples, initial_clause,
                                    equivalent_literals, target_predicate=None):
-        substitution_clause, type_clause = \
-            build_substitution_clause(
-                initial_clause, self.learning_system.knowledge_base)
         initial_clause_head = \
             get_initial_clause_head(initial_clause.head, target_predicate)
+        _initial_clause = HornClause(initial_clause_head, *initial_clause.body)
+        substitution_clause, type_clause = \
+            build_substitution_clause(
+                _initial_clause, self.learning_system.knowledge_base)
         query_set = build_queries_from_examples(
             self.get_based_examples(examples), initial_clause_head,
             substitution_clause.head, True)

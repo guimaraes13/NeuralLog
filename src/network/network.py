@@ -480,7 +480,8 @@ class NeuralLogNetwork(keras.Model):
         key = (renamed_literal, inverted)
         literal_layer = self._literal_layers.get(key, None)
         if literal_layer is None:
-            if atom.predicate in self.program.logic_predicates:
+            if atom.predicate in self.program.logic_predicates or \
+                    atom.predicate in self.program.clause_predicates:
                 logger.debug("Building layer for literal: %s", renamed_literal)
                 predicates_depths.setdefault(atom.predicate, -1)
                 predicates_depths[atom.predicate] += 1

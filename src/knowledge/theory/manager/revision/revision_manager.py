@@ -213,7 +213,7 @@ class BestLeafRevisionManager(RevisionManager):
             revision_points.sort(
                 key=ro.my_cmp_to_key(
                     self.revision_heuristic.compare,
-                    lambda x, y, _: (x.get_training_examples(all_examples), y)))
+                    lambda x: (x[0].get_training_examples(all_examples), x[1])))
             for revision_point, _, index in revision_points[:total_revision]:
                 self.tree_theory.current_index = index
                 self.call_revision(revision_point)

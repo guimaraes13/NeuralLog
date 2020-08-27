@@ -148,7 +148,6 @@ class AddNodeTreeRevisionOperator(TreeRevisionOperator):
     # noinspection PyMissingOrEmptyDocstring
     def perform_operation(self, targets, minimum_threshold=None):
         revision_leaf = self.tree_theory.get_revision_leaf()
-        logger.debug("Trying to revise rule:\t%s", revision_leaf)
         if revision_leaf.is_root:
             # This is the root node
             return self.add_rule_to_theory(revision_leaf, targets)
@@ -202,6 +201,7 @@ class AddNodeTreeRevisionOperator(TreeRevisionOperator):
         :return: the new sorted theory
         :rtype: NeuralLogProgram
         """
+        logger.debug("Trying to revise rule:\t%s", node)
         element = \
             HornClause(node.element.head) if node.is_root else node.element
         target_predicate = self.tree_theory.get_target_predicate()

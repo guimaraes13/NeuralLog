@@ -15,6 +15,9 @@ from src.util import Initializable
 
 POSITIVE_LABEL = 1.0
 
+FULL_CURVE = [(0.0, 1.0), (1.0, 1.0)]
+EMPTY_CURVE = [(0.0, 0.0), (1.0, 0.0)]
+
 
 class TheoryMetric(Initializable):
     """
@@ -313,12 +316,11 @@ class ListAccumulator(AccumulatorMetric[Tuple[List[float], List[float]],
 
     # noinspection PyMissingOrEmptyDocstring
     def initial_value(self):
-        return [], []
+        return []
 
     # noinspection PyMissingOrEmptyDocstring
     def accumulate_value(self, current, new):
-        current[0].append(new[0])
-        current[1].append(new[1])
+        current.append(new)
 
         return current
 
@@ -387,13 +389,173 @@ def append_default_values(*results):
             result.append(POSITIVE_LABEL)
 
 
-class RocCurveMetric(ListAccumulator):
+# noinspection PyMissingOrEmptyDocstring
+def convert_true_pred(results):
+    y_true = []
+    y_pred = []
+    for result in results:
+        y_true.append(result[0])
+        y_pred.append(result[1])
+
+    return y_true, y_pred
+
+
+def integrate_curve(curve_points):
+    """
+    Integrates the curve using the trapezoid method.
+
+    :param curve_points: the list of point of the curve
+    :type curve_points: List[Tuple[float, float]]
+    :return: the integration of the curve
+    :rtype: float
+    """
+    area = 0.0
+    for i in range(1, len(curve_points)):
+        area += (curve_points[i][0] - curve_points[i - 1][0]) * \
+                ((curve_points[i][1] + curve_points[i - 1][1]) / 2)
+
+    return area
+
+
+class CurveMetric(ListAccumulator):
+    """
+    Defines a curve metric.
+    """
+
+    # noinspection PyMissingOrEmptyDocstring
+    def calculate_result(self, result):
+        if not result:
+            return self.default_value
+
+        curve_points = self.build_curve(result)
+        return integrate_curve(curve_points)
+
+    def build_curve(self, results):
+        """
+        Builds the curve based on the results.
+
+        :param results: a list containing tuples where the first element of the
+        tuple is the true score and the second element is the predict scores
+        of the example
+        :type results: List[Tuple[float, float]]
+        :return: the curve as a list of points in a 2D space
+        :rtype: List[Tuple[float, float]]
+        """
+        if len(results) == 0:
+            return FULL_CURVE
+
+        positives = sum(map(lambda x: x[0] > 0.0, results))
+        negatives = len(results) - positives
+
+        if negatives == 0:
+            return FULL_CURVE
+
+        if positives == 0:
+            return EMPTY_CURVE
+
+        return self.get_curve_points(results, positives, negatives)
+
+    def get_curve_points(self, results, positives, negatives):
+        """
+        Calculates the curve points
+
+        :param results: a list containing tuples where the first element of the
+        tuple is the true score and the second element is the predict scores
+        of the example
+        :type results: List[Tuple[float, float]]
+        :param positives: the number of positive examples
+        :type positives: int
+        :param negatives: the number of negative examples
+        :type negatives: int
+        :return: the curve as a list of points in a 2D space
+        :rtype: List[Tuple[float, float]]
+        """
+        results.sort(key=lambda x: x[1], reverse=True)
+        points = []
+
+        current = results[0][1] + 1
+        true_positives = 0
+        false_positives = 0
+        points.append(self.build_point(
+            true_positives, false_positives, positives, negatives))
+        for true, pred in results:
+            if true > 0:
+                true_positives += 1
+            else:
+                false_positives += 1
+            if pred >= current:
+                continue
+            current = pred
+            points.append(self.build_point(
+                true_positives, false_positives, positives, negatives))
+        points.append(self.build_point(
+            true_positives, false_positives, positives, negatives))
+
+        return points
+
+    @abstractmethod
+    def build_point(
+            self, true_positives, false_positives, positives, negatives):
+        """
+        Builds a point of the curve.
+
+        :param true_positives: the number of true positive examples
+        :type true_positives: int
+        :param false_positives: the number of false positive examples
+        :type false_positives: int
+        :param positives: the number of positive examples
+        :type positives: int
+        :param negatives: the number of negative examples
+        :type negatives: int
+        :return: the point of the curve
+        :rtype: Tuple[float, float]
+        """
+        pass
+
+
+class RocCurveMetric(CurveMetric):
     """
     Computes the area under the ROC curve.
     """
 
     # noinspection PyMissingOrEmptyDocstring
+    def build_point(
+            self, true_positives, false_positives, positives, negatives):
+        true_positive_rate = float(true_positives) / positives \
+            if positives > 0 else 1.0
+        false_positive_rate = float(false_positives) / negatives \
+            if negatives > 0 else 0.0
+
+        return false_positive_rate, true_positive_rate
+
+    # # noinspection PyMissingOrEmptyDocstring
+    # def calculate_result(self, result):
+    #     if len(result) == 0:
+    #         return self.default_value
+    #     result = convert_true_pred(result)
+    #     # In the case where there is only on class in the result, the area
+    #     # under the ROC curve will not be defined.
+    #     # In this case, it appends a positive and a negative correct
+    #     # classified example to the result.
+    #     # This is not ideal, since it would distort the metric, however,
+    #     # this distortion should be negligible for a large set of examples.
+    #     append_default_values(*result)
+    #     return sklearn.metrics.roc_auc_score(*result)
+
+    def __repr__(self):
+        return "ROC Curve"
+
+
+class SKLearnRoc(ListAccumulator):
+    """
+    Computes the area under the ROC curve using the SKLearn library.
+    """
+
+    # noinspection PyMissingOrEmptyDocstring
     def calculate_result(self, result):
+        if len(result) == 0:
+            return self.default_value
+        result = convert_true_pred(result)
         # In the case where there is only on class in the result, the area
         # under the ROC curve will not be defined.
         # In this case, it appends a positive and a negative correct
@@ -404,17 +566,32 @@ class RocCurveMetric(ListAccumulator):
         return sklearn.metrics.roc_auc_score(*result)
 
     def __repr__(self):
-        return "ROC Curve"
+        return "SKLearn ROC Curve"
 
 
-class PrecisionRecallCurveMetric(ListAccumulator):
+class PrecisionRecallCurveMetric(CurveMetric):
     """
     Computes the area under the Precision-Recall curve.
     """
 
     # noinspection PyMissingOrEmptyDocstring
-    def calculate_result(self, result):
-        return sklearn.metrics.average_precision_score(*result)
+    def build_point(
+            self, true_positives, false_positives, positives, negatives):
+        positive_predictions = (true_positives + false_positives)
+        precision = float(true_positives) / positive_predictions \
+            if positive_predictions > 0 else 1.0
+        recall = float(true_positives) / positives \
+            if positives > 0 else 1.0
+
+        return recall, precision
+
+    # # noinspection PyMissingOrEmptyDocstring
+    # def calculate_result(self, result):
+    #     if len(result) == 0:
+    #         return self.default_value
+    #
+    #     result = convert_true_pred(result)
+    #     return sklearn.metrics.average_precision_score(*result)
 
     def __repr__(self):
         return "PR Curve"

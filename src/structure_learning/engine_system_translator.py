@@ -66,6 +66,8 @@ def convert_predictions(model, dataset, positive_threshold=None):
     """
     neural_program = model.program
     inferences = ExamplesInferences()
+    if dataset is None:
+        return inferences
     empty_entry = None
     for features, labels in dataset:
         y_scores = model.predict(features)
@@ -376,7 +378,7 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
     # noinspection PyMissingOrEmptyDocstring
     @EngineSystemTranslator.knowledge_base.setter
     def knowledge_base(self, value: NeuralLogProgram):
-        self._knowledge_base = value.copy()
+        self._knowledge_base = value
         self.knowledge_base.parameters.setdefault("inverse_relations", False)
         self.build_model()
 
@@ -405,6 +407,8 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
             return
         program = self.knowledge_base.copy()
         append_theory(program, self.theory)
+        sls.add_null_atoms(program)
+        program.build_program()
         self.saved_trainer = Trainer(program, self.output_path)
         self.saved_trainer.init_model()
         self.current_trainer = self.saved_trainer
@@ -495,6 +499,8 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
         layers = []
         program = self.saved_trainer.neural_program
         for predicate in program.clauses_by_predicate:
+            if not program.is_logic_predicate(predicate):
+                continue
             possible_terms = []
             for i in range(predicate.arity - 1):
                 terms = program.iterable_constants_per_term.get(
@@ -509,7 +515,7 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
                 has_example = True
             if has_example:
                 layers.append((predicate, False))
-
+        program.build_program()
         self.saved_trainer.model.build_layers(layers)
 
     # noinspection PyMissingOrEmptyDocstring

@@ -632,11 +632,11 @@ class LayerFactory:
                     len(value.data) / np.prod(value.shape, dtype=np.float32)
                 if allow_sparse and sparsity < self.SPARSE_THRESHOLD:
                     data = value.data
-                    if len(data) == 0:
+                    rows, columns = value.nonzero()
+                    if len(rows) == 0:
                         data = [0.0]
                         rows, columns = [0], [0]
                     else:
-                        rows, columns = value.nonzero()
                         if len(data) > len(rows):
                             data = data[data != 0]
                     if len(shape) == 1:

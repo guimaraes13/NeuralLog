@@ -26,7 +26,7 @@ revision_operator_selector: !!python/object:src.knowledge.theory.manager.revisio
 theory_evaluator: !!python/object:src.knowledge.theory.evaluation.theory_evaluator.TheoryEvaluator {}
 
 theory_revision_manager: !!python/object:src.knowledge.theory.manager.theory_revision_manager.TheoryRevisionManager
-  theory_metric: &metric !!python/object:src.knowledge.theory.evaluation.metric.theory_metric.RocCurveMetric {}
+  theory_metric: &metric !!python/object:src.knowledge.theory.evaluation.metric.theory_metric.SKLearnRoc {}
 
 incoming_example_manager: !!python/object:src.knowledge.manager.tree_manager.TreeExampleManager
   tree_theory: &tree !!python/object:src.knowledge.manager.tree_manager.TreeTheory {}

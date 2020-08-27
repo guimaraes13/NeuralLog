@@ -35,7 +35,7 @@ revision_manager: !!python/object:src.knowledge.theory.manager.revision.revision
 revision_operator_evaluators:
   - !!python/object:src.knowledge.theory.manager.revision.revision_operator_evaluator.RevisionOperatorEvaluator
     revision_operator: !!python/object:src.knowledge.theory.manager.revision.operator.meta_revision_operator.MetaRevisionOperator
-      theory_metric: !!python/object:src.knowledge.theory.evaluation.metric.theory_metric.RocCurveMetric {}
+      theory_metric: !!python/object:src.knowledge.theory.evaluation.metric.theory_metric.SKLearnRoc {}
       maximum_depth: 3
       find_best_theory: true
       meta_program: |

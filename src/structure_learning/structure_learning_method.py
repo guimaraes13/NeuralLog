@@ -98,12 +98,14 @@ class StructureLearningMethod(Initializable, ABC):
     """
 
     OPTIONAL_FIELDS = {
-        "load_pre_trained_parameter": False
+        "load_pre_trained_parameter": False,
+        "theory_file_paths": (),
     }
 
     def __init__(self, output_directory,
                  engine_system_translator,
                  load_pre_trained_parameter=None,
+                 theory_file_paths=None,
                  theory_revision_manager=None,
                  theory_evaluator=None,
                  incoming_example_manager=None,
@@ -146,6 +148,11 @@ class StructureLearningMethod(Initializable, ABC):
             self.load_pre_trained_parameter = \
                 self.OPTIONAL_FIELDS["load_pre_trained_parameter"]
 
+        self.theory_file_paths = theory_file_paths
+        if theory_file_paths is None:
+            self.theory_file_paths = \
+                list(self.OPTIONAL_FIELDS["theory_file_paths"])
+
         self._knowledge_base = NeuralLogProgram()
         self._theory = NeuralLogProgram()
 
@@ -165,7 +172,8 @@ class StructureLearningMethod(Initializable, ABC):
     # noinspection PyMissingOrEmptyDocstring
     @property
     def knowledge_base(self):
-        if self.learning_system is not None:
+        if hasattr(self, "learning_system") and \
+                self.learning_system is not None:
             return self.learning_system.knowledge_base
         else:
             return self._knowledge_base
@@ -173,7 +181,8 @@ class StructureLearningMethod(Initializable, ABC):
     # noinspection PyMissingOrEmptyDocstring
     @property
     def theory(self):
-        if self.learning_system is not None:
+        if hasattr(self, "learning_system") and \
+                self.learning_system is not None:
             return self.learning_system.theory
         else:
             return self._theory
@@ -274,12 +283,22 @@ class StructureLearningMethod(Initializable, ABC):
         """
         pass
 
-    @abstractmethod
+    # noinspection PyAttributeOutsideInit,DuplicatedCode
     def build_theory(self):
         """
         Builds the logic theory.
         """
-        pass
+        logger.info(RunTimestamps.BEGIN_READ_THEORY.value)
+        self.time_measure.add_measure(RunTimestamps.BEGIN_READ_THEORY)
+        if self.theory_file_paths:
+            for filepath in self.theory_file_paths:
+                clauses = read_logic_file(filepath)
+                self._theory.add_clauses(clauses)
+        self.time_measure.add_measure(RunTimestamps.END_READ_THEORY)
+        logger.info("%s in \t%.3fs", RunTimestamps.END_READ_THEORY.value,
+                    self.time_measure.time_between_timestamps(
+                        RunTimestamps.BEGIN_READ_THEORY,
+                        RunTimestamps.END_READ_THEORY))
 
     @abstractmethod
     def build_examples(self):
@@ -299,7 +318,7 @@ class StructureLearningMethod(Initializable, ABC):
         """
         Builds the engine system translator.
         """
-        logger.info(RunTimestamps.BEGIN_BUILD_ENGINE_TRANSLATOR.name)
+        logger.info(RunTimestamps.BEGIN_BUILD_ENGINE_TRANSLATOR.value)
         self.time_measure.add_measure(
             RunTimestamps.BEGIN_BUILD_ENGINE_TRANSLATOR)
         self.engine_system_translator.output_path = self.output_directory
@@ -417,7 +436,6 @@ class BatchStructureLearning(StructureLearningMethod):
 
     OPTIONAL_FIELDS = dict(StructureLearningMethod.OPTIONAL_FIELDS)
     OPTIONAL_FIELDS.update({
-        "theory_file_paths": (),
         "test_file_paths": (),
         "examples_batch_size": 1,
         "train_parameters_on_remaining_examples": False,
@@ -476,6 +494,7 @@ class BatchStructureLearning(StructureLearningMethod):
         """
         super(BatchStructureLearning, self).__init__(
             output_directory, engine_system_translator,
+            theory_file_paths=theory_file_paths,
             load_pre_trained_parameter=load_pre_trained_parameter,
             theory_revision_manager=theory_revision_manager,
             theory_evaluator=theory_evaluator,
@@ -491,11 +510,6 @@ class BatchStructureLearning(StructureLearningMethod):
             self.theory_file_paths = \
                 list(self.OPTIONAL_FIELDS["theory_file_paths"])
         self.example_file_paths = example_file_paths
-
-        self.theory_file_paths = theory_file_paths
-        if theory_file_paths is None:
-            self.theory_file_paths = \
-                list(self.OPTIONAL_FIELDS["theory_file_paths"])
 
         self.test_file_paths = test_file_paths
         if test_file_paths is None:
@@ -535,28 +549,11 @@ class BatchStructureLearning(StructureLearningMethod):
                 RunTimestamps.BEGIN_READ_KNOWLEDGE_BASE,
                 RunTimestamps.END_READ_KNOWLEDGE_BASE))
 
-    # noinspection PyAttributeOutsideInit,DuplicatedCode
-    def build_theory(self):
-        """
-        Builds the logic theory.
-        """
-        logger.info(RunTimestamps.BEGIN_READ_THEORY.value)
-        self.time_measure.add_measure(RunTimestamps.BEGIN_READ_THEORY)
-        if self.theory_file_paths:
-            for filepath in self.theory_file_paths:
-                clauses = read_logic_file(filepath)
-                self._theory.add_clauses(clauses)
-        self.time_measure.add_measure(RunTimestamps.END_READ_THEORY)
-        logger.info("%s in \t%.3fs", RunTimestamps.END_READ_THEORY.value,
-                    self.time_measure.time_between_timestamps(
-                        RunTimestamps.BEGIN_READ_THEORY,
-                        RunTimestamps.END_READ_THEORY))
-
     def build_examples(self):
         """
         Builds the train examples.
         """
-        logger.info(RunTimestamps.BEGIN_READ_EXAMPLES.name)
+        logger.info(RunTimestamps.BEGIN_READ_EXAMPLES.value)
         self.time_measure.add_measure(RunTimestamps.BEGIN_READ_EXAMPLES)
         train_examples = 0
         test_examples = 0
@@ -614,7 +611,7 @@ class BatchStructureLearning(StructureLearningMethod):
         """
         Calls the method to revise the examples
         """
-        examples = self._knowledge_base.examples[TRAIN_SET_NAME]
+        examples = self.knowledge_base.examples[TRAIN_SET_NAME]
         logger.info("Begin the revision using\t%d example(s)", examples.size())
         if self.examples_batch_size > 0:
             self.pass_batch_examples_to_revise(self.examples_batch_size)
@@ -644,7 +641,7 @@ class BatchStructureLearning(StructureLearningMethod):
         """
         Passes a `number_of_examples` to revise, at a time.
         """
-        examples = self._knowledge_base.examples[TRAIN_SET_NAME]
+        examples = self.knowledge_base.examples[TRAIN_SET_NAME]
         iterator = LimitedIterator(
             ExampleIterator(examples), number_of_examples)
         size = examples.size()
@@ -659,13 +656,13 @@ class BatchStructureLearning(StructureLearningMethod):
     # noinspection PyMissingOrEmptyDocstring
     def evaluate_model(self):
         self.time_measure.add_measure(RunTimestamps.BEGIN_EVALUATION)
-        train_set = self._knowledge_base.examples[TRAIN_SET_NAME]
+        train_set = self.knowledge_base.examples[TRAIN_SET_NAME]
         inferred_examples = self.learning_system.infer_examples(train_set)
         self.run_statistics.train_evaluation = \
             self.learning_system.evaluate(train_set, inferred_examples)
         filepath = os.path.join(self.output_directory, TRAIN_INFERENCE_FILE)
         print_predictions_to_file(train_set, inferred_examples, filepath)
-        test_set = self._knowledge_base.examples.get(
+        test_set = self.knowledge_base.examples.get(
             VALIDATION_SET_NAME, Examples())
         if test_set:
             inferred_examples = self.learning_system.infer_examples(test_set)
@@ -706,6 +703,7 @@ class BatchStructureLearning(StructureLearningMethod):
         logger.info("Total elapsed time:\t\t\t%.3fs", total_time)
 
 
+# noinspection DuplicatedCode
 def get_iteration_directories(data_directory, iteration_prefix):
     """
     Gets the iteration directories, sorted by the iteration number.
@@ -773,6 +771,7 @@ class IterativeStructureLearning(StructureLearningMethod):
                  data_directory,
                  output_directory,
                  engine_system_translator,
+                 theory_file_paths=None,
                  iteration_prefix=None,
                  logic_file_extension=None,
                  load_pre_trained_parameter=None,
@@ -825,6 +824,7 @@ class IterativeStructureLearning(StructureLearningMethod):
         """
         super(IterativeStructureLearning, self).__init__(
             output_directory, engine_system_translator,
+            theory_file_paths=theory_file_paths,
             load_pre_trained_parameter=load_pre_trained_parameter,
             theory_revision_manager=theory_revision_manager,
             theory_evaluator=theory_evaluator,
@@ -865,9 +865,15 @@ class IterativeStructureLearning(StructureLearningMethod):
 
     # noinspection PyMissingOrEmptyDocstring,PyAttributeOutsideInit
     def initialize(self):
-        super().initialize()
+        self.iteration_knowledge: List[Iterable[Clause]] = []
+        self.iteration_directories: List[str] = []
+        self.iteration_statistics: Optional[IterationStatistics] = None
+        self.time_stamp_factory: Optional[IterationTimeStampFactory] = None
+
         self.train_inferred_examples: Optional[ExamplesInferences] = None
         self.test_inferred_examples: Optional[ExamplesInferences] = None
+
+        super().initialize()
 
     # noinspection PyMissingOrEmptyDocstring
     def build_knowledge_base(self):
@@ -883,8 +889,8 @@ class IterativeStructureLearning(StructureLearningMethod):
             parameters = 0
             for file in files:
                 filepath = os.path.join(self.data_directory, iteration, file)
-                if os.path.isdir(filepath) and not filepath.startswith(".") \
-                        and filepath.endswith(self.logic_file_extension):
+                if os.path.isfile(filepath) and not file.startswith(".") \
+                        and file.endswith(self.logic_file_extension):
                     logic_file = read_logic_file(filepath)
                     clauses.append(logic_file)
                     if logger.isEnabledFor(logging.DEBUG):
@@ -894,18 +900,14 @@ class IterativeStructureLearning(StructureLearningMethod):
                         examples += values[2]
                         parameters += values[3]
             if logger.isEnabledFor(logging.DEBUG):
-                logger.debug("Knowledge read from %s:", iteration)
-                logger.debug("Number of facts:       ", facts)
-                logger.debug("Number of rules:       ", rules)
-                logger.debug("Number of examples:    ", examples)
-                logger.debug("Number of parameters:  ", parameters)
+                logger.debug("Knowledge read from %s: ", iteration)
+                logger.debug("Number of facts:        %d", facts)
+                logger.debug("Number of rules:        %d", rules)
+                logger.debug("Number of examples:     %d", examples)
+                logger.debug("Number of parameters:   %d", parameters)
             else:
                 logger.info("Knowledge read from %s", iteration)
             self.iteration_knowledge.append(chain(*clauses))
-
-    # noinspection PyMissingOrEmptyDocstring
-    def build_theory(self):
-        pass
 
     # noinspection PyMissingOrEmptyDocstring
     def build_examples(self):
@@ -918,7 +920,6 @@ class IterativeStructureLearning(StructureLearningMethod):
         self.iteration_statistics.iteration_names = self.iteration_directories
         self.iteration_statistics.number_of_iterations = \
             len(self.iteration_knowledge)
-        self.iteration_statistics.iteration_names = self.iteration_prefix
         self.iteration_statistics.time_measure = self.time_measure
 
     def add_iteration_knowledge(self, index):
@@ -930,8 +931,9 @@ class IterativeStructureLearning(StructureLearningMethod):
         """
         iteration_name = self.iteration_directories[index]
         iteration_knowledge = self.iteration_knowledge[index]
-        self.knowledge_base.add_clauses(
+        total = self.knowledge_base.add_clauses(
             iteration_knowledge, example_set=iteration_name)
+        self.iteration_statistics.iteration_knowledge_sizes.append(total)
         self.engine_system_translator.build_model()
         logger.debug("Added knowledge from \t%s", iteration_name)
 
@@ -1003,6 +1005,11 @@ class IterativeStructureLearning(StructureLearningMethod):
         self.iteration_statistics.add_iteration_train_evaluation(
             self.learning_system.evaluate(
                 examples, self.train_inferred_examples))
+        examples_size = examples.size()
+        self.iteration_statistics.iteration_examples_sizes.append(examples_size)
+        if len(self.iteration_statistics.iteration_knowledge_sizes) < index:
+            self.iteration_statistics.iteration_knowledge_sizes -= \
+                examples_size
         self.time_measure.add_measure(self.time_stamp_factory.get_time_stamp(
             IterationTimeMessage.TRAIN_EVALUATION_DONE, iteration_name))
         logger.debug("Ended the train evaluation of %s", iteration_name)
@@ -1033,8 +1040,7 @@ class IterativeStructureLearning(StructureLearningMethod):
         """
         iteration_name = self.iteration_directories[index]
         iteration_path = os.path.join(self.output_directory, iteration_name)
-        if os.path.isdir(iteration_path):
-            os.makedirs(iteration_path, exist_ok=True)
+        os.makedirs(iteration_path, exist_ok=True)
         filepath = os.path.join(iteration_path, TRAIN_INFERENCE_FILE)
         train_set = self.knowledge_base.examples.get(iteration_name, Examples())
         print_predictions_to_file(
@@ -1043,7 +1049,7 @@ class IterativeStructureLearning(StructureLearningMethod):
             test_iteration = self.iteration_directories[index + 1]
             test_set = self.knowledge_base.examples.get(
                 test_iteration, Examples())
-            filepath = os.path.join(iteration_path, test_iteration)
+            filepath = os.path.join(iteration_path, TEST_INFERENCE_FILE)
             print_predictions_to_file(
                 test_set, self.test_inferred_examples, filepath)
         self.learning_system.save_parameters(iteration_path)
