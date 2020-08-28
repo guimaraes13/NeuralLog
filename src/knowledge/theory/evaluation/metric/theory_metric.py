@@ -215,8 +215,9 @@ class AccumulatorMetric(TheoryMetric, Generic[J, K]):
         :return: the accumulation of all the results
         :rtype: J or None
         """
-        if inferred_values is None:
-            inferred_values = ExamplesInferences()
+        if not inferred_values:
+            return None
+            # inferred_values = ExamplesInferences()
 
         result: J = self.initial_value()
         for p, facts in examples.items():

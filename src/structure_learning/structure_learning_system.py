@@ -119,7 +119,7 @@ class StructureLearningSystem(Initializable):
 
     # noinspection PyMissingOrEmptyDocstring
     @property
-    def knowledge_base(self):
+    def knowledge_base(self) -> NeuralLogProgram:
         return self.engine_system_translator.knowledge_base
 
     @knowledge_base.setter

@@ -555,8 +555,8 @@ class MetaRevisionOperator(ro.RevisionOperator):
         self._logic_predicates = set()
         knowledge_base = self.learning_system.knowledge_base
         self._logic_predicates.update(
-            knowledge_base.logic_predicates,
-            theory.logic_predicates)
+            knowledge_base.predicates.keys(),
+            theory.predicates.keys())
 
         self._generic_trainable_predicates = set()
         # The code below may cause the number of parameters to grow quickly,
