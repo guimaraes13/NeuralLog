@@ -38,7 +38,8 @@ cached_null_atoms: Dict[Predicate, Atom] = dict()
 
 
 def relevant_breadth_first_search(terms, relevant_depth,
-                                  learning_system, safe_stop=False):
+                                  learning_system, safe_stop=False,
+                                  infer_relevant=False):
     """
     Retrieve the relevant atom, given the `terms`, by performing a
     breadth-first search in the knowledge base graph, until a given
@@ -55,6 +56,10 @@ def relevant_breadth_first_search(terms, relevant_depth,
     :param safe_stop: if `True`, the search stops when all the atoms of a
     distance are added and those atoms, collectively, contains all `terms`
     :type safe_stop: bool
+    :param infer_relevant: if `True`, in addition to the atoms directly found
+    in the knowledge base, the search will include atoms inferred by the
+    logic rules. This might significantly increase the running time
+    :type infer_relevant: bool
     :return: the set of relevant atoms with respect to the `terms`
     :rtype: Set[Atom]
     """
@@ -73,8 +78,9 @@ def relevant_breadth_first_search(terms, relevant_depth,
         current_relevant.add(term)
         head_terms.add(term)
 
-    atom_set = learning_system.inferred_relevant(current_relevant)
-    atoms.update(atom_set)
+    if infer_relevant:
+        atom_set = learning_system.inferred_relevant(current_relevant)
+        atoms.update(atom_set)
 
     previous_distance = 0
     while queue:
@@ -82,8 +88,10 @@ def relevant_breadth_first_search(terms, relevant_depth,
         current_distance = terms_distance[current_term]
 
         if current_distance != previous_distance:
-            atom_set = learning_system.inferred_relevant(current_relevant)
-            atoms.update(atom_set)
+            atom_set = set()
+            if infer_relevant:
+                atom_set = learning_system.inferred_relevant(current_relevant)
+                atoms.update(atom_set)
             if safe_stop:
                 # If `safe_stop`, the minimal safe rule (i.e. the rule where
                 # all atoms in the head appears in the body) is returned.
@@ -464,7 +472,8 @@ class BottomClauseBoundedRule(RevisionOperator):
         "improvement_threshold": 0.0,
         "generic": True,
         "evaluation_timeout": 300,
-        "number_of_process": 1
+        "number_of_process": 1,
+        "infer_relevant": False
     })
 
     def __init__(self,
@@ -478,7 +487,8 @@ class BottomClauseBoundedRule(RevisionOperator):
                  improvement_threshold=None,
                  generic=None,
                  evaluation_timeout=None,
-                 number_of_process=None):
+                 number_of_process=None,
+                 infer_relevant=None):
         """
         Creates a Bottom Clause Bounded Rule operator.
 
@@ -506,6 +516,10 @@ class BottomClauseBoundedRule(RevisionOperator):
         :type evaluation_timeout: Optional[int]
         :param number_of_process: the number of parallel process
         :type number_of_process: Optional[int]
+        :param infer_relevant: If `True`, in addition to facts in the knowledge
+        base, it also considers as relevant the facts that could be inferred
+        by the rules
+        :type infer_relevant: Optional[bool]
         """
         super().__init__(learning_system, theory_metric, clause_modifiers)
 
@@ -609,6 +623,15 @@ class BottomClauseBoundedRule(RevisionOperator):
         if number_of_process is None:
             self.number_of_process = self.OPTIONAL_FIELDS["number_of_process"]
 
+        self.infer_relevant = infer_relevant
+        """
+        If `True`, in addition to facts in the knowledge base, it also 
+        considers as relevant the facts that could be inferred by the rules.
+        """
+
+        if self.infer_relevant is None:
+            self.infer_relevant = self.OPTIONAL_FIELDS["infer_relevant"]
+
     # noinspection PyMissingOrEmptyDocstring
     def initialize(self):
         super().initialize()
@@ -702,7 +725,8 @@ class BottomClauseBoundedRule(RevisionOperator):
         """
         relevant_set = relevant_breadth_first_search(
             example.terms, self.relevant_depth,
-            self.learning_system, not self.refine)
+            self.learning_system,
+            safe_stop=not self.refine, infer_relevant=self.infer_relevant)
         variable_generator = self.variable_generator.clean_copy()
         variable_map: Dict[Term, Term] = dict()
         variable_atom = to_variable_atom(
@@ -901,7 +925,7 @@ class CombinedBottomClauseBoundedRule(BottomClauseBoundedRule):
         positive_terms = set(itertools.chain.from_iterable(positive_terms))
         relevant_set = relevant_breadth_first_search(
             positive_terms, self.relevant_depth, self.learning_system,
-            not self.refine)
+            safe_stop=not self.refine, infer_relevant=self.infer_relevant)
         positive_examples = set(filter(is_positive, examples.values()))
 
         return self.build_variable_bottom_clause(

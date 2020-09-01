@@ -423,13 +423,15 @@ class TreeTheory:
         while True:
             previous_leaf = current_leaf
             current_leaf = current_leaf.parent
-            unproved_examples: re.RevisionExamples = self.get_example_from_leaf(
-                predicate, current_leaf.default_child)
-            grouped_examples.add_examples(
-                unproved_examples.get_training_examples(True))
+            unproved_examples: Optional[re.RevisionExamples] = \
+                self.get_example_from_leaf(
+                    predicate, current_leaf.default_child)
+            if unproved_examples is not None:
+                grouped_examples.add_examples(
+                    unproved_examples.get_training_examples(True))
             self.remove_example_from_leaf(predicate, current_leaf.default_child)
             if len(current_leaf.children) != 1 or current_leaf.parent is None:
-                continue
+                break
 
         self.remove_example_from_leaf(predicate, revision_leaf)
         if current_leaf.is_root and len(current_leaf.children) == 1:
@@ -437,12 +439,13 @@ class TreeTheory:
             current_leaf.element.body.clear()
             current_leaf.element.body.append(FALSE_LITERAL)
 
-        revision_examples = re.RevisionExamples(
-            self.learning_system, unproved_examples.sample_selector.copy())
-        revision_examples.add_examples(grouped_examples)
+        if unproved_examples is not None:
+            revision_examples = re.RevisionExamples(
+                self.learning_system, unproved_examples.sample_selector.copy())
+            revision_examples.add_examples(grouped_examples)
 
-        self.get_leaf_example_map_from_tree(predicate)[current_leaf] = \
-            revision_examples
+            self.get_leaf_example_map_from_tree(predicate)[current_leaf] = \
+                revision_examples
         TreeTheory.remove_node_from_tree(previous_leaf)
 
     @staticmethod
@@ -634,7 +637,7 @@ class TreeExampleManager(IncomingExampleManager):
             leaf_examples = \
                 self.tree_theory.get_leaf_example_map_from_tree(predicate)
             root = self.tree_theory.get_tree_for_example(predicate)
-            not_covered = self.transverse_theory_tree(
+            _, not_covered = self.transverse_theory_tree(
                 root, Examples({predicate: atoms}),
                 modified_leaves, leaf_examples)
             if not_covered:
@@ -657,18 +660,22 @@ class TreeExampleManager(IncomingExampleManager):
         :param leaf_examples: the leaf examples map to save the examples of
         each lead
         :type leaf_examples: Dict[Node[HornClause], RevisionExamples]
-        :return: the set of not covered examples
-        :rtype: Examples
+        :return: the set of covered and not examples, respectively
+        :rtype: Tuple[Examples, Examples]
         """
+        covered = None
         not_covered = None
         # This method is always called for a single predicate
         for predicate in examples.keys():
-            inferred_examples = self.learning_system.infer_examples(
-                examples,
-                self.cached_clauses.get(predicate, []) + [root.element],
-                retrain=False)
-            covered, not_covered = \
-                self.split_covered_examples(examples, inferred_examples)
+            if TRUE_LITERAL in root.element.body:
+                covered, not_covered = examples, Examples()
+            else:
+                inferred_examples = self.learning_system.infer_examples(
+                    examples,
+                    self.cached_clauses.get(predicate, []) + [root.element],
+                    retrain=False)
+                covered, not_covered = \
+                    self.split_covered_examples(examples, inferred_examples)
             if covered:
                 if root.children:
                     self.push_example_to_child(
@@ -677,7 +684,7 @@ class TreeExampleManager(IncomingExampleManager):
                     self.add_example_to_leaf(
                         root, covered, modified_leaves, leaf_examples)
 
-        return not_covered
+        return covered, not_covered
 
     @staticmethod
     def split_covered_examples(
@@ -719,38 +726,41 @@ class TreeExampleManager(IncomingExampleManager):
         append the current example
         :type leaf_example: Dict[Node[HornClause], RevisionExamples]
         """
-        not_covered_by_child = []
+        covered_by_children = set()
         for child in node.children:
-            not_covered_by_child.append(self.transverse_theory_tree(
-                child, examples, modified_leaves, leaf_example))
-        not_covered = self.examples_not_covered_by_any_child(
-            examples, not_covered_by_child)
+            covered, _ = self.transverse_theory_tree(
+                child, examples, modified_leaves, leaf_example)
+            covered_by_children.update(ExampleIterator(covered))
+        not_covered = Examples()
+        for example in ExampleIterator(examples):
+            if example not in covered_by_children:
+                not_covered.add_example(example)
         if not_covered:
             self.add_example_to_leaf(
                 node.default_child, not_covered, modified_leaves, leaf_example)
 
-    @staticmethod
-    def examples_not_covered_by_any_child(examples, not_covered_by_child):
-        """
-        Returns only the examples that were not covered by any child.
-
-        :param examples: all the examples
-        :type examples: Examples
-        :param not_covered_by_child: the list of not covered examples of each
-        child
-        :type not_covered_by_child: List[Examples]
-        :return: the examples that were not covered by any child
-        :rtype: Examples
-        """
-        all_not_covered = set(ExampleIterator(not_covered_by_child[0]))
-        for not_covered in not_covered_by_child[1:]:
-            all_not_covered.difference_update(set(ExampleIterator(not_covered)))
-        not_covered = Examples()
-        for example in ExampleIterator(examples):
-            if example not in all_not_covered:
-                not_covered.add_example(example)
-
-        return not_covered
+    # @staticmethod
+    # def examples_not_covered_by_any_child(examples, not_covered_by_child):
+    #     """
+    #     Returns only the examples that were not covered by any child.
+    #
+    #     :param examples: all the examples
+    #     :type examples: Examples
+    #     :param not_covered_by_child: the list of not covered examples of each
+    #     child
+    #     :type not_covered_by_child: List[Examples]
+    #     :return: the examples that were not covered by any child
+    #     :rtype: Examples
+    #     """
+    #     all_not_covered = set(ExampleIterator(not_covered_by_child[0]))
+    #     for not_covered in not_covered_by_child[1:]:
+    #         all_not_covered.difference_update(set(ExampleIterator(not_covered)))
+    #     not_covered = Examples()
+    #     for example in ExampleIterator(examples):
+    #         if example in all_not_covered:
+    #             not_covered.add_example(example)
+    #
+    #     return not_covered
 
     def add_example_to_leaf(
             self, leaf, examples, modified_leaves, leaf_example):

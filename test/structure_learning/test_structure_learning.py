@@ -49,16 +49,17 @@ class TestStructureLearning(unittest.TestCase):
         clauses = reduce(lambda x, y: x | set(y), clauses, set())
         self.assertIsNotNone(
             clauses, "Expected two clauses in the theory, but it is none.")
-        expected = len(expected_clauses)
-        found = len(clauses)
-        self.assertEqual(
-            expected, found,
-            "Expected {} clause, but {} found".format(expected, found))
-        expected = "\n".join(map(lambda x: str(x), expected_clauses))
-        found = "\n".join(map(lambda x: str(x), clauses))
-        if assert_equals:
-            self.assertTrue(expected_clauses.issuperset(clauses),
-                            "Expected:\n{}\n\n{}".format(expected, found))
+        if expected_clauses is not None:
+            expected = len(expected_clauses)
+            found = len(clauses)
+            self.assertEqual(
+                expected, found,
+                "Expected {} clause, but {} found".format(expected, found))
+            expected = "\n".join(map(lambda x: str(x), expected_clauses))
+            found = "\n".join(map(lambda x: str(x), clauses))
+            if assert_equals:
+                self.assertTrue(expected_clauses.issuperset(clauses),
+                                "Expected:\n{}\n\n{}".format(expected, found))
 
     def test_structure_learning(self):
         program = """
@@ -106,3 +107,6 @@ class TestStructureLearning(unittest.TestCase):
 
         self._test_structure_learning(
             "configuration_meta_tree.yaml", _read_program(program))
+
+    def test_tree_structure_learning_it(self):
+        self._test_structure_learning("configuration_it.yaml", None)

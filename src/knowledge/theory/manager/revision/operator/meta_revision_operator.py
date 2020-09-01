@@ -877,8 +877,10 @@ class MetaRevisionOperator(ro.RevisionOperator):
 
         original_clause: HornClause = revision_leaf.parent.element
         current_theory = self.learning_system.theory.copy()
-        current_theory.clauses_by_predicate[
-            original_clause.head.predicate].remove(original_clause)
+        if len(original_clause.body) != 1 or \
+                original_clause.body[0] != TRUE_LITERAL:
+            current_theory.clauses_by_predicate[
+                original_clause.head.predicate].remove(original_clause)
         if FALSE_LITERAL in first_clause.body:
             # the program added a false literal to the clause, just remove
             # the clause

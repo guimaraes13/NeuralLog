@@ -150,7 +150,7 @@ class OrderedSet(set):
         return "{{{}}}".format(", ".join(map(lambda x: str(x), self._list)))
 
     def __hash__(self) -> int:
-        return reduce(lambda x, y: x * y, self._list)
+        return reduce(lambda x, y: x * (13 + hash(y)), self._list, 13)
         # return sum(map(lambda x: hash(x), self._list))
 
     def __format__(self, format_spec: str) -> str:

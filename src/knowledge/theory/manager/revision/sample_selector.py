@@ -6,9 +6,9 @@ from abc import abstractmethod
 from typing import Set
 
 import src.knowledge.theory.manager.revision.operator.revision_operator as ro
-from src.language.language import Atom
 import src.structure_learning.structure_learning_system as sls
-from src.util import Initializable, reset_field_error, InitializationException
+from src.language.language import Atom
+from src.util import Initializable, reset_field_error
 
 
 class SampleSelector(Initializable):
@@ -115,33 +115,22 @@ class IndependentSampleSelector(SampleSelector):
 
     OPTIONAL_FIELDS = dict(SampleSelector.OPTIONAL_FIELDS)
     OPTIONAL_FIELDS.update({
-        "relevant_depth": DEFAULT_RELEVANT_DEPTH
+        "relevant_depth": DEFAULT_RELEVANT_DEPTH,
+        "infer_relevant": False
     })
 
-    def __init__(self, learning_system=None, relevant_depth=None):
+    def __init__(self, learning_system=None, relevant_depth=None,
+                 infer_relevant=None):
         super().__init__(learning_system)
-        self._relevant_depth = relevant_depth
-        if self._relevant_depth is None:
-            self._relevant_depth: int = self.OPTIONAL_FIELDS["relevant_depth"]
+        self.relevant_depth = relevant_depth
+        if self.relevant_depth is None:
+            self.relevant_depth: int = self.OPTIONAL_FIELDS["relevant_depth"]
+
+        self.infer_relevant = infer_relevant
+        if self.infer_relevant is None:
+            self.infer_relevant: bool = self.OPTIONAL_FIELDS["infer_relevant"]
+
         self.previous_relevant: Set[Atom] = set()
-
-    @property
-    def relevant_depth(self):
-        """
-        The relevant depth.
-        :return: relevant depth
-        :rtype: int
-        """
-        return self._relevant_depth
-
-    @relevant_depth.setter
-    def relevant_depth(self, value):
-        if self.previous_relevant:
-            raise InitializationException(
-                "It is not allowed to reset {}, from {}, "
-                "after using it.".format(
-                    "relevant_depth", self.__class__.__name__))
-        self._relevant_depth = value
 
     # noinspection PyMissingOrEmptyDocstring
     def is_all_relevant(self):
@@ -154,7 +143,8 @@ class IndependentSampleSelector(SampleSelector):
         relevant = False
         terms = set(filter(lambda x: x.is_constant(), example.terms))
         current_relevant = ro.relevant_breadth_first_search(
-            terms, self.relevant_depth, self.learning_system, False)
+            terms, self.relevant_depth, self.learning_system,
+            safe_stop=False, infer_relevant=self.infer_relevant)
         if self.previous_relevant.isdisjoint(current_relevant):
             relevant = True
         self.previous_relevant.update(current_relevant)

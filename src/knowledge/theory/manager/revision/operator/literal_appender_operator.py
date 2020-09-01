@@ -14,7 +14,7 @@ from src.knowledge.theory.manager.revision.operator.revision_operator import \
     RevisionOperator, is_positive, relevant_breadth_first_search
 from src.language.equivalent_clauses import EquivalentAtom
 from src.language.language import HornClause, get_variable_atom, Literal, \
-    Atom, Term
+    Atom, Term, Number
 from src.util import OrderedSet
 from src.util.clause_utils import to_variable_atom
 from src.util.language import is_atom_unifiable_to_goal
@@ -249,7 +249,8 @@ class LiteralAppendOperator(RevisionOperator, Generic[V]):
         "evaluation_timeout": DEFAULT_EVALUATION_TIMEOUT,
         "relevant_depth": 0,
         "maximum_based_examples": -1,
-        "positive_threshold": None
+        "positive_threshold": None,
+        "infer_relevant": False
     })
 
     def __init__(self,
@@ -260,7 +261,8 @@ class LiteralAppendOperator(RevisionOperator, Generic[V]):
                  evaluation_timeout=None,
                  relevant_depth=None,
                  maximum_based_examples=None,
-                 positive_threshold=None
+                 positive_threshold=None,
+                 infer_relevant=None
                  ):
         super().__init__(learning_system, theory_metric, clause_modifiers)
 
@@ -321,6 +323,15 @@ class LiteralAppendOperator(RevisionOperator, Generic[V]):
 
         if self.positive_threshold is None:
             self.positive_threshold = self.OPTIONAL_FIELDS["positive_threshold"]
+
+        self.infer_relevant = infer_relevant
+        """
+        If `True`, in addition to facts in the knowledge base, it also 
+        considers as relevant the facts that could be inferred by the rules.
+        """
+
+        if self.infer_relevant is None:
+            self.infer_relevant = self.OPTIONAL_FIELDS["infer_relevant"]
 
     # noinspection PyMissingOrEmptyDocstring
     def perform_operation(self, targets, minimum_threshold=None):
@@ -432,7 +443,8 @@ class LiteralAppendOperator(RevisionOperator, Generic[V]):
             constants = list(
                 filter(lambda x: x.is_constant(), grouped_atom.query.terms))
             relevant_atoms = relevant_breadth_first_search(
-                constants, self.relevant_depth, self.learning_system)
+                constants, self.relevant_depth, self.learning_system,
+                infer_relevant=self.infer_relevant)
             variable_relevant: Set[Literal] = set()
             for answer in grouped_atom.atoms:
                 substitution_map = \
@@ -613,8 +625,9 @@ class PathFinderAppendOperator(LiteralAppendOperator[Set[Literal]]):
             set(), False)
         if not literals:
             return None
-        knowledge_base = self.build_knowledge_base_with_facts(literals)
-        paths: Collection[Tuple[Term]] = knowledge_base.shortest_path(
+        path_finder = PathFinder(literals)
+        # TODO: change it to find all paths
+        paths: Collection[Tuple[Term]] = path_finder.shortest_path(
             initial_clause_head.terms[0],
             initial_clause_head.terms[self.destination_index],
             self.maximum_path_length)
@@ -622,49 +635,185 @@ class PathFinderAppendOperator(LiteralAppendOperator[Set[Literal]]):
             return None
         conjunctions: Set[OrderedSet[Term]] = set()
         for path in paths:
-            self.path_to_rules(path, knowledge_base, conjunctions)
+            path_finder.path_to_rules(path, conjunctions)
         self.conjunction_transformer.initial_clause = initial_clause
         return self.multiprocessing.get_best_clause_from_candidates(
             conjunctions, examples)
 
-    @staticmethod
-    def build_knowledge_base_with_facts(facts):
-        """
-        Builds a knowledge base with the facts.
 
-        :param facts: the facts
-        :type facts: collections.Iterable[Atom]
-        :return: the knowledge base
-        :rtype: NeuralLogProgram
+class PathFinder:
+    """
+    Class to find paths in a set of atoms.
+    """
+
+    def __init__(self, atoms):
+        self.atoms = atoms
+        self.constants = set()
+        self._cached_atoms_by_term: Dict[Term, Set[Atom]] = dict()
+        for atom in self.atoms:
+            for term in atom:
+                if isinstance(term, Number):
+                    continue
+                self.constants.add(term)
+                self._cached_atoms_by_term.setdefault(term, set()).add(atom)
+
+    def get_neighbour_terms(self, term):
         """
-        knowledge_base = NeuralLogProgram()
-        for literal in facts:
-            knowledge_base.add_fact(literal)
-        knowledge_base.build_program()
-        return knowledge_base
+        Gets the neighbour terms of the `term`.
+
+        :param term: the term
+        :type term: Term
+        :return: the neighbour terms
+        :rtype: Collection[Term]
+        """
+        if isinstance(term, Number):
+            return set()
+
+        neighbours = set()
+        for atom in self.get_atoms_with_term(term):
+            for neighbour in atom.terms:
+                if term != neighbour and not isinstance(neighbour, Number):
+                    neighbours.add(neighbour)
+
+        return neighbours
+
+    def get_atoms_with_term(self, term):
+        """
+        Gets the atoms with the term.
+
+        :param term: the term
+        :type term: Term
+        :return: the set of atom containing the term
+        :rtype: Set[Atom]
+        """
+        return self._cached_atoms_by_term.get(term, set())
+
+    def shortest_path(self, source, destination, maximum_length):
+        """
+        Finds the shortest paths (sequence of terms), of at most
+        `maximum_length` long, between the `source` and the `destination`
+        terms in the knowledge base. If such path exists.
+
+        :param source: the source term
+        :type source: Term
+        :param destination: the destination term
+        :type destination: Term
+        :param maximum_length: the maximum length of the path. If negative,
+        there will be no limit on the length of the path.
+        :type maximum_length: int
+        :return: the shortest paths between `source` and `destination`
+        :rtype: Collection[Tuple[Term]]
+        """
+        if not self.constants.issuperset({source, destination}):
+            return None
+        if source == destination or \
+                destination in self.get_neighbour_terms(source):
+            return [(source, destination)]
+
+        return self._find_shortest_paths(source, destination, maximum_length)
+
+    def _find_shortest_paths(self, source, destination, maximum_length):
+        """
+        Finds the shortest paths (sequence of terms), of at most
+        `maximum_length` long, between the `source` and the
+        `destination`
+        terms in the knowledge base. If such path exists.
+
+        :param source: the source term
+        :type source: Term
+        :param destination: the destination term
+        :type destination: Term
+        :param maximum_length: the maximum length of the path. If
+        negative,
+        there will be no limit on the length of the path.
+        :type maximum_length: int
+        :return: the shortest paths between `source` and `destination`
+        :rtype: Collection[Tuple[Term]]
+        """
+        distance_for_vertex: Dict[Term, int] = dict()
+        predecessors_of_vertex: Dict[Term, Set[Term]] = dict()
+
+        distance_for_vertex[source] = 0
+
+        queue: deque[Term] = deque()
+        queue.append(source)
+        found = False
+        previous_distance = 0
+        while queue:
+            current = queue.popleft()
+            distance = distance_for_vertex[current]
+            if found and distance > previous_distance:
+                break
+            previous_distance = distance
+            if 0 <= maximum_length < distance + 1:
+                break
+
+            for neighbor in self.get_neighbour_terms(current):
+                predecessors_of_vertex.setdefault(neighbor, set()).add(current)
+                if neighbor not in distance_for_vertex:
+                    distance_for_vertex[neighbor] = distance + 1
+                    queue.append(neighbor)
+
+                if neighbor == destination:
+                    found = True
+                    break
+
+        if not found:
+            return set()
+        return self._build_paths(
+            source, destination, predecessors_of_vertex,
+            distance_for_vertex[destination])
 
     @staticmethod
-    def path_to_rules(path, knowledge_base, append):
+    def _build_paths(source, destination, predecessors_of_vertex, path_length):
+        """
+        Builds the paths based on the predecessors. Then, filters it by the
+        ones that starts on `source` and ends at `destination`.
+
+        :param source: the source of the path
+        :type source: Term
+        :param destination: the destination of the path
+        :type destination: Term
+        :param predecessors_of_vertex:
+        :type predecessors_of_vertex: Dict[Term, Set[Term]]
+        :param path_length: the length of the paths
+        :type path_length: int
+        :return: the paths that starts on `source` and ends at `destination`
+        :rtype: Collection[Tuple[Term]]
+        """
+        queue: deque[List[Term]] = deque()
+        queue.append([destination])
+
+        for i in range(path_length - 1, -1, -1):
+            size = len(queue)
+            for j in range(size):
+                current_array = queue.popleft()
+                for predecessor in predecessors_of_vertex[current_array[0]]:
+                    queue.append([predecessor] + list(current_array))
+
+        result = \
+            filter(lambda x: x[0] == source and x[-1] == destination, queue)
+        return set(map(lambda x: tuple(x), result))
+
+    def path_to_rules(self, path, append):
         """
         Creates rules where the body is the path between terms in a
         knowledge base.
 
         :param path: the path
         :type path: Tuple[Term] or List[Term]
-        :param knowledge_base: the knowledge base
-        :type knowledge_base: NeuralLogProgram
         :param append: the collection of rules to append
         :type append: Set[Iterable[Literal]]
         :return: the collection of rules
         :rtype: Set[Iterable[Literal]]
         """
-        current_edges = set(knowledge_base.get_atoms_with_term(path[0]))
+        current_edges = set(self.get_atoms_with_term(path[0]))
         path_length = len(path) - 1
         queue: deque[OrderedSet[Literal]] = deque()
         queue.append(OrderedSet())
         for i in range(path_length):
             size = len(queue)
-            next_edges = set(knowledge_base.get_atoms_with_term(path[i + 1]))
+            next_edges = set(self.get_atoms_with_term(path[i + 1]))
             current_edges = current_edges.intersection(next_edges)
             for j in range(size):
                 current_array = queue.popleft()
@@ -675,4 +824,5 @@ class PathFinderAppendOperator(LiteralAppendOperator[Set[Literal]]):
             current_edges = next_edges
 
         append.update(queue)
+
         return append

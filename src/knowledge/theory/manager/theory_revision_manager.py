@@ -162,8 +162,8 @@ class TheoryRevisionManager(Initializable):
         improvement = self.theory_metric.difference(
             revised_metric, self.theory_evaluation)
         log_message = "Theory modification skipped due no significant " \
-                      "improvement. Improvement of %.3f, over %.3f, " \
-                      "threshold of %.3f."
+                      "improvement. Improvement of %f, over %f, " \
+                      "threshold of %f."
         theory_changed = False
         if improvement >= improvement_threshold:
             training_examples = examples.get_training_examples(
@@ -177,7 +177,7 @@ class TheoryRevisionManager(Initializable):
                 operator_evaluator.theory_revision_accepted(
                     revised_theory, relevant_examples)
                 log_message = "Theory modification accepted. Improvement of " \
-                              "%.3f, over %.3f, threshold of %.3f."
+                              "%f, over %f, threshold of %f."
                 self.last_theory_change = time_measure.performance_time()
                 theory_changed = True
         logger.debug(log_message, improvement,

@@ -416,7 +416,7 @@ class RemoveNodeTreeRevisionOperator(TreeRevisionOperator):
                     self.apply_clause_modifiers(node.parent.element, examples)
                 clauses.add(revised_clause)
             else:
-                clauses.add(clauses)
+                clauses.add(clause)
         if logger.isEnabledFor(logging.DEBUG):
             body = set(node.element.body)
             body.difference(node.parent.element.body)
