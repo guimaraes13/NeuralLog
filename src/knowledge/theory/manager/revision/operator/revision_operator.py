@@ -450,6 +450,92 @@ class RevisionOperator(Initializable):
             horn_clause = clause_modifier.modify_clause(horn_clause, targets)
         return horn_clause
 
+    def check_for_equivalent_clause(self, clause, theory):
+        """
+        Checks if the theory has another clause equivalent to `clause`.
+
+        Since full equivalent checking is not trivial, we will consider that
+        two clauses are equivalent whenever they are equal, expect by
+        constant terms in learnable predicates.
+
+        :param clause: the clause
+        :type clause: HornClause
+        :param theory: the current theory
+        :type theory: NeuralLogProgram
+        :return: `True`, if it does; otherwise, `False`
+        :rtype: bool
+        """
+        trainable_predicates = set()
+        base = self.learning_system.knowledge_base
+        theory = self.learning_system.theory if theory is None else theory
+        trainable_predicates.update(
+            base.trainable_predicates,
+            theory.trainable_predicates)
+        other_clauses = \
+            base.clauses_by_predicate.get(clause.head.predicate, [])
+        for other_clause in other_clauses:
+            if self._is_clauses_equivalent(
+                    clause, other_clause, trainable_predicates):
+                return True
+        other_clauses = \
+            theory.clauses_by_predicate.get(clause.head.predicate, [])
+        for other_clause in other_clauses:
+            if self._is_clauses_equivalent(
+                    clause, other_clause, trainable_predicates):
+                return True
+
+        return False
+
+    # noinspection PyMethodMayBeStatic
+    def _is_clauses_equivalent(self, clause1, clause2, trainable_predicates):
+        """
+        Checks if the clauses are equivalent to each other.
+
+        :param clause1: the first clause
+        :type clause1: HornClause
+        :param clause2: the second clause
+        :type clause2: HornClause
+        :param trainable_predicates: the set of trainable predicates
+        :type trainable_predicates: Set[Predicate]
+        :return: `True`, if they are equivalent to each other;
+            otherwise, `False`
+        :rtype: bool
+        """
+        if clause1.head != clause2.head:
+            return False
+
+        if len(clause1.body) != len(clause2.body):
+            return False
+
+        for atom1, atom2 in zip(clause1.body, clause2.body):
+            predicate = atom1.predicate
+            if predicate != atom2.predicate:
+                return False
+
+            if not self._is_predicate_trainable(
+                    predicate, trainable_predicates):
+                if atom1.terms != atom2.terms:
+                    return False
+
+        return True
+
+    @staticmethod
+    def _is_predicate_trainable(predicate, trainable_predicates):
+        """
+        Checks if the predicate is equivalent to a trainable predicate.
+
+        :param predicate: the predicate
+        :type predicate: Predicate
+        :param trainable_predicates: the trainable predicates
+        :type trainable_predicates: Iterable[Predicate]
+        :return: `True`, if it is; otherwise, `False`
+        :rtype: bool
+        """
+        for trainable in trainable_predicates:
+            if predicate.equivalent(trainable):
+                return True
+        return False
+
     def __repr__(self):
         return self.__class__.__name__
 

@@ -792,8 +792,14 @@ class MetaRevisionOperator(ro.RevisionOperator):
         revised_clause = new_clause
 
         current_theory = self.learning_system.theory.copy()
+        if self.check_for_equivalent_clause(
+                new_clause, current_theory):
+            return None
         current_theory.add_clauses([new_clause])
-        current_theory.add_clauses(program[1:])
+        for clause in program[1:]:
+            # noinspection PyTypeChecker
+            if not self.check_for_equivalent_clause(clause, current_theory):
+                current_theory.add_clauses([clause])
 
         return current_theory, revised_clause, None
 
@@ -844,8 +850,14 @@ class MetaRevisionOperator(ro.RevisionOperator):
         revised_clause = new_clause
 
         current_theory = self.learning_system.theory.copy()
+        if self.check_for_equivalent_clause(
+                new_clause, current_theory):
+            return None
         current_theory.add_clauses([new_clause])
-        current_theory.add_clauses(program[1:])
+        for clause in program[1:]:
+            # noinspection PyTypeChecker
+            if not self.check_for_equivalent_clause(clause, current_theory):
+                current_theory.add_clauses([clause])
 
         return current_theory, revised_clause, None
 
@@ -901,8 +913,14 @@ class MetaRevisionOperator(ro.RevisionOperator):
                     Literal(new_clause.head) == new_clause.body[0]:
                 return None
             revised_clause = new_clause
+            if self.check_for_equivalent_clause(
+                    new_clause, current_theory):
+                return None
             current_theory.add_clauses([new_clause])
-            current_theory.add_clauses(program[1:])
+            for clause in program[1:]:
+                # noinspection PyTypeChecker
+                if not self.check_for_equivalent_clause(clause, current_theory):
+                    current_theory.add_clauses([clause])
 
         return current_theory, revised_clause, removed_item
 

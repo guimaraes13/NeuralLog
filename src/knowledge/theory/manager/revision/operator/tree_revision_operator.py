@@ -218,6 +218,8 @@ class AddNodeTreeRevisionOperator(TreeRevisionOperator):
         self.log_changes(node, remove_old)
 
         theory = self.learning_system.theory.copy()
+        if self.check_for_equivalent_clause(self.revised_clause, theory):
+            return None
         theory.add_clauses([self.revised_clause])
         if remove_old:
             self.remove_old_rule_from_theory(node, theory)
