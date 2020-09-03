@@ -8,7 +8,7 @@ from typing import Set
 import src.knowledge.theory.manager.revision.operator.revision_operator as ro
 import src.structure_learning.structure_learning_system as sls
 from src.language.language import Atom
-from src.util import Initializable, reset_field_error
+from src.util import Initializable
 
 
 class SampleSelector(Initializable):
@@ -24,7 +24,7 @@ class SampleSelector(Initializable):
         :param learning_system: the learning system
         :type learning_system: sls.StructureLearningSystem
         """
-        self._learning_system = learning_system
+        self.learning_system = learning_system
 
     # noinspection PyMissingOrEmptyDocstring
     def required_fields(self):
@@ -60,17 +60,6 @@ class SampleSelector(Initializable):
         :rtype: SampleSelector
         """
         pass
-
-    # noinspection PyMissingOrEmptyDocstring
-    @property
-    def learning_system(self):
-        return self._learning_system
-
-    @learning_system.setter
-    def learning_system(self, value):
-        if self._learning_system is not None:
-            raise reset_field_error(self, "learning_system")
-        self._learning_system = value
 
 
 class AllRelevantSampleSelector(SampleSelector):

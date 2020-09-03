@@ -280,15 +280,15 @@ class EngineSystemTranslator(Initializable):
     def inferred_relevant(self, terms, positive_threshold=None):
         """
         Perform the inference in order to get all atoms directly
-        relevant to `terms`. The atoms directly relevant ot a term is the atoms
+        relevant to `terms`. The atoms directly relevant of a term is the atoms
         which contain the term.
 
         :param terms: the terms
         :type terms: Set[Term]
         :param positive_threshold: if set, only the examples whose inference
-        are above the threshold will be considered as positive. If not set,
-        only the examples whose score is above the score of the `__null__`
-        example will be considered as positive
+            are above the threshold will be considered as positive. If not set,
+            only the examples whose score is above the score of the `__null__`
+            example will be considered as positive
         :type positive_threshold: Optional[float]
         :return: the atoms relevant to the terms
         :rtype: Set[Atom]

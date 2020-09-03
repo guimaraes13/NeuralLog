@@ -937,6 +937,16 @@ class IterativeStructureLearning(StructureLearningMethod):
         self.engine_system_translator.build_model()
         logger.debug("Added knowledge from \t%s", iteration_name)
 
+    def remove_iteration_examples(self, index):
+        """
+        Removes the examples of the iteration.
+
+        :param index: the index of the iteration
+        :type index: int
+        """
+        iteration_name = self.iteration_directories[index]
+        self.knowledge_base.examples.pop(iteration_name, None)
+
     # noinspection PyMissingOrEmptyDocstring
     def learn(self):
         logger.info(RunTimestamps.BEGIN_TRAIN.value)
@@ -981,6 +991,8 @@ class IterativeStructureLearning(StructureLearningMethod):
         logger.debug(
             "Ended the revision of the example(s) from %s", iteration_name)
         self.evaluate_iteration(index)
+        if index > 1:
+            self.remove_iteration_examples(index - 2)
         self.save_iteration_files(index)
         end_stamp = self.time_stamp_factory.get_time_stamp(
             IterationTimeMessage.END, iteration_name)

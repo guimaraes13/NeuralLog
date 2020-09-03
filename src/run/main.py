@@ -12,10 +12,13 @@ import sys
 import time
 import traceback
 
+# IMPROVE: import only the command names and description. Then, import only
+#  the class of the command the will be used.
 import src.run.command
 import src.run.command.learn_structure
 import src.run.command.output_nlp
 import src.run.command.train
+import src.run.command.plot_result_it
 
 logger = logging.getLogger(__name__ if __name__ != "__main__" else "main")
 

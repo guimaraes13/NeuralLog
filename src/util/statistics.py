@@ -2,7 +2,7 @@
 Measures training statistics.
 """
 from functools import reduce
-from typing import Optional, Dict, List, TypeVar, Generic
+from typing import Optional, Dict, List, TypeVar, Generic, Any
 
 from src.knowledge.theory.evaluation.metric.theory_metric import TheoryMetric
 from src.util.time_measure import TimeMeasure
@@ -117,6 +117,19 @@ class RunStatistics:
 T = TypeVar('T')
 
 
+def convert_evaluations(evaluations):
+    """
+    Converts the evaluation to a dictionary of strings and floats.
+
+    :param evaluations: the evaluations
+    :type evaluations: Dict[TheoryMetric, float]
+    :return: the evaluations
+    :rtype: Dict[str, float]
+    """
+    converted = map(lambda x: (str(x[0]), x[1]), evaluations.items())
+    return dict(converted)
+
+
 class IterationStatistics(Generic[T]):
     """
     Class to hold the statistics of an iteration experiment. The idea is to
@@ -131,8 +144,8 @@ class IterationStatistics(Generic[T]):
         self.iteration_knowledge_sizes = []
         self.iteration_examples_sizes = []
 
-        self.iteration_train_evaluation: List[Dict[TheoryMetric, float]] = []
-        self.iteration_test_evaluation: List[Dict[TheoryMetric, float]] = []
+        self.iteration_train_evaluation: List[Dict[Any, float]] = []
+        self.iteration_test_evaluation: List[Dict[Any, float]] = []
 
         self.time_measure: TimeMeasure[T] = TimeMeasure()
 
@@ -143,7 +156,7 @@ class IterationStatistics(Generic[T]):
         :param evaluations: the evaluations
         :type evaluations: Dict[TheoryMetric, float]
         """
-        self.iteration_train_evaluation.append(evaluations)
+        self.iteration_train_evaluation.append(convert_evaluations(evaluations))
 
     def add_iteration_test_evaluation(self, evaluations):
         """
@@ -152,7 +165,7 @@ class IterationStatistics(Generic[T]):
         :param evaluations: the evaluations
         :type evaluations: Dict[TheoryMetric, float]
         """
-        self.iteration_test_evaluation.append(evaluations)
+        self.iteration_test_evaluation.append(convert_evaluations(evaluations))
 
     def get_sorted_metrics(self):
         """
