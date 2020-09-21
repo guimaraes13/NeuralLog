@@ -607,6 +607,21 @@ class CRFLogLikelihood(NeuralLogLoss):
     __call__ = call
 
 
+@neural_log_literal_function("conv_transpose")
+def conv_transpose(a):
+    """
+    Transpose the input tensor as to apply `a` by changing the seconds
+    dimension with the last, in order to prepare for a convolution layer.
+
+    :param a: the input tensor
+    :type a: tf.Tensor
+    :return: the transposed tensor
+    :rtype: tf.Tensor
+    """
+
+    return tf.transpose(a, [0, 2, 1])
+
+
 @neural_log_literal_function("partial")
 class Partial:
     """

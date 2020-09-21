@@ -704,18 +704,18 @@ class BatchStructureLearning(StructureLearningMethod):
 
 
 # noinspection DuplicatedCode
-def get_iteration_directories(data_directory, iteration_prefix):
+def get_sorted_directories(data_directory, prefix):
     """
     Gets the iteration directories, sorted by the iteration number.
 
     :param data_directory: the data directory
     :type data_directory: str
-    :param iteration_prefix: the iteration prefix
-    :type iteration_prefix: str
+    :param prefix: the iteration prefix
+    :type prefix: str
     :return: the iteration directories
     :rtype: List[str]
     """
-    pattern = re.compile(iteration_prefix + "([0-9]|[1-9][0-9]+)")
+    pattern = re.compile(prefix + "([0-9]|[1-9][0-9]+)")
     directories = os.listdir(data_directory)
     directories = map(lambda x: pattern.fullmatch(x), directories)
     directories = filter(lambda x: x is not None, directories)
@@ -878,7 +878,7 @@ class IterativeStructureLearning(StructureLearningMethod):
     # noinspection PyMissingOrEmptyDocstring
     def build_knowledge_base(self):
         logger.info("Build the knowledge from iterations")
-        self.iteration_directories = get_iteration_directories(
+        self.iteration_directories = get_sorted_directories(
             self.data_directory, self.iteration_prefix)
         for iteration in self.iteration_directories:
             files = os.listdir(os.path.join(self.data_directory, iteration))

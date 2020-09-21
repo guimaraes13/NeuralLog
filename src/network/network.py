@@ -512,7 +512,8 @@ class NeuralLogNetwork(keras.Model):
         """
         predicate = renamed_literal.predicate
         depth = predicates_depths[predicate]
-        if depth < self.get_recursion_depth(predicate) + 1:
+        max_depth = self.get_recursion_depth(predicate) + 1
+        if depth < max_depth:
             inputs = []
             if (predicate in self.program.facts_by_predicate or
                     predicate in self.program.trainable_predicates):

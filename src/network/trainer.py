@@ -417,10 +417,13 @@ class Trainer:
             return os.path.join(self.output_path, suffix)
         return suffix
 
-    def build_dataset(self):
+    def build_dataset(self, override_targets=True):
         """
         Builds the NeuralLog dataset.
 
+        :param override_targets: if `True`, overrides the target predicates
+        of the dataset for the ones from the model
+        :type override_targets: bool
         :return: the NeuralLog dataset
         :rtype: NeuralLogDataset
         """
@@ -439,7 +442,8 @@ class Trainer:
         config["inverse_relations"] = inverse_relations
         self._neural_dataset: NeuralLogDataset = \
             get_dataset_class(class_name)(**config)
-        self._neural_dataset.target_predicates = self.model.predicates
+        if override_targets:
+            self._neural_dataset.target_predicates = self.model.predicates
         return self._neural_dataset
 
     def get_dataset(self, name):

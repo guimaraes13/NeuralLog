@@ -522,8 +522,8 @@ class AreaUnderCurveROC(AbstractNeuralLogCallback):
             results[predicate] = ([], [])
 
         for features, labels in self.dataset:
-            y_scores = self.model.predict(features)
-            if len(self.model.predicates) == 1:
+            y_scores = model.predict(features)
+            if len(model.predicates) == 1:
                 y_scores = [y_scores]
                 features = [features]
             for i in range(len(model.predicates)):

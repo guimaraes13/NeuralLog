@@ -237,7 +237,7 @@ class Train(Command):
         parser.add_argument("--logFile", "-log", metavar='file',
                             type=str, default=None,
                             help="The file path to save the log into")
-        parser.add_argument("--tensorBoard", "-tb", metavar='file',
+        parser.add_argument("--tensorBoard", "-tb", metavar='directory',
                             type=str, default=None,
                             help="Creates a log event for the TensorBoard "
                                  "on the given path")
@@ -359,10 +359,13 @@ class Train(Command):
         logger.info("Building model...")
         self.trainer = Trainer(self.neural_program, self.output_path)
         self.trainer.init_model()
-        self.neural_dataset = self.trainer.build_dataset()
+        self._read_parameters()
+        # self.trainer.read_parameters()
+        self.neural_dataset = self.trainer.build_dataset(override_targets=False)
+        self._build_examples_set()
         self.model = self.trainer.model
         self.model.build_layers(self.neural_dataset.get_target_predicates())
-        self._read_parameters()
+        # self._read_parameters()
         self.trainer.log_parameters(
             ["clip_labels", "loss_function", "optimizer",
              "regularizer" "metrics", "inverse_relations"],
@@ -442,7 +445,6 @@ class Train(Command):
     def run(self):
         self.build()
         history = None
-        self._build_examples_set()
         self._save_transitions("transition_before.txt")
         if self.train:
             history = self.fit()

@@ -184,14 +184,30 @@ class AccumulatorMetric(TheoryMetric, Generic[J, K]):
 
     OPTIONAL_FIELDS = dict(TheoryMetric.OPTIONAL_FIELDS)
     OPTIONAL_FIELDS.update({
-        "ABSENT_PREDICTION_VALUE": 0.0
+        "ABSENT_PREDICTION_VALUE": 0.0,
+        "empty_default": True
     })
 
-    def __init__(self):
+    def __init__(self, empty_default=None):
         """
         Creates an accumulator metric.
+
+        :param empty_default: if `True`, returns the default value for theories
+        that those not proves any examples. Otherwise, computes the metric
+        considering all predictions as false
+        :type empty_default: bool or None
         """
         super().__init__()
+
+        self.empty_default = empty_default
+        """
+        if `True`, returns the default value for theories 
+        that those not proves any examples. Otherwise, computes the metric 
+        considering all predictions as false.
+        """
+        if self.empty_default is None:
+            self.empty_default = self.OPTIONAL_FIELDS["empty_default"]
+
         self.ABSENT_PREDICTION_VALUE = \
             self.OPTIONAL_FIELDS["ABSENT_PREDICTION_VALUE"]
 
@@ -216,8 +232,10 @@ class AccumulatorMetric(TheoryMetric, Generic[J, K]):
         :rtype: J or None
         """
         if not inferred_values:
-            return None
-            # inferred_values = ExamplesInferences()
+            if self.empty_default:
+                return None
+
+            inferred_values = ExamplesInferences()
 
         result: J = self.initial_value()
         for p, facts in examples.items():
