@@ -445,6 +445,14 @@ class Train(Command):
     def run(self):
         self.build()
         history = None
+        # from src.language.language import get_term_from_string
+        # target_predicate = self.model.predicates[0][0]
+        # size = self.neural_program.get_constant_size(target_predicate, 0)
+        # input_subject = self.neural_program.get_index_of_constant(
+        #     target_predicate, 0, get_term_from_string("c01698271"))
+        # test_feature = np.eye(size)[input_subject].reshape([1, -1])
+        # result = self.model.call(test_feature)
+        # print(result)
         self._save_transitions("transition_before.txt")
         if self.train:
             history = self.fit()

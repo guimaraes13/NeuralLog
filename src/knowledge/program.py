@@ -827,7 +827,7 @@ class NeuralLogProgram:
                 clauses_for_predicate = self.clauses_by_predicate.setdefault(
                     clause.head.predicate, list())
                 if clause in clauses_for_predicate:
-                    return
+                    continue
                 self._add_predicate(clause.head)
                 self.clause_predicates.add(clause.head.predicate)
                 for atom in clause.body:

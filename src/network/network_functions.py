@@ -265,6 +265,28 @@ def concat_combining_function(a, b):
     return tf.concat([a, b], axis=1)
 
 
+@neural_log_combining_function("concat_last_combining_function")
+def concat_axis_combining_function(a, b):
+    """
+    Combines the tensor `a` and `b` by concatenating them.
+
+    :param a: the tensor a
+    :type a: tf.Tensor
+    :param b: the tensor b
+    :type b: tf.Tensor
+    :param axis: the axis into which to concat
+    :type axis: int
+    :return: a combination of the tensors
+    :rtype: tf.Tensor
+    """
+    axis = 2
+    if a.shape.rank == 2:
+        a = tf.expand_dims(a, axis)
+    if b.shape.rank == 2:
+        b = tf.expand_dims(b, axis)
+    return tf.concat([a, b], axis=axis)
+
+
 @neural_log_combining_function("edge_combining_function_2d:sparse")
 def edge_combining_function_2d_sparse(a, sp_b):
     """
@@ -622,7 +644,6 @@ def conv_transpose(a):
     return tf.transpose(a, [0, 2, 1])
 
 
-@neural_log_literal_function("partial")
 class Partial:
     """
     Defines a literal function that call another function passing the values
@@ -669,6 +690,10 @@ class Partial:
             return self._function(inputs, **new_kwargs)
 
     __call__ = call
+
+
+neural_log_literal_function("partial")(Partial)
+neural_log_combining_function("partial")(Partial)
 
 
 class NeuralLogLayer(keras.layers.Layer):

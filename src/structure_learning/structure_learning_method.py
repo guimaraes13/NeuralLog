@@ -38,7 +38,7 @@ from src.structure_learning.structure_learning_system import \
     StructureLearningSystem
 from src.util import Initializable
 from src.util.file import read_logic_program_from_file, \
-    print_predictions_to_file
+    print_predictions_to_file, print_tsv_file_file
 from src.util.statistics import RunStatistics, IterationStatistics
 from src.util.time_measure import TimeMeasure, performance_time, \
     IterationTimeStampFactory, IterationTimeMessage, RunTimestamps
@@ -46,7 +46,9 @@ from src.util.time_measure import TimeMeasure, performance_time, \
 STATISTICS_FILE_NAME = "statistics.yaml"
 
 TRAIN_INFERENCE_FILE = "train.inference.pl"
+TSV_TRAIN_INFERENCE_FILE = "inference.train.tsv"
 TEST_INFERENCE_FILE = "test.inference.pl"
+TSV_TEST_INFERENCE_FILE = "inference.test.tsv"
 
 logger = logging.getLogger(__name__)
 
@@ -1054,16 +1056,22 @@ class IterativeStructureLearning(StructureLearningMethod):
         iteration_path = os.path.join(self.output_directory, iteration_name)
         os.makedirs(iteration_path, exist_ok=True)
         filepath = os.path.join(iteration_path, TRAIN_INFERENCE_FILE)
+        tsv_filepath = os.path.join(iteration_path, TSV_TRAIN_INFERENCE_FILE)
         train_set = self.knowledge_base.examples.get(iteration_name, Examples())
         print_predictions_to_file(
             train_set, self.train_inferred_examples, filepath)
+        print_tsv_file_file(
+            train_set, self.train_inferred_examples, tsv_filepath)
         if self.test_inferred_examples is not None:
             test_iteration = self.iteration_directories[index + 1]
             test_set = self.knowledge_base.examples.get(
                 test_iteration, Examples())
             filepath = os.path.join(iteration_path, TEST_INFERENCE_FILE)
+            tsv_filepath = os.path.join(iteration_path, TSV_TEST_INFERENCE_FILE)
             print_predictions_to_file(
                 test_set, self.test_inferred_examples, filepath)
+            print_tsv_file_file(
+                test_set, self.test_inferred_examples, tsv_filepath)
         self.learning_system.save_parameters(iteration_path)
         self.save_statistics()
         self.time_measure.add_measure(self.time_stamp_factory.get_time_stamp(

@@ -4,7 +4,7 @@ Contains useful method to read and write files.
 import sys
 
 from src.knowledge.examples import ExamplesInferences, ExampleIterator
-from src.language.language import AtomClause
+from src.language.language import AtomClause, Atom
 from src.language.parser.ply.neural_log_parser import NeuralLogLexer, \
     NeuralLogParser
 
@@ -50,3 +50,31 @@ def print_predictions_to_file(examples, predictions, filepath,
         output.write(str(clause))
         output.write("\n")
     output.close()
+
+
+def print_tsv_file_file(examples, predictions, filepath,
+                        default_value=-sys.float_info.max):
+    """
+    Prints the `predictions` to the file in `filepath`, in tsv format.
+
+    :param examples: the examples
+    :type examples: Examples
+    :param predictions: the predictions
+    :type predictions: ExamplesInferences
+    :param filepath: the file path
+    :type filepath: str
+    :param default_value: the default value to save not inferred examples
+    :type default_value: float
+    """
+    HEADER = "Example\tExpected\tInference\n"
+    output = open(filepath, "w")
+    output.write(HEADER)
+    for atom in ExampleIterator(examples):
+        clause = Atom(atom.predicate, *atom.terms)
+        if predictions.contains_example(atom):
+            pred = predictions.get_value_for_example(atom)
+        else:
+            pred = default_value
+        output.write(f"{clause}\t{atom.weight}\t{pred}\n")
+    output.close()
+
