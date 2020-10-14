@@ -59,6 +59,8 @@ class AddNodeTreeRevisionOperator(TreeRevisionOperator):
     operator.
     """
 
+    logger = logging.getLogger(f"{__name__}.AddNodeTreeRevisionOperator")
+
     OPTIONAL_FIELDS = dict(TreeRevisionOperator.OPTIONAL_FIELDS)
     OPTIONAL_FIELDS.update({
         "refine": False,
@@ -201,7 +203,7 @@ class AddNodeTreeRevisionOperator(TreeRevisionOperator):
         :return: the new sorted theory
         :rtype: NeuralLogProgram
         """
-        logger.debug("Trying to revise rule:\t%s", node)
+        self.logger.debug("Trying to revise rule:\t%s", node)
         element = \
             HornClause(node.element.head) if node.is_root else node.element
         target_predicate = self.tree_theory.get_target_predicate()
@@ -251,7 +253,7 @@ class AddNodeTreeRevisionOperator(TreeRevisionOperator):
         :return: the best Horn clause found
         :rtype: AsyncTheoryEvaluator or SyncTheoryEvaluator
         """
-        logger.info("Refining rule:\t%s", initial_clause)
+        self.logger.info("Refining rule:\t%s", initial_clause)
         side_way_movements = 0
         best_clause = initial_clause
         current_clause = initial_clause
@@ -261,7 +263,7 @@ class AddNodeTreeRevisionOperator(TreeRevisionOperator):
                 examples, current_clause.horn_clause, set(), target_predicate)
             if not current_clause:
                 break
-            logger.debug("Proposed refined rule:\t%s", current_clause)
+            self.logger.debug("Proposed refined rule:\t%s", current_clause)
             improvement = self.theory_metric.difference(
                 current_clause.evaluation, best_clause.evaluation)
             if improvement > self.improvement_threshold:
@@ -282,13 +284,13 @@ class AddNodeTreeRevisionOperator(TreeRevisionOperator):
         :param remove_old: if it is to remove the old clause
         :type remove_old: bool
         """
-        if logger.isEnabledFor(logging.DEBUG):
+        if self.logger.isEnabledFor(logging.DEBUG):
             if remove_old:
                 body = set(self.revised_clause.body)
                 body = body.difference(node.element.body)
-                logger.debug("Propose to add the literal(s):\t%s", body)
+                self.logger.debug("Propose to add the literal(s):\t%s", body)
             else:
-                logger.debug(
+                self.logger.debug(
                     "Propose to add the rule:\t%s", self.revised_clause)
 
     def is_to_stop_by_side_way_movements(self, side_way_movements):
@@ -351,10 +353,12 @@ class RemoveNodeTreeRevisionOperator(TreeRevisionOperator):
     Revision operator that removes a node from the tree theory.
     """
 
+    logger = logging.getLogger(f"{__name__}.RemoveNodeTreeRevisionOperator")
+
     # noinspection PyMissingOrEmptyDocstring
     def perform_operation(self, targets, minimum_threshold=None):
         revision_leaf = self.tree_theory.get_revision_leaf()
-        logger.debug("Trying to revise rule:\t%s", revision_leaf)
+        self.logger.debug("Trying to revise rule:\t%s", revision_leaf)
         if revision_leaf.is_root:
             # Root case
             # This is the root node
@@ -393,7 +397,7 @@ class RemoveNodeTreeRevisionOperator(TreeRevisionOperator):
         theory = self.learning_system.theory.copy()
         element = node.element
         theory.clauses_by_predicate[element.head.predicate].remove(element)
-        logger.debug("Propose to remove the rule:\t%s", element)
+        self.logger.debug("Propose to remove the rule:\t%s", element)
         return theory
 
     def remove_literal_from_theory(self, node, examples):
@@ -419,10 +423,10 @@ class RemoveNodeTreeRevisionOperator(TreeRevisionOperator):
                 clauses.add(revised_clause)
             else:
                 clauses.add(clause)
-        if logger.isEnabledFor(logging.DEBUG):
+        if self.logger.isEnabledFor(logging.DEBUG):
             body = set(node.element.body)
             body.difference(node.parent.element.body)
-            logger.debug("Propose to remove the literal:\t%s", body)
+            self.logger.debug("Propose to remove the literal:\t%s", body)
 
         modified_theory = self.learning_system.theory.copy()
         modified_theory.clauses_by_predicate[predicate] = list(clauses)
