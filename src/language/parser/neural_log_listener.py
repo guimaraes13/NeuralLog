@@ -137,6 +137,12 @@ def solve_place_holder_term(term, key, substitution):
             return value
         else:
             return TemplateTerm(parts)
+    if isinstance(term, ListTerms):
+        sub_terms = []
+        for sub_term in term.items:
+            sub_terms.append(
+                solve_place_holder_term(sub_term, key, substitution))
+        return ListTerms(sub_terms)
     raise BadTermException(term, key, substitution)
 
 

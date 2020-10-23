@@ -5,13 +5,15 @@ Module to parse the NeuralLog Programs using the ply parser library.
 import logging
 import sys
 from collections import deque
+from enum import IntEnum
+from typing import List
 
 import ply.lex as lex
 import ply.yacc as yacc
 
 from src.language.language import Atom, Predicate, TemplatePredicate, Number, \
     Quote, TemplateTerm, Variable, Constant, Literal, HornClause, AtomClause, \
-    BadArgumentException, Clause, FileDefinedClause
+    BadArgumentException, Clause, FileDefinedClause, ListTerms
 from src.language.parser.neural_log_listener import KeyDict, \
     BadClauseException, PLACE_HOLDER, ground_placeholders, solve_place_holders
 
@@ -37,6 +39,37 @@ def config_log(level=logging.DEBUG):
     )
 
 
+class ContainerTypes(IntEnum):
+    """
+    Enumerates the types of containers.
+    """
+
+    PLACE_HOLDER_CONTAINER = 0
+    LIST_OF_ARGUMENTS = 1
+
+    def __repr__(self):
+        return self.name
+
+
+class ListContainer:
+    """
+    Holds a list of a type.
+    """
+
+    def __init__(self, container_type: ContainerTypes, items: List):
+        self.container_type = container_type
+        self.items = items
+
+    def __getitem__(self, item):
+        return self.items[item]
+
+    def __len__(self):
+        return len(self.items)
+
+    def __repr__(self):
+        return f"{self.container_type.name}:\t{self.items}"
+
+
 # noinspection PyPep8Naming,PyMethodMayBeStatic,PySingleQuotedDocstring
 class NeuralLogLexer:
     """
@@ -60,6 +93,8 @@ class NeuralLogLexer:
                  "PLACE_HOLDER",
                  "OPEN_ARGUMENTS",
                  "CLOSE_ARGUMENTS",
+                 "OPEN_LIST_ARGUMENT",
+                 "CLOSE_LIST_ARGUMENT",
                  "OPEN_CURLY_BRACES",
                  "CLOSE_CURLY_BRACES",
                  "RANGER_SEPARATOR",
@@ -75,6 +110,8 @@ class NeuralLogLexer:
     t_PLACE_HOLDER = r"{([a-zA-Z0-9_-])+}"
     t_OPEN_ARGUMENTS = r"\("
     t_CLOSE_ARGUMENTS = r"\)"
+    t_OPEN_LIST_ARGUMENT = r"\["
+    t_CLOSE_LIST_ARGUMENT = r"\]"
     t_OPEN_CURLY_BRACES = r"\{"
     t_CLOSE_CURLY_BRACES = r"\}"
     t_RANGER_SEPARATOR = r"\.\."
@@ -221,15 +258,8 @@ class NeuralLogParser:
                     ground_placeholders(literal.predicate.parts, place_holders,
                                         *predicates_names)
                 for term in literal.terms:
-                    if not term.is_template():
-                        continue
-                    if isinstance(term, Quote):
-                        parts = PLACE_HOLDER.split(term.get_name())
-                    else:
-                        parts = term.parts
-                    ground_placeholders(parts,
-                                        place_holders,
-                                        *predicates_names, *constants_names)
+                    self.process_term(term, place_holders, predicates_names,
+                                      constants_names)
             solved = sorted(solve_place_holders(clause, place_holders),
                             key=lambda x: x.__str__())
             for new_clause in solved:
@@ -241,6 +271,34 @@ class NeuralLogParser:
                     self.add_constants(new_clause)
         self.clauses.clear()
         self.clauses.append(expanded_clauses)
+
+    def process_term(self, term, place_holders, predicates_names,
+                     constants_names):
+        """
+        Process the placeholder term.
+
+        :param term: the term
+        :type term: Term
+        :param place_holders: the place_holders
+        :type place_holders: Dict[str, Set[str]]
+        :param predicates_names: the names of the predicates
+        :type predicates_names: set[str]
+        :param constants_names: the names of the constants
+        :type constants_names: set[str]
+        """
+        if not term.is_template():
+            return
+        if isinstance(term, ListTerms):
+            for sub_term in term.items:
+                self.process_term(sub_term, place_holders, predicates_names,
+                                  constants_names)
+        else:
+            if isinstance(term, Quote):
+                parts = PLACE_HOLDER.split(term.get_name())
+            else:
+                parts = term.parts
+            ground_placeholders(parts, place_holders,
+                                *predicates_names, *constants_names)
 
     def add_constant_names_to_set(self, clause, constants_set):
         """
@@ -337,12 +395,33 @@ class NeuralLogParser:
         """
         if isinstance(parts, list):
             if len(parts) == 1 and not self.is_template(parts[0]):
-                term = parts[0]
+                return self.extract_term(parts[0])
             else:
                 return TemplateTerm(parts)
+        elif isinstance(parts, ListContainer):
+            if parts.container_type == ContainerTypes.LIST_OF_ARGUMENTS:
+                terms = []
+                for term in parts.items:
+                    terms.append(self.build_term_from_parts(term))
+                return ListTerms(terms)
+            elif parts.container_type == ContainerTypes.PLACE_HOLDER_CONTAINER:
+                if len(parts.items) == 1 and not self.is_template(parts[0]):
+                    return self.extract_term(parts[0])
+                return TemplateTerm(parts.items)
+            else:
+                raise BadArgumentException(parts)
         else:
-            term = parts
+            return self.extract_term(parts)
 
+    def extract_term(self, term):
+        """
+        Extracts the term from the raw value.
+
+        :param term: the raw term
+        :type term: str, int, float
+        :return: the extracted term
+        :rtype: Term
+        """
         if isinstance(term, float) or isinstance(term, int):
             return Number(term)
         elif term[0].isupper():
@@ -660,10 +739,17 @@ class NeuralLogParser:
                     | term"""
         p[0] = p[1]
 
-    def p_term(self, p):
-        """term : QUOTED
-                | place_holder_term"""
+    def p_list_argument(self, p):
+        """argument : OPEN_LIST_ARGUMENT arguments CLOSE_LIST_ARGUMENT"""
+        p[0] = ListContainer(ContainerTypes.LIST_OF_ARGUMENTS, p[2])
+
+    def p_term_quoted(self, p):
+        """term : QUOTED"""
         p[0] = p[1]
+
+    def p_term_place_holder(self, p):
+        """term : place_holder_term"""
+        p[0] = ListContainer(ContainerTypes.PLACE_HOLDER_CONTAINER, p[1])
 
     def p_place_holder_term(self, p):
         """place_holder_term : PLACE_HOLDER

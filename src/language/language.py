@@ -328,7 +328,7 @@ class Term:
         Creates a logic term.
 
         :param value: the value of the term
-        :type value: str or float
+        :type value: Any
         """
         self.value = value
 
@@ -512,6 +512,34 @@ class TemplateTerm(Term):
     # noinspection PyMissingOrEmptyDocstring
     def is_template(self):
         return True
+
+
+class ListTerms(Term):
+    """
+    Defines a term that is a list of terms.
+    """
+
+    def __init__(self, terms):
+        """
+        Creates a list of terms.
+
+        :param terms: the terms
+        :type terms: collections.Iterable[Term]
+        """
+        self.items = tuple(terms)
+        super().__init__(f"[{', '.join(map(lambda x: str(x), self.items))}]")
+
+    # noinspection PyMissingOrEmptyDocstring
+    def is_constant(self):
+        return True
+
+    # noinspection PyMissingOrEmptyDocstring
+    def is_template(self):
+        for term in self.items:
+            if term.is_template():
+                return True
+
+        return False
 
 
 class Predicate:
