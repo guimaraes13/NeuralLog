@@ -5,8 +5,9 @@ import logging
 import unittest
 from typing import List
 
+from src.knowledge.program import NeuralLogProgram
 from src.language.language import HornClause, Variable, Constant, ListTerms, \
-    Quote, Number, TemplateTerm
+    Quote, Number, TemplateTerm, Predicate
 from src.language.parser.ply.neural_log_parser import NeuralLogLexer, \
     NeuralLogParser
 from src.run import configure_log
@@ -60,3 +61,28 @@ class TestStructureLearning(unittest.TestCase):
 
         terms = clauses[1].body[0].terms
         self.assertEqual(TemplateTerm(["{test}", "A"]), terms[0])
+
+    def test_parameters(self):
+        parameter_name = "parameter_name"
+        predicate = Predicate("predicate_name", 2)
+        program = f"""
+            set_parameter({parameter_name}, [1, C, 2]).
+            set_predicate_parameter("{predicate}", class_name, test).
+            set_predicate_parameter("{predicate}", config, [1, [4, 2.2], 3.8]).
+        """
+        clauses: List[HornClause] = _read_program(program)
+        neural_program = NeuralLogProgram()
+        neural_program.add_clauses(clauses)
+        neural_program.build_program()
+        # Predicate
+        expect1 = [1, "C", 2]
+        expect2 = [1, [4, 2.2], 3.8]
+
+        self.assertTrue(parameter_name in neural_program.parameters)
+        values1 = neural_program.parameters[parameter_name]
+        self.assertEqual(expect1, values1)
+        self.assertTrue(predicate in neural_program.parameters)
+        values2 = neural_program.parameters[predicate]["class_name"]
+        self.assertEqual("test", values2)
+        values3 = neural_program.parameters[predicate]["config"]
+        self.assertEqual(expect2, values3)

@@ -17,7 +17,7 @@ from src.language.language import Number, TermType, Predicate, Atom, \
     HornClause, Term, AtomClause, ClauseMalformedException, \
     PredicateTypeError, \
     UnsupportedMatrixRepresentation, Literal, \
-    get_constant_from_string, KnowledgeException, get_variable_atom
+    get_constant_from_string, KnowledgeException, get_variable_atom, ListTerms
 from src.util import OrderedSet
 
 TRUE_PREDICATE = "true"
@@ -1769,7 +1769,7 @@ class NeuralLogProgram:
                 inner_dict = dict()
                 parameter_dict[key] = inner_dict
             parameter_dict = inner_dict
-        value = self._convert_value(atom.terms[-1].value)
+        value = self._convert_value(atom.terms[-1])
         parameter_dict[atom.terms[-2].value] = value
 
     def _convert_value(self, value):
@@ -1785,10 +1785,17 @@ class NeuralLogProgram:
         Otherwise, return the value.
 
         :param value: the value
-        :type value: str or int or float
+        :type value: Term
         :return: the converted value
-        :rtype: int or float or str or bool or function
+        :rtype: int or float or str or bool or function or list
         """
+        if isinstance(value, ListTerms):
+            terms = []
+            for sub_term in value.items:
+                terms.append(self._convert_value(sub_term))
+            return terms
+
+        value = value.value
         if isinstance(value, str):
             match = PREDICATE_TYPE_MATCH.match(value)
             if match is not None:
