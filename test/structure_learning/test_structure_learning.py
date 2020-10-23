@@ -82,8 +82,8 @@ class TestStructureLearning(unittest.TestCase):
 
     def test_meta_structure_learning(self):
         program = """
-            parent(X0, X1) :- father(X0, X1).
-            parent(X0, X1) :- mother(X0, X1).
+            parent(A, B) :- father(A, B).
+            parent(A, B) :- mother(A, B).
         """
 
         self._test_structure_learning(
@@ -91,9 +91,9 @@ class TestStructureLearning(unittest.TestCase):
 
     def test_meta_structure_learning_invention(self):
         program = """
-            parent(X0, X1) :- f0(X0, X1).
-            f0(X0, X1) :- father(X0, X1).
-            f0(X0, X1) :- mother(X0, X1).
+            parent(A, B) :- f0(A, B).
+            f0(A, B) :- father(A, B).
+            f0(A, B) :- mother(A, B).
         """
 
         self._test_structure_learning(

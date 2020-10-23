@@ -15,11 +15,11 @@ from src.knowledge.manager.tree_manager import TreeTheory, Node, \
 from src.knowledge.program import NeuralLogProgram, get_predicate_from_string
 from src.knowledge.theory import TheoryRevisionException
 from src.language.language import Atom, HornClause, Predicate, Variable, \
-    get_term_from_string, Literal, get_variable_atom, KnowledgeException, \
-    AtomClause, Quote, Clause
+    get_term_from_string, Literal, KnowledgeException, AtomClause, Quote, Clause
 from src.language.parser.ply.neural_log_parser import NeuralLogLexer, \
     NeuralLogParser
 from src.util import OrderedSet, InitializationException
+from src.util.clause_utils import to_variable_atom
 from src.util.language import get_unify_map
 from src.util.variable_generator import VariableGenerator, PredicateGenerator, \
     PermutationGenerator
@@ -422,9 +422,11 @@ def apply_clause_to_node(node, clause, unify_constant_predicate=True):
                 unify_constant_predicate):
             continue
         head = Atom(goal.predicate, *clause.head.terms)
-        substitution = get_unify_map(head, goal)
+        # substitution = get_unify_map(head, goal)
+        substitution = get_unify_map(goal, head)
         if substitution is None:
             continue
+        substitution = {value: key for key, value in substitution.items()}
         substitution[clause.head.predicate] = goal.predicate
         substitution[get_term_from_string(clause.head.predicate.name)] = \
             get_term_from_string(goal.predicate.name)
@@ -474,6 +476,44 @@ def apply_clause_to_node(node, clause, unify_constant_predicate=True):
             node.values[:i] + tuple(renamed_body) + node.values[i:]
         new_node = SLDNode(new_values, renamed_clause, node)
         yield new_node
+
+
+def _replace_constants(program):
+    """
+    Replaces the constants from the program by variables.
+
+    :param program: the program
+    :type program: Sequence[Clause]
+    :return: the variable program
+    :rtype: Sequence[Clause]
+    """
+    variable_generator = VariableGenerator()
+    variable_map = dict()
+    variable_program = []
+    for clause in program:
+        if isinstance(clause, HornClause):
+            head = to_variable_atom(
+                clause.head, variable_generator=variable_generator,
+                variable_map=variable_map, not_number_constants_only=True)
+            body = []
+            for literal in clause.body:
+                atom = to_variable_atom(
+                    literal, variable_generator=variable_generator,
+                    variable_map=variable_map, not_number_constants_only=True)
+                body.append(Literal(atom, negated=literal.negated))
+            variable_program.append(
+                HornClause(head, *body, provenance=clause.provenance))
+        elif isinstance(clause, AtomClause):
+            atom = to_variable_atom(
+                clause.atom, variable_generator=variable_generator,
+                variable_map=variable_map, not_number_constants_only=True)
+            atom.weight = clause.atom.weight
+            atom.provenance = clause.atom.provenance
+            variable_program.append(AtomClause(atom))
+        else:
+            raise Exception("Unsupported clause.")
+
+    return variable_program
 
 
 class MetaRevisionOperator(ro.RevisionOperator):
@@ -993,9 +1033,9 @@ class MetaRevisionOperator(ro.RevisionOperator):
                         logger.debug("Skipping covered example:\t%s", example)
                     # It skips negatives or covered positive examples
                     continue
-                target = get_variable_atom(example.predicate)
+                # target = get_variable_atom(example.predicate)
                 updated = self.perform_operation_for_example(
-                    target, theory, targets,
+                    example, theory, targets,
                     inferred_examples, current_evaluation, minimum_threshold)
                 if updated:
                     inferred_examples = None
@@ -1041,7 +1081,8 @@ class MetaRevisionOperator(ro.RevisionOperator):
 
             logger.debug("Building clause from the example:\t%s", example)
             program = self.build_program_from_target(
-                example, targets, current_evaluation, minimum_threshold)
+                example, targets, current_evaluation, minimum_threshold,
+                replace_constants=True)
             # horn_clause = self.apply_clause_modifiers(horn_clause, targets)
             if program:
                 for horn_clause in program:
@@ -1056,7 +1097,8 @@ class MetaRevisionOperator(ro.RevisionOperator):
         return False
 
     def build_program_from_target(self, target_atom, examples,
-                                  current_evaluation, minimum_threshold=None):
+                                  current_evaluation, minimum_threshold=None,
+                                  replace_constants=False):
         """
         Builds the a program from the example.
 
@@ -1070,6 +1112,9 @@ class MetaRevisionOperator(ro.RevisionOperator):
         :param minimum_threshold: the minimum threshold to early stop the
         evaluation of candidate programs
         :type minimum_threshold: float or None
+        :param replace_constants: if `True`, replaces the constants from the
+        program by variables/
+        :type replace_constants: bool
         :return: if `minimum_threshold` is None, returns the best evaluated
         program found, from the example; otherwise, returns the first program
         whose the improvement over the current theory is bigger than the
@@ -1093,6 +1138,8 @@ class MetaRevisionOperator(ro.RevisionOperator):
                 #  metrics and to allow timeout.
                 if not program or not isinstance(program[0], HornClause):
                     continue
+                if replace_constants:
+                    program = _replace_constants(program)
                 current_program = OrderedSet()
                 # noinspection PyTypeChecker
                 current_program.add(
@@ -1145,7 +1192,7 @@ class MetaRevisionOperator(ro.RevisionOperator):
             for node in apply_clause_to_node(root, clause, True):
                 queue.append(node)
                 yield node
-        for _ in range(self.maximum_depth - 1):
+        for _ in range(self.maximum_depth):
             size = len(queue)
             for __ in range(size):
                 current_node = queue.popleft()

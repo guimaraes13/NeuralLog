@@ -274,8 +274,6 @@ def concat_axis_combining_function(a, b):
     :type a: tf.Tensor
     :param b: the tensor b
     :type b: tf.Tensor
-    :param axis: the axis into which to concat
-    :type axis: int
     :return: a combination of the tensors
     :rtype: tf.Tensor
     """

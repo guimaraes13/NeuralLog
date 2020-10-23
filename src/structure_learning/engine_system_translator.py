@@ -19,6 +19,7 @@ from src.network.network import NeuralLogNetwork
 from src.network.trainer import Trainer
 from src.util import Initializable, time_measure
 from src.util.file import read_logic_program_from_file
+import tensorflow as tf
 
 logger = logging.getLogger(__name__)
 
@@ -437,6 +438,7 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
         :return: the trainer
         :rtype: Trainer
         """
+        tf.keras.backend.clear_session()
         program = self.knowledge_base.copy()
         if isinstance(examples, Examples):
             program.add_examples(examples, TEMPORARY_SET_NAME)

@@ -52,6 +52,9 @@ def print_predictions_to_file(examples, predictions, filepath,
     output.close()
 
 
+TSV_HEADER = "Example\tExpected\tInference\n"
+
+
 def print_tsv_file_file(examples, predictions, filepath,
                         default_value=-sys.float_info.max):
     """
@@ -66,9 +69,8 @@ def print_tsv_file_file(examples, predictions, filepath,
     :param default_value: the default value to save not inferred examples
     :type default_value: float
     """
-    HEADER = "Example\tExpected\tInference\n"
     output = open(filepath, "w")
-    output.write(HEADER)
+    output.write(TSV_HEADER)
     for atom in ExampleIterator(examples):
         clause = Atom(atom.predicate, *atom.terms)
         if predictions.contains_example(atom):
@@ -77,4 +79,3 @@ def print_tsv_file_file(examples, predictions, filepath,
             pred = default_value
         output.write(f"{clause}\t{atom.weight}\t{pred}\n")
     output.close()
-

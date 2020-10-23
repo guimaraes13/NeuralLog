@@ -5,11 +5,12 @@ from collections import Collection, Iterable
 from typing import Set, List, Callable, TypeVar
 
 from src.language.language import Literal, Atom, Term, get_term_from_string, \
-    HornClause
+    HornClause, Number
 from src.util.variable_generator import VariableGenerator
 
 
-def to_variable_atom(atom, variable_generator=None, variable_map=None):
+def to_variable_atom(atom, variable_generator=None, variable_map=None,
+                     not_number_constants_only=False):
     """
     Replace the constant terms of `atom` to variables, mapping equal constants
     to equal variables.
@@ -20,6 +21,7 @@ def to_variable_atom(atom, variable_generator=None, variable_map=None):
     :type variable_generator: Optional[VariableGenerator]
     :param variable_map: the map of constant to variables
     :type variable_map: Optional[Dict[Term, Term]]
+    :param not_number_constants_only: replaces only the not numbers constants
     :return: a new atom, with the constant terms replaces by variables
     :rtype: Atom
     """
@@ -29,11 +31,14 @@ def to_variable_atom(atom, variable_generator=None, variable_map=None):
         variable_map = dict()
     terms = []
     for term in atom.terms:
-        variable = variable_map.get(term)
-        if variable is None:
-            variable = get_term_from_string(next(variable_generator))
-        variable_map[term] = variable
-        terms.append(variable)
+        if not_number_constants_only and isinstance(term, Number):
+            terms.append(term)
+        else:
+            variable = variable_map.get(term)
+            if variable is None:
+                variable = get_term_from_string(next(variable_generator))
+            variable_map[term] = variable
+            terms.append(variable)
 
     return Atom(atom.predicate, *terms)
 
