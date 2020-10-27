@@ -15,7 +15,8 @@ from src.knowledge.manager.tree_manager import TreeTheory, Node, \
 from src.knowledge.program import NeuralLogProgram, get_predicate_from_string
 from src.knowledge.theory import TheoryRevisionException
 from src.language.language import Atom, HornClause, Predicate, Variable, \
-    get_term_from_string, Literal, KnowledgeException, AtomClause, Quote, Clause
+    get_term_from_string, Literal, KnowledgeException, AtomClause, Quote, \
+    Clause, get_variable_atom
 from src.language.parser.ply.neural_log_parser import NeuralLogLexer, \
     NeuralLogParser
 from src.util import OrderedSet, InitializationException
@@ -526,12 +527,14 @@ class MetaRevisionOperator(ro.RevisionOperator):
     OPTIONAL_FIELDS.update({
         "maximum_depth": 0,
         "find_best_theory": False,
-        "tree_theory": None
+        "tree_theory": None,
+        "iterate_over_predicate": False
     })
 
     def __init__(self, learning_system=None, theory_metric=None,
                  clause_modifiers=None, meta_program=None, maximum_depth=None,
-                 tree_theory=None, find_best_theory=None):
+                 tree_theory=None, find_best_theory=None,
+                 iterate_over_predicate=False):
         super().__init__(learning_system, theory_metric, clause_modifiers)
 
         self.meta_program: str = meta_program
@@ -559,6 +562,17 @@ class MetaRevisionOperator(ro.RevisionOperator):
 
         if self.find_best_theory is None:
             self.find_best_theory = self.OPTIONAL_FIELDS["find_best_theory"]
+
+        self.iterate_over_predicate = iterate_over_predicate
+        """
+        When learning from examples (not from tree theory), if it is set to 
+        `True`, instead of iterating each example at a time, it will iterate 
+        it target predicate only.
+        """
+
+        if self.iterate_over_predicate is None:
+            self.iterate_over_predicate = \
+                self.OPTIONAL_FIELDS["iterate_over_predicate"]
 
     def _read_program(self):
         """
@@ -1019,7 +1033,11 @@ class MetaRevisionOperator(ro.RevisionOperator):
             inferred_examples = None
             current_evaluation = None
             self._update_logic_predicates(theory)
-            for example in ExampleIterator(targets):
+            if self.iterate_over_predicate:
+                iterator = map(lambda x: get_variable_atom(x), targets)
+            else:
+                iterator = ExampleIterator(targets)
+            for example in iterator:
                 if inferred_examples is None:
                     inferred_examples = self.learning_system.infer_examples(
                         targets, theory)
@@ -1082,7 +1100,7 @@ class MetaRevisionOperator(ro.RevisionOperator):
             logger.debug("Building clause from the example:\t%s", example)
             program = self.build_program_from_target(
                 example, targets, current_evaluation, minimum_threshold,
-                replace_constants=True)
+                replace_constants=not self.iterate_over_predicate)
             # horn_clause = self.apply_clause_modifiers(horn_clause, targets)
             if program:
                 for horn_clause in program:
