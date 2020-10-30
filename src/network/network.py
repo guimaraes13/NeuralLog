@@ -287,6 +287,8 @@ class NeuralLogNetwork(keras.Model):
     def compile(self, *args, **kwargs):
         self._build_neural_log_loss(**kwargs)
         value = super().compile(*args, **kwargs)
+        for predicate_layer in self.predicate_layers:
+            predicate_layer.compile_layer()
         self.__is_compiled = True
         return value
 

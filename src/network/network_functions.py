@@ -5,6 +5,7 @@ from collections import deque
 from functools import reduce
 from typing import Dict, Callable
 
+import bert
 import tensorflow as tf
 import tensorflow.keras
 from tensorflow.python.training.tracking import data_structures
@@ -727,6 +728,53 @@ class NeuralLogLayer(keras.layers.Layer):
 
         return self.name == other.name
 
+    def compile_layer(self):
+        """
+        A function that is called after the compilation of the module to give
+        the layer the opportunity to set the last parameters.
+        """
+        pass
+
+
+@neural_log_literal_function("bert")
+class Bert(NeuralLogLayer):
+    """
+    Defines a layer that implements the BERT embeddings. Using the bert-for-tf2
+    library available at https://github.com/kpe/bert-for-tf2.
+
+    @article{devlin2018bert,
+        title={BERT: Pre-training of Deep Bidirectional Transformers for
+               Language Understanding},
+        author={Devlin, Jacob and Chang, Ming-Wei and Lee, Kenton and
+                Toutanova, Kristina},
+        journal={arXiv preprint arXiv:1810.04805},
+        year={2018}
+    }
+    """
+
+    def __init__(self, model_path, bert_checkpoint_file=None, **kwargs):
+        name = kwargs.get("name", "bert")
+        name += "_layer"
+        super(Bert, self).__init__(name)
+        parameters = bert.params_from_pretrained_ckpt(model_path)
+        self.bert_layer = bert.BertModelLayer.from_params(parameters, **kwargs)
+        self.bert_checkpoint_file = bert_checkpoint_file
+        self.loaded = False
+
+    def compile_layer(self):
+        """
+        Loads the weights of the layer.
+        """
+        if self.bert_checkpoint_file is not None and not self.loaded:
+            bert.load_stock_weights(self.bert_layer, self.bert_checkpoint_file)
+            self.loaded = True
+
+    # noinspection PyMissingOrEmptyDocstring
+    def call(self, inputs, mask=None, training=None):
+        return self.bert_layer(inputs, mask=mask, training=training)
+
+    __call__ = call
+
 
 class EmptyLayer(NeuralLogLayer):
     """
@@ -1150,6 +1198,11 @@ class SpecificFactLayer(NeuralLogLayer):
             result = tf.reshape(result, [-1, 1])
         return result
 
+    # noinspection PyMissingOrEmptyDocstring
+    def compile_layer(self):
+        super().compile_layer()
+        self.fact_layer.compile_layer()
+
 
 class InvertedSpecificFactLayer(NeuralLogLayer):
     """
@@ -1188,6 +1241,11 @@ class InvertedSpecificFactLayer(NeuralLogLayer):
     def call(self, inputs, **kwargs):
         # return self.fact_combining_function(self.get_kernel(), inputs)
         return self.fact_combining_function(inputs, self.get_kernel())
+
+    # noinspection PyMissingOrEmptyDocstring
+    def compile_layer(self):
+        super().compile_layer()
+        self.fact_layer.compile_layer()
 
 
 class LiteralLayer(NeuralLogLayer):
@@ -1264,6 +1322,12 @@ class LiteralLayer(NeuralLogLayer):
     def from_config(cls, config):
         return cls(**config)
 
+    # noinspection PyMissingOrEmptyDocstring
+    def compile_layer(self):
+        super().compile_layer()
+        for layer in self.input_layers:
+            layer.compile_layer()
+
 
 class FunctionLayer(NeuralLogLayer):
     """
@@ -1298,6 +1362,12 @@ class FunctionLayer(NeuralLogLayer):
     @classmethod
     def from_config(cls, config):
         return cls(**config)
+
+    # noinspection PyMissingOrEmptyDocstring
+    def compile_layer(self):
+        super().compile_layer()
+        if isinstance(self.function, NeuralLogLayer):
+            self.function.compile_layer()
 
 
 class AnyLiteralLayer(NeuralLogLayer):
@@ -1431,6 +1501,15 @@ class RuleLayer(NeuralLogLayer):
     @classmethod
     def from_config(cls, config):
         return cls(**config)
+
+    # noinspection PyMissingOrEmptyDocstring
+    def compile_layer(self):
+        super().compile_layer()
+        for path in self.paths:
+            for layer in path:
+                layer.compile_layer()
+        for layer in self.grounded_layers:
+            layer.compile_layer()
 
 
 class CyclicRuleException(KnowledgeException):
@@ -1710,6 +1789,14 @@ class GraphRuleLayer(NeuralLogLayer):
     def from_config(cls, config):
         return cls(**config)
 
+    # noinspection PyMissingOrEmptyDocstring
+    def compile_layer(self):
+        super().compile_layer()
+        for layer in self.literal_layers.values():
+            layer.compile_layer()
+        for layer in self.grounded_layers:
+            layer.compile_layer()
+
 
 class DiagonalRuleLayer(NeuralLogLayer):
     """
@@ -1748,6 +1835,11 @@ class DiagonalRuleLayer(NeuralLogLayer):
     def from_config(cls, config):
         return cls(**config)
 
+    # noinspection PyMissingOrEmptyDocstring
+    def compile_layer(self):
+        super().compile_layer()
+        self.rule_layer.compile_layer()
+
 
 class ExtractUnaryLiteralLayer(NeuralLogLayer):
     """
@@ -1784,3 +1876,8 @@ class ExtractUnaryLiteralLayer(NeuralLogLayer):
     @classmethod
     def from_config(cls, config):
         return cls(**config)
+
+    # noinspection PyMissingOrEmptyDocstring
+    def compile_layer(self):
+        super().compile_layer()
+        self.literal_layer.compile_layer()

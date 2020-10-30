@@ -11,12 +11,13 @@ from typing import List, Tuple
 
 import numpy as np
 import tensorflow as tf
+from bert.tokenization.bert_tokenization import FullTokenizer
 
 from src.knowledge.examples import Examples
 from src.knowledge.program import NeuralLogProgram, NO_EXAMPLE_SET, \
     get_predicate_from_string
 from src.language.language import AtomClause, Atom, Predicate, \
-    get_constant_from_string, get_term_from_string, TermType
+    get_constant_from_string, get_term_from_string, TermType, Constant
 from src.network import registry
 
 logger = logging.getLogger(__name__)
@@ -481,7 +482,6 @@ class NeuralLogDataset(ABC):
         """
         pass
 
-    @abstractmethod
     def get_target_predicates(self):
         """
         Gets a list of tuples containing the target predicates and whether it
@@ -490,7 +490,7 @@ class NeuralLogDataset(ABC):
         :return: the list of target predicates
         :rtype: list[tuple[Predicate, bool]]
         """
-        pass
+        return self._target_predicates
 
 
 @neural_log_dataset("default_dataset")
@@ -533,10 +533,6 @@ class DefaultDataset(NeuralLogDataset):
                 if self.inverse_relations and predicate.arity == 2:
                     target_predicates.append((predicate, True))
         return target_predicates
-
-    # noinspection PyMissingOrEmptyDocstring
-    def get_target_predicates(self):
-        return self._target_predicates
 
     # noinspection PyMissingOrEmptyDocstring
     def has_example_key(self, key):
@@ -800,35 +796,15 @@ class DefaultDataset(NeuralLogDataset):
         return -1
 
 
-@neural_log_dataset("sequence_dataset")
-class SequenceDataset(DefaultDataset):
+class AbstractSequenceDataset(DefaultDataset, ABC):
     """
-    The sequence dataset.
+    Represents an Abstract Sequence Dataset.
     """
 
-    def __init__(self, program, empty_word_index, inverse_relations=True,
-                 oov_word="<OOV>", expand_one_hot=True):
-        """
-        Creates a SequenceDataset.
-
-        :param program: the NeuralLog program
-        :type program: NeuralLogProgram
-        :param empty_word_index: the index of an entity that is not found in any
-        example, to represent an empty entry
-        :type empty_word_index: int
-        :param inverse_relations: whether the dataset must consider the
-        inverse relations
-        :type inverse_relations: bool
-        :param oov_word: the value to replace out of the vocabulary
-        entities
-        :type oov_word: str
-        :param expand_one_hot: if `True`, expands the indices of the input
-        into one hot tensors
-        :type expand_one_hot: bool
-        """
-        super(SequenceDataset, self).__init__(program, inverse_relations)
-        self.empty_word_index = empty_word_index
-        self.oov_word = get_constant_from_string(oov_word)
+    def __init__(self, program, pad_index,
+                 inverse_relations=False, expand_one_hot=True):
+        super().__init__(program, inverse_relations=inverse_relations)
+        self.pad_index = pad_index
         self.expand_one_hot = expand_one_hot
         self.example_keys = self._load_example_keys()
         self._output_types = None
@@ -952,10 +928,11 @@ class SequenceDataset(DefaultDataset):
             labels = tuple(map(lambda x: tf.sparse.to_dense(x), labels))
             yield features, labels
 
-    # noinspection DuplicatedCode
+    @abstractmethod
     def _build(self, examples):
         """
-        Builds the features and label to train the neural network based on
+        Builds the features and label to train the neural network
+        based on
         the `example_set`.
 
         The labels are always a sparse tensor.
@@ -968,10 +945,45 @@ class SequenceDataset(DefaultDataset):
         :return: the features and labels
         :rtype: (tuple[list[int]], tuple[tf.SparseTensor])
         """
+        pass
+
+
+@neural_log_dataset("sequence_dataset")
+class SequenceDataset(AbstractSequenceDataset):
+    """
+    The sequence dataset.
+    """
+
+    def __init__(self, program, empty_word_index, inverse_relations=True,
+                 oov_word="<OOV>", expand_one_hot=True):
+        """
+        Creates a SequenceDataset.
+
+        :param program: the NeuralLog program
+        :type program: NeuralLogProgram
+        :param empty_word_index: the index of an entity that is not found in any
+        example, to represent an empty entry
+        :type empty_word_index: int
+        :param inverse_relations: whether the dataset must consider the
+        inverse relations
+        :type inverse_relations: bool
+        :param oov_word: the value to replace out of the vocabulary
+        entities
+        :type oov_word: str
+        :param expand_one_hot: if `True`, expands the indices of the input
+        into one hot tensors
+        :type expand_one_hot: bool
+        """
+        super(SequenceDataset, self).__init__(
+            program, empty_word_index, inverse_relations, expand_one_hot)
+        self.oov_word = get_constant_from_string(oov_word)
+
+    # noinspection DuplicatedCode
+    def _build(self, examples):
         all_features = []
         all_label_indices = []
         all_label_values = []
-        row_index = 0
+        total_of_rows = 0
         for predicate, inverted in self._target_predicates:
             input_indices, output_index = get_predicate_indices(
                 predicate, inverted)
@@ -998,14 +1010,14 @@ class SequenceDataset(DefaultDataset):
                         count += 1
 
                     if predicate.arity == 1:
-                        label_indices.append([row_index, 0])
+                        label_indices.append([total_of_rows, 0])
                     else:
                         output_term = fact.terms[output_index]
                         output_value = self.program.get_index_of_constant(
                             predicate, output_index, output_term)
-                        label_indices.append([row_index, output_value])
+                        label_indices.append([total_of_rows, output_value])
                     label_values.append(fact.weight)
-                    row_index += 1
+                    total_of_rows += 1
             all_label_indices.append(label_indices)
             all_label_values.append(label_values)
             all_features += feature
@@ -1019,11 +1031,11 @@ class SequenceDataset(DefaultDataset):
             length = len(all_features[features_offset])
             for j in range(number_of_features):
                 all_features[features_offset + j] = \
-                    ([self.empty_word_index] * examples_offset) + \
+                    ([self.pad_index] * examples_offset) + \
                     all_features[features_offset + j]
                 all_features[features_offset + j] += \
-                    [self.empty_word_index] * (
-                            row_index - examples_offset - length)
+                    [self.pad_index] * (
+                            total_of_rows - examples_offset - length)
             examples_offset += length
             features_offset += number_of_features
 
@@ -1031,11 +1043,11 @@ class SequenceDataset(DefaultDataset):
             predicate, index = self._target_predicates[i]
             _, output_index = get_predicate_indices(predicate, index)
             if predicate.arity == 1:
-                dense_shape = [row_index, 1]
+                dense_shape = [total_of_rows, 1]
                 empty_index = [[0, 0]]
             else:
                 dense_shape = [
-                    row_index,
+                    total_of_rows,
                     self.program.get_constant_size(predicate, output_index)]
                 empty_index = [[0, 0]]
             if len(all_label_values[i]) == 0:
@@ -1062,6 +1074,234 @@ class SequenceDataset(DefaultDataset):
         """
         return self.program.get_index_of_constant(predicate, term_index,
                                                   self.oov_word)
+
+
+@neural_log_dataset("language_dataset")
+class LanguageDataset(AbstractSequenceDataset):
+    """
+    Class to process mega examples as phrases.
+    """
+
+    def __init__(self,
+                 program,
+                 inverse_relations,
+                 vocabulary_file,
+                 initial_token="[CLS]",
+                 final_token="[SEP]",
+                 pad_token="[PAD]",
+                 sub_token_label="X",
+                 maximum_sentence_length=None,
+                 do_lower_case=False,
+                 pad_to_maximum_length=False,
+                 # expand_one_hot=False,
+                 # language_predicates=None,
+                 ):
+
+        self.tokenizer = FullTokenizer(
+            vocabulary_file, do_lower_case=do_lower_case)
+
+        self.maximum_sentence_length = maximum_sentence_length
+
+        self.initial_token = Constant(initial_token)
+        self.initial_token_index = self.tokenizer.vocab[initial_token]
+
+        self.final_token = Constant(final_token)
+        self.final_token_index = self.tokenizer.vocab[final_token]
+
+        self.pad_token = Constant(pad_token)
+        self.pad_index = self.tokenizer.vocab[pad_token]
+
+        self.sub_token_label = Constant(sub_token_label)
+
+        self.pad_to_maximum_length = \
+            pad_to_maximum_length and maximum_sentence_length is not None
+
+        super(LanguageDataset, self).__init__(
+            program, self.pad_index, inverse_relations, expand_one_hot=False)
+
+    def _compute_output_format(self):
+        batch_size = None
+        if self.pad_to_maximum_length:
+            batch_size = self.maximum_sentence_length
+        length = 0
+        output_types = []
+        output_shapes = []
+        for predicate, inverted in self._target_predicates:
+            length += max(predicate.arity - 1, 1)
+            _, index = get_predicate_indices(predicate, inverted)
+            size = self.program.get_constant_size(predicate, index)
+            output_types.append(tf.float32)
+            output_shapes.append((batch_size, size))
+        self._output_types = (tf.int32,) + (tuple(output_types),)
+        # noinspection PyTypeChecker
+        self._output_shapes = ((length, batch_size),) + (tuple(output_shapes),)
+
+    def _reached_maximum_length(self, current_length):
+        if self.maximum_sentence_length is None:
+            return False
+        return current_length > self.maximum_sentence_length - 2
+
+    # noinspection DuplicatedCode
+    def _build(self, examples):
+        all_features, all_label_indices, all_label_values, total_of_rows = \
+            self._preprocess_examples(examples)
+
+        all_labels = []
+        examples_offset = 0
+        features_offset = 0
+        for i in range(len(self._target_predicates)):
+            # Features
+            number_of_features = max(
+                self._target_predicates[i][0].arity - 1, 1)
+            length = len(all_features[features_offset])
+            for j in range(number_of_features):
+                all_features[features_offset + j] = \
+                    ([self.pad_index] * examples_offset) + \
+                    all_features[features_offset + j]
+                all_features[features_offset + j] += \
+                    [self.pad_index] * (
+                            total_of_rows - examples_offset - length)
+            examples_offset += length
+            features_offset += number_of_features
+
+            # Labels
+            predicate, index = self._target_predicates[i]
+            _, output_index = get_predicate_indices(predicate, index)
+            if predicate.arity == 1:
+                dense_shape = [total_of_rows, 1]
+                empty_index = [[0, 0]]
+            else:
+                dense_shape = [
+                    total_of_rows,
+                    self.program.get_constant_size(predicate, output_index)]
+                empty_index = [[0, 0]]
+            if len(all_label_values[i]) == 0:
+                sparse_tensor = tf.SparseTensor(
+                    indices=empty_index, values=[0.0],
+                    dense_shape=dense_shape)
+            else:
+                sparse_tensor = tf.SparseTensor(
+                    indices=all_label_indices[i],
+                    values=all_label_values[i],
+                    dense_shape=dense_shape)
+            all_labels.append(sparse_tensor)
+
+        return tuple(all_features), tuple(all_labels)
+
+    # noinspection DuplicatedCode
+    def _preprocess_examples(self, examples):
+        all_features = []
+        all_label_indices = []
+        all_label_values = []
+        total_of_rows = 0
+        for predicate, inverted in self._target_predicates:
+            input_indices, output_index = get_predicate_indices(
+                predicate, inverted)
+            feature = [[] for _ in range(max(1, predicate.arity - 1))]
+            label_indices = []
+            label_values = []
+            facts = examples.get(predicate, [])
+
+            # Adds the initial token
+            for i in range(len(input_indices)):
+                feature[i].append(self.initial_token_index)
+            if predicate.arity == 1:
+                label_indices.append([total_of_rows, 0])
+            else:
+                index = self.program.get_index_of_constant(
+                    predicate, -1, self.initial_token)
+                label_indices.append([total_of_rows, index])
+            label_values.append(1.0)
+            total_of_rows += 1
+
+            reached_maximum_length = False
+            for example in facts:
+                for fact in self.ground_atom(example):
+                    if predicate.arity < 3:
+                        input_terms = (fact.terms[-1 if inverted else 0],)
+                    else:
+                        input_terms = tuple(
+                            fact.terms[0:predicate.arity - 1])
+
+                    count = 0
+                    input_values = []
+                    maximum_rows = \
+                        self.maximum_sentence_length - total_of_rows - 1
+                    for input_index, input_term in zip(input_indices,
+                                                       input_terms):
+                        input_values = self.tokenizer.tokenize(input_term.value)
+                        if input_values is None:
+                            input_values = [self._get_out_of_vocabulary_index(
+                                predicate, input_index)]
+                        else:
+                            input_values = self.tokenizer.convert_tokens_to_ids(
+                                input_values)
+                        feature[count].extend(input_values[:maximum_rows])
+                        count += 1
+
+                    if predicate.arity == 1:
+                        label_indices.append([total_of_rows, 0])
+                    else:
+                        output_term = fact.terms[output_index]
+                        output_value = self.program.get_index_of_constant(
+                            predicate, output_index, output_term)
+                        label_indices.append([total_of_rows, output_value])
+                    label_values.append(fact.weight)
+                    total_of_rows += 1
+
+                    if self._reached_maximum_length(total_of_rows):
+                        reached_maximum_length = True
+                        break
+
+                    sub_token_index = self.program.get_index_of_constant(
+                        predicate, -1, self.sub_token_label)
+                    # Adds the sub_token labels
+                    for _ in range(len(input_values) - 1):
+                        if predicate.arity == 1:
+                            label_indices.append([total_of_rows, 0])
+                        else:
+                            label_indices.append(
+                                [total_of_rows, sub_token_index])
+                        label_values.append(1.0)
+                        total_of_rows += 1
+                        if self._reached_maximum_length(total_of_rows):
+                            reached_maximum_length = True
+                            break
+
+                if reached_maximum_length:
+                    break
+
+            # Adds the final token
+            for i in range(len(input_indices)):
+                feature[i].append(self.final_token_index)
+            if predicate.arity == 1:
+                label_indices.append([total_of_rows, 0])
+            else:
+                index = self.program.get_index_of_constant(
+                    predicate, -1, self.final_token)
+                label_indices.append([total_of_rows, index])
+            label_values.append(1.0)
+            total_of_rows += 1
+
+            # Adds pads
+            if self.pad_to_maximum_length:
+                index = self.program.get_index_of_constant(
+                    predicate, -1, self.pad_token)
+                for _ in range(self.maximum_sentence_length - total_of_rows):
+                    for i in range(len(input_indices)):
+                        feature[i].append(self.pad_index)
+                    if predicate.arity == 1:
+                        label_indices.append([total_of_rows, 0])
+                    else:
+                        label_indices.append([total_of_rows, index])
+                    label_values.append(1.0)
+                    total_of_rows += 1
+
+            all_label_indices.append(label_indices)
+            all_label_values.append(label_values)
+            all_features += feature
+
+        return all_features, all_label_indices, all_label_values, total_of_rows
 
 
 @neural_log_dataset("word_char_dataset")
