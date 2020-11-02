@@ -1,7 +1,7 @@
 """
 File to define custom functions to use in the network.
 """
-from collections import deque
+from collections import deque, Sequence
 from functools import reduce
 from typing import Dict, Callable
 
@@ -752,11 +752,22 @@ class Bert(NeuralLogLayer):
     }
     """
 
-    def __init__(self, model_path, bert_checkpoint_file=None, **kwargs):
+    def __init__(self,
+                 model_path,
+                 bert_checkpoint_file=None,
+                 out_layer_indices=None,
+                 **kwargs):
         name = kwargs.get("name", "bert")
         name += "_layer"
         super(Bert, self).__init__(name)
         parameters = bert.params_from_pretrained_ckpt(model_path)
+        if out_layer_indices is not None:
+            if isinstance(out_layer_indices, Sequence):
+                out_layer_indices = list(out_layer_indices)
+            else:
+                out_layer_indices = [out_layer_indices]
+            # noinspection SpellCheckingInspection
+            parameters.out_layer_ndxs = out_layer_indices
         self.bert_layer = bert.BertModelLayer.from_params(parameters, **kwargs)
         self.bert_checkpoint_file = bert_checkpoint_file
         self.loaded = False
@@ -771,7 +782,8 @@ class Bert(NeuralLogLayer):
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, mask=None, training=None):
-        return self.bert_layer(inputs, mask=mask, training=training)
+        result = self.bert_layer(inputs, mask=mask, training=training)
+        return result
 
     __call__ = call
 

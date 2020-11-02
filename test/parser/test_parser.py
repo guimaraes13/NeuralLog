@@ -28,7 +28,7 @@ def _read_program(program):
     return list(parser.get_clauses())
 
 
-class TestStructureLearning(unittest.TestCase):
+class TestParser(unittest.TestCase):
 
     # noinspection PyMissingOrEmptyDocstring
     @classmethod

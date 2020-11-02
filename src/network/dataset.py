@@ -1119,6 +1119,32 @@ class LanguageDataset(AbstractSequenceDataset):
         super(LanguageDataset, self).__init__(
             program, self.pad_index, inverse_relations, expand_one_hot=False)
 
+    # noinspection PyMissingOrEmptyDocstring
+    def call(self, features, labels, *args, **kwargs):
+        dense_features = []
+        count = 0
+        for i in range(len(self._target_predicates)):
+            predicate, inverted = self._target_predicates[i]
+            indices, _ = get_predicate_indices(predicate, inverted)
+            for index in indices:
+                if self.expand_one_hot:
+                    feature = tf.one_hot(
+                        features[count],
+                        self.program.get_constant_size(predicate, index))
+                else:
+                    feature = features[count]
+                dense_features.append(feature)
+                count += 1
+
+        if len(dense_features) > 1:
+            dense_features = tuple(dense_features)
+        else:
+            dense_features = dense_features[0]
+
+        return dense_features, labels
+
+    __call__ = call
+
     def _compute_output_format(self):
         batch_size = None
         if self.pad_to_maximum_length:
@@ -1135,6 +1161,13 @@ class LanguageDataset(AbstractSequenceDataset):
         self._output_types = (tf.int32,) + (tuple(output_types),)
         # noinspection PyTypeChecker
         self._output_shapes = ((length, batch_size),) + (tuple(output_shapes),)
+
+    # noinspection PyMissingOrEmptyDocstring
+    def get_dataset(self, example_set=NO_EXAMPLE_SET,
+                    batch_size=1, shuffle=False):
+        dataset = super().get_dataset(
+            example_set, batch_size=batch_size, shuffle=shuffle)
+        return dataset.batch(batch_size)
 
     def _reached_maximum_length(self, current_length):
         if self.maximum_sentence_length is None:

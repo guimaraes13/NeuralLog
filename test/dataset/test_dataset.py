@@ -15,8 +15,7 @@ from src.network.trainer import Trainer
 from src.run import configure_log
 
 RESOURCE_PATH = os.path.dirname(os.path.realpath(__file__))
-VOCABULARY_FILE = \
-    os.path.join(os.path.dirname(os.path.realpath(__file__)), "vocab.txt")
+VOCABULARY_FILE = os.path.join(RESOURCE_PATH, "vocab.txt")
 
 POSSIBLE_LABELS = ["[PAD]", "B", "I", "O", "X", "[CLS]", "[SEP]"]
 
@@ -148,7 +147,7 @@ def _read_program(program):
 
 
 # noinspection DuplicatedCode
-class TestStructureLearning(unittest.TestCase):
+class TestSequenceDataset(unittest.TestCase):
 
     # noinspection PyMissingOrEmptyDocstring
     @classmethod
