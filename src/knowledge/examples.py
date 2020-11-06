@@ -142,6 +142,18 @@ class Examples(UserDict, MutableMapping[Predicate, Dict[Any, Atom]]):
     def __bool__(self):
         return bool(self.size())
 
+    def contains(self, example):
+        """
+        Checks if it contains the example.
+
+        :param example: the example
+        :type example: Atom
+        :return: `True if it contains the example; otherwise, `False`
+        :rtype: bool
+        """
+        examples = self.data.get(example.predicate)
+        return examples is not None and example.simple_key() in examples
+
 
 class ExamplesInferences(UserDict, MutableMapping[Predicate, Dict[Any, float]]):
     """

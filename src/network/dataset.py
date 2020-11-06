@@ -17,8 +17,10 @@ from src.knowledge.examples import Examples
 from src.knowledge.program import NeuralLogProgram, NO_EXAMPLE_SET, \
     get_predicate_from_string
 from src.language.language import AtomClause, Atom, Predicate, \
-    get_constant_from_string, get_term_from_string, TermType, Constant
+    get_constant_from_string, get_term_from_string, TermType, Constant, Quote
 from src.network import registry
+
+PARTIAL_WORD_PREFIX = "##"
 
 logger = logging.getLogger(__name__)
 
@@ -72,11 +74,6 @@ def print_neural_log_predictions(model, neural_program, neural_dataset, dataset,
     batch
     :type print_batch_header: bool
     """
-    if isinstance(neural_dataset, WordCharDataset):
-        return _print_word_char_predictions(
-            model, neural_program, neural_dataset, dataset, writer=writer,
-            dataset_name=dataset_name, print_batch_header=print_batch_header
-        )
     count = 0
     batches = None
     empty_entry = None
@@ -85,8 +82,6 @@ def print_neural_log_predictions(model, neural_program, neural_dataset, dataset,
         if print_batch_header and dataset_name is not None:
             batches = list(neural_program.mega_examples[dataset_name].keys())
         empty_entry = neural_dataset.empty_word_index
-    if isinstance(neural_dataset, WordCharDataset):
-        fix = -1
     for features, _ in dataset:
         if print_batch_header:
             batch = batches[count] if batches is not None else count
@@ -492,6 +487,28 @@ class NeuralLogDataset(ABC):
         """
         return self._target_predicates
 
+    @abstractmethod
+    def print_predictions(self, model, program, dataset, writer=sys.stdout,
+                          dataset_name=None, print_batch_header=False):
+        """
+        Prints the predictions of `model` to `writer`.
+
+        :param model: the model
+        :type model: NeuralLogNetwork
+        :param program: the neural program
+        :type program: NeuralLogProgram
+        :param dataset: the dataset
+        :type dataset: tf.data.Dataset
+        :param writer: the writer. Default is to write to the standard output
+        :type writer: Any
+        :param dataset_name: the name of the dataset
+        :type dataset_name: str
+        :param print_batch_header: if `True`, prints a commented line before
+        each batch
+        :type print_batch_header: bool
+        """
+        pass
+
 
 @neural_log_dataset("default_dataset")
 class DefaultDataset(NeuralLogDataset):
@@ -795,6 +812,13 @@ class DefaultDataset(NeuralLogDataset):
         """
         return -1
 
+    # noinspection PyMissingOrEmptyDocstring
+    def print_predictions(self, model, program, dataset, writer=sys.stdout,
+                          dataset_name=None, print_batch_header=False):
+        return print_neural_log_predictions(
+            model, program, self, dataset, writer=writer,
+            dataset_name=dataset_name, print_batch_header=print_batch_header)
+
 
 class AbstractSequenceDataset(DefaultDataset, ABC):
     """
@@ -1076,6 +1100,15 @@ class SequenceDataset(AbstractSequenceDataset):
                                                   self.oov_word)
 
 
+def _atom_processor(predicate, feature, label, weight):
+    return str(AtomClause(Atom(predicate, feature, label, weight=weight)))
+
+
+# noinspection PyUnusedLocal
+def _conll_processor(predicate, feature, label, weight):
+    return f"{feature.value}\t{label.value}"
+
+
 @neural_log_dataset("language_dataset")
 class LanguageDataset(AbstractSequenceDataset):
     """
@@ -1107,6 +1140,8 @@ class LanguageDataset(AbstractSequenceDataset):
 
         self.final_token = Constant(final_token)
         self.final_token_index = self.tokenizer.vocab[final_token]
+
+        self.skip_tokens = [initial_token, final_token]
 
         self.pad_token = Constant(pad_token)
         self.pad_index = self.tokenizer.vocab[pad_token]
@@ -1335,6 +1370,71 @@ class LanguageDataset(AbstractSequenceDataset):
             all_features += feature
 
         return all_features, all_label_indices, all_label_values, total_of_rows
+
+    # noinspection PyMissingOrEmptyDocstring
+    def print_predictions(self, model, program, dataset, string_processor=None,
+                          writer=sys.stdout, dataset_name=None,
+                          print_batch_header=False):
+        prefix_length = len(PARTIAL_WORD_PREFIX)
+        if string_processor is None:
+            string_processor = _atom_processor
+        else:
+            if string_processor.lower() == 'conll':
+                string_processor = _conll_processor
+            else:
+                string_processor = _atom_processor
+
+        count = 0
+        batches = None
+        if print_batch_header and dataset_name is not None:
+            batches = list(program.mega_examples[dataset_name].keys())
+
+        for features, _ in dataset:
+            if print_batch_header:
+                batch = batches[count] if batches is not None else count
+                print("%% Batch:", batch, file=writer, sep="\t")
+                count += 1
+            y_scores = model.predict(features)
+            if len(model.predicates) == 1:
+                # if not isinstance(neural_dataset, WordCharDataset):
+                y_scores = [y_scores]
+                if model.predicates[0][0].arity < 3:
+                    features = [features]
+            # i iterates over the predicates
+            for i in range(len(model.predicates)):
+                predicate, inverted = model.predicates[i]
+                if inverted:
+                    continue
+                row_scores = y_scores[i]
+                # j iterates over the mega examples
+                for j in range(len(row_scores)):
+                    y_score = row_scores[j]
+                    offset = sum(model.input_sizes[:i])
+                    x_k = features[offset][j].numpy()
+                    subjects = self.tokenizer.convert_ids_to_tokens(x_k)
+
+                    processed_token = None
+                    label_index = None
+                    for index, sub in enumerate(subjects):
+                        if sub == self.pad_token.value:
+                            break
+                        if sub.startswith(PARTIAL_WORD_PREFIX):
+                            processed_token += sub[prefix_length:]
+                        else:
+                            if processed_token is not None:
+                                max_label = y_score[label_index].argmax()
+                                obj = program.get_constant_by_index(
+                                    predicate, -1, max_label)
+                                weight = float(y_score[label_index][max_label])
+                                feature = Quote(f'"{processed_token}"')
+                                string_format = string_processor(
+                                    predicate, feature, obj, weight)
+                                print(string_format, file=writer)
+                            if sub in self.skip_tokens:
+                                continue
+                            processed_token = sub
+                            label_index = index
+                    print(file=writer)
 
 
 @neural_log_dataset("word_char_dataset")
@@ -1630,3 +1730,10 @@ class WordCharDataset(SequenceDataset):
             all_labels.append(sparse_tensor)
 
         return tuple(all_features), tuple(all_labels)
+
+    # noinspection PyMissingOrEmptyDocstring
+    def print_predictions(self, model, program, dataset, writer=sys.stdout,
+                          dataset_name=None, print_batch_header=False):
+        return _print_word_char_predictions(
+            model, program, self, dataset, writer=writer,
+            dataset_name=dataset_name, print_batch_header=print_batch_header)

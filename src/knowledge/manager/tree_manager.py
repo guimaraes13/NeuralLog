@@ -556,6 +556,22 @@ class TreeTheory:
 
         return parent
 
+    def has_example(self, example):
+        """
+        Checks if this tree contains the example in its leaves.
+
+        :param example: the example
+        :type example: Atom
+        :return: `True` if it has; otherwise, returns `False`
+        :rtype: bool
+        """
+        nodes = self.leaf_examples_map.get(example.predicate, dict())
+        for values in nodes.values():
+            if values.contains(example):
+                return True
+
+        return False
+
 
 class TreeExampleManager(IncomingExampleManager):
     """
@@ -611,13 +627,13 @@ class TreeExampleManager(IncomingExampleManager):
         :rtype: Dict[Predicate, Set[Node[HornClause]]]
         """
         modified_leaves: Dict[Predicate, Set[Node[HornClause]]] = dict()
-        count = 0
+        # count = 0
         self._update_rule_cache()
         if not isinstance(examples, collections.Iterable):
             examples = [examples]
         self.place_examples(modified_leaves, examples)
-        logger.debug(
-            "%s\tnew example(s) placed at the leaves of the tree", count)
+        # logger.debug(
+        #     "%s\t new example(s) placed at the leaves of the tree", count)
         return modified_leaves
 
     def place_examples(self, modified_leaves_map, examples):
@@ -754,7 +770,8 @@ class TreeExampleManager(IncomingExampleManager):
     #     """
     #     all_not_covered = set(ExampleIterator(not_covered_by_child[0]))
     #     for not_covered in not_covered_by_child[1:]:
-    #         all_not_covered.difference_update(set(ExampleIterator(not_covered)))
+    #         all_not_covered.difference_update(set(ExampleIterator(
+    #         not_covered)))
     #     not_covered = Examples()
     #     for example in ExampleIterator(examples):
     #         if example in all_not_covered:
@@ -779,13 +796,16 @@ class TreeExampleManager(IncomingExampleManager):
         # otherwise, `False`
         # :rtype: bool
         """
+        if not examples:
+            return
         revision_examples = leaf_example.get(leaf)
         if revision_examples is None:
             revision_examples = re.RevisionExamples(
                 self.learning_system, self.sample_selector.copy())
             leaf_example[leaf] = revision_examples
-        revision_examples.add_examples(ExampleIterator(examples))
-        modified_leaves.add(leaf)
+        added = revision_examples.add_examples(ExampleIterator(examples))
+        if added:
+            modified_leaves.add(leaf)
 
     def call_revision(self, modified_leaves):
         """
@@ -822,3 +842,37 @@ class TreeExampleManager(IncomingExampleManager):
                     examples.add_example(atom)
 
         return examples
+
+
+class RepeatedTreeExampleManager(TreeExampleManager):
+    """
+    Repeats placing the examples until the tree is no longer modified by it.
+    """
+
+    # noinspection PyMissingOrEmptyDocstring
+    def incoming_examples(self, examples):
+        modifier_leaves = True
+        count = 0
+        while modifier_leaves:
+            new_examples = self.filter_existent_examples(examples)
+            modifier_leaves = self.place_incoming_examples(new_examples)
+            if modifier_leaves:
+                count += 1
+                logger.info(f"Passing all examples by the {count}-th time.")
+                self.call_revision(modifier_leaves)
+
+    def filter_existent_examples(self, examples):
+        """
+        Filters the examples that are already placed in the tree.
+
+        :param examples: the examples
+        :type examples: Atom or collections.Iterable[Atom]
+        :return: the examples that are NOT in the tree yet
+        :rtype: Atom or collections.Iterable[Atom]
+        """
+        if isinstance(examples, collections.Iterable):
+            return filter(
+                lambda x: not self.tree_theory.has_example(x), examples)
+        else:
+            if not self.tree_theory.has_example(examples):
+                return examples

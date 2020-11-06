@@ -93,12 +93,19 @@ class RevisionExamples:
 
         :param examples: the examples
         :type examples: collections.Iterable[Atom] or Examples
+        :return: `True`, if at least one examples has been added; otherwise,
+        `False`
+        :rtype: bool
         """
         if isinstance(examples, Examples):
             examples = ExampleIterator(examples)
 
+        added = False
         for example in examples:
             self.add_example(example)
+            added = True
+
+        return added
 
     def get_inferred_values(self, last_theory_change):
         """
@@ -139,3 +146,14 @@ class RevisionExamples:
 
     def __bool__(self):
         return bool(self.incoming_examples)
+
+    def contains(self, example):
+        """
+        Checks if it contains the example.
+
+        :param example: the example
+        :type example: Atom
+        :return: `True if it constains the example; otherwise, `False`
+        :rtype: bool
+        """
+        return self.incoming_examples.contains(example)
