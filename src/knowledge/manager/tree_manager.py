@@ -851,6 +851,10 @@ class RepeatedTreeExampleManager(TreeExampleManager):
 
     # noinspection PyMissingOrEmptyDocstring
     def incoming_examples(self, examples):
+        if isinstance(examples, Atom):
+            examples = [examples]
+        else:
+            examples = list(examples)
         modifier_leaves = True
         count = 0
         while modifier_leaves:
@@ -868,11 +872,6 @@ class RepeatedTreeExampleManager(TreeExampleManager):
         :param examples: the examples
         :type examples: Atom or collections.Iterable[Atom]
         :return: the examples that are NOT in the tree yet
-        :rtype: Atom or collections.Iterable[Atom]
+        :rtype: collections.Iterable[Atom]
         """
-        if isinstance(examples, collections.Iterable):
-            return filter(
-                lambda x: not self.tree_theory.has_example(x), examples)
-        else:
-            if not self.tree_theory.has_example(examples):
-                return examples
+        return filter(lambda x: not self.tree_theory.has_example(x), examples)

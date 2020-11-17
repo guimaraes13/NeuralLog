@@ -756,11 +756,16 @@ class Bert(NeuralLogLayer):
                  model_path,
                  bert_checkpoint_file=None,
                  out_layer_indices=None,
+                 maximum_sentence_length=None,
                  **kwargs):
         name = kwargs.get("name", "bert")
         name += "_layer"
         super(Bert, self).__init__(name)
         parameters = bert.params_from_pretrained_ckpt(model_path)
+        if maximum_sentence_length is None:
+            self.maximum_sentence_length = parameters.max_position_embeddings
+        else:
+            self.maximum_sentence_length = maximum_sentence_length
         if out_layer_indices is not None:
             if isinstance(out_layer_indices, Sequence):
                 out_layer_indices = list(out_layer_indices)
@@ -769,8 +774,16 @@ class Bert(NeuralLogLayer):
             # noinspection SpellCheckingInspection
             parameters.out_layer_ndxs = out_layer_indices
         self.bert_layer = bert.BertModelLayer.from_params(parameters, **kwargs)
+        layer_input_ids = keras.layers.Input(
+            shape=(self.maximum_sentence_length,), dtype='int32')
+        self.bert_layer(layer_input_ids)
         self.bert_checkpoint_file = bert_checkpoint_file
         self.loaded = False
+
+    # noinspection PyMissingOrEmptyDocstring
+    def build(self, input_shape):
+        super().build(input_shape)
+        self.bert_layer.build(input_shape)
 
     def compile_layer(self):
         """

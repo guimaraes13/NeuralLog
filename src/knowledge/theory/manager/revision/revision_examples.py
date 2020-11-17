@@ -153,7 +153,7 @@ class RevisionExamples:
 
         :param example: the example
         :type example: Atom
-        :return: `True if it constains the example; otherwise, `False`
+        :return: `True` if it contains the example; otherwise, `False`
         :rtype: bool
         """
         return self.incoming_examples.contains(example)

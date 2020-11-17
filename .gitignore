@@ -4,6 +4,7 @@
 *.class
 /test/resources
 /examples/family/data/
+/examples/iris/data/
 src/language/parser/ply/parsetab.py
 src/language/parser/ply/parser.out
 /src/test

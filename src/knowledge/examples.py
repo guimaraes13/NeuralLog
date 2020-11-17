@@ -49,7 +49,7 @@ class LimitedIterator:
                 raise e
             self.current_item += 1
             return value
-        raise StopIteration
+        raise StopIteration()
 
     def __iter__(self):
         return self

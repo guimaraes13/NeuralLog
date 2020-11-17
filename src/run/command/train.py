@@ -15,7 +15,6 @@ from src.knowledge.program import NeuralLogProgram, print_neural_log_program, \
     DEFAULT_PARAMETERS
 from src.network import trainer
 from src.network.callbacks import get_formatted_name
-from src.network.dataset import print_neural_log_predictions
 from src.network.network import LossMaskWrapper
 from src.network.network_functions import get_loss_function, CRFLogLikelihood
 from src.network.trainer import Trainer
@@ -601,7 +600,9 @@ class Train(Command):
         """
         dataset = self.get_dataset(dataset_name)
         writer = open(filepath, "w")
-        print_neural_log_predictions(self.model, self.neural_program,
-                                     self.neural_dataset, dataset, writer,
-                                     dataset_name)
+        # print_neural_log_predictions(self.model, self.neural_program,
+        #                              self.neural_dataset, dataset, writer,
+        #                              dataset_name)
+        self.neural_dataset.print_predictions(
+            self.model, self.neural_program, dataset, writer, dataset_name)
         writer.close()

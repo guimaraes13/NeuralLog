@@ -567,7 +567,7 @@ class MetaRevisionOperator(ro.RevisionOperator):
         """
         When learning from examples (not from tree theory), if it is set to 
         `True`, instead of iterating each example at a time, it will iterate 
-        it target predicate only.
+        over different predicates only.
         """
 
         if self.iterate_over_predicate is None:
@@ -943,10 +943,10 @@ class MetaRevisionOperator(ro.RevisionOperator):
 
         original_clause: HornClause = revision_leaf.parent.element
         current_theory = self.learning_system.theory.copy()
-        if len(original_clause.body) != 1 or \
-                original_clause.body[0] != TRUE_LITERAL:
-            current_theory.clauses_by_predicate[
-                original_clause.head.predicate].remove(original_clause)
+        clauses = current_theory.clauses_by_predicate[
+                original_clause.head.predicate]
+        if original_clause in clauses:
+            clauses.remove(original_clause)
         if FALSE_LITERAL in first_clause.body:
             # the program added a false literal to the clause, just remove
             # the clause

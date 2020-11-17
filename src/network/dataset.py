@@ -1126,6 +1126,7 @@ class LanguageDataset(AbstractSequenceDataset):
                  maximum_sentence_length=None,
                  do_lower_case=False,
                  pad_to_maximum_length=False,
+                 string_processor=None
                  # expand_one_hot=False,
                  # language_predicates=None,
                  ):
@@ -1153,6 +1154,11 @@ class LanguageDataset(AbstractSequenceDataset):
 
         super(LanguageDataset, self).__init__(
             program, self.pad_index, inverse_relations, expand_one_hot=False)
+
+        if string_processor is not None and string_processor.lower() == 'conll':
+            self._string_processor = _conll_processor
+        else:
+            self._string_processor = _atom_processor
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, features, labels, *args, **kwargs):
@@ -1371,18 +1377,11 @@ class LanguageDataset(AbstractSequenceDataset):
 
         return all_features, all_label_indices, all_label_values, total_of_rows
 
-    # noinspection PyMissingOrEmptyDocstring
-    def print_predictions(self, model, program, dataset, string_processor=None,
+    # noinspection PyMissingOrEmptyDocstring,DuplicatedCode
+    def print_predictions(self, model, program, dataset,
                           writer=sys.stdout, dataset_name=None,
                           print_batch_header=False):
         prefix_length = len(PARTIAL_WORD_PREFIX)
-        if string_processor is None:
-            string_processor = _atom_processor
-        else:
-            if string_processor.lower() == 'conll':
-                string_processor = _conll_processor
-            else:
-                string_processor = _atom_processor
 
         count = 0
         batches = None
@@ -1427,7 +1426,7 @@ class LanguageDataset(AbstractSequenceDataset):
                                     predicate, -1, max_label)
                                 weight = float(y_score[label_index][max_label])
                                 feature = Quote(f'"{processed_token}"')
-                                string_format = string_processor(
+                                string_format = self._string_processor(
                                     predicate, feature, obj, weight)
                                 print(string_format, file=writer)
                             if sub in self.skip_tokens:
