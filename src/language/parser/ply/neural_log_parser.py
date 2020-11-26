@@ -298,7 +298,7 @@ class NeuralLogParser:
             else:
                 parts = term.parts
             ground_placeholders(parts, place_holders,
-                                *predicates_names, *constants_names)
+                                *predicates_names, *constants_names, union=True)
 
     def add_constant_names_to_set(self, clause, constants_set):
         """

@@ -3,11 +3,22 @@
 NeuralLog is a system to compile logic programs into Artificial Neural Networks.
 
 ## Dependencies
+
+The system runs using the following libraries in the version described here. 
+Different versions of the libraries may work as well, although it is not
+ tested. 
+
 - python 3.7;
-- tensorflow 2.0;
+- numpy 1.19.1;
+- scipy 1.5.2;
+- scikit-learn 0.23.2;
+- sklearn 0.0;
+- tensorflow 2.0.1;
 - tensorflow-addons 0.6.0;
-- ply;
-- scikit-learn;
+- ply 3.11;
+- PyYAML 5.3.1;
+- matplotlib 3.3.1;
+- [bert-for-tf2](https://github.com/kpe/bert-for-tf2);
 
 ### Logic Syntax
 

@@ -247,7 +247,8 @@ def solve_place_holders(clause, place_holders):
     return set(queue)
 
 
-def ground_placeholders(parts, place_holders_map, *possible_constants):
+def ground_placeholders(parts, place_holders_map, *possible_constants,
+                        union=False):
     """
     Finds the possible substitution for the place holders found in parts.
 
@@ -260,6 +261,10 @@ def ground_placeholders(parts, place_holders_map, *possible_constants):
     :param possible_constants: the possible constants to replace the
     place_holders
     :type possible_constants: str
+    :param union: if `True`, the possible substitutions will be the union of
+    the existing possibilities with the possibilities found by this method.
+    Otherwise, it will be the intersection.
+    :type union: bool
     """
     name = ""
     place_holders = []
@@ -280,6 +285,9 @@ def ground_placeholders(parts, place_holders_map, *possible_constants):
 
     for k, v in possible_subs.items():
         if k in place_holders_map:
-            place_holders_map[k] = place_holders_map[k].intersection(v)
+            if union:
+                place_holders_map[k] = place_holders_map[k].union(v)
+            else:
+                place_holders_map[k] = place_holders_map[k].intersection(v)
         else:
             place_holders_map[k] = v

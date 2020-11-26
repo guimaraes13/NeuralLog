@@ -45,17 +45,9 @@ done
 
 activation_{i}(X) :- hidden_{i}(X), sigmoid(X).
 
-output_setosa(X) :- activation_{i}(X), w2(output_setosa_{i}).
-output_setosa(X) :- b(output_setosa).
+for type in setosa versicolor virginica do
+    output_{type}(X) :- activation_{i}(X), w2(output_{type}_{i}).
+    output_{type}(X) :- b(output_{type}).
 
-iris_setosa(X) :- output_setosa(X), sigmoid(X).
-
-output_versicolor(X) :- activation_{i}(X), w2(output_versicolor_{i}).
-output_versicolor(X) :- b(output_versicolor).
-
-iris_versicolor(X) :- output_versicolor(X), sigmoid(X).
-
-output_virginica(X) :- activation_{i}(X), w2(output_virginica_{i}).
-output_virginica(X) :- b(output_virginica).
-
-iris_virginica(X) :- output_virginica(X), sigmoid(X).
+    iris_{type}(X) :- output_{type}(X), sigmoid(X).
+done

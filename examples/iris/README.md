@@ -1,4 +1,4 @@
-# Family
+# Iris
 
 Iris classification dataset.
 
