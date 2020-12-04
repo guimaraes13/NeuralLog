@@ -1,6 +1,6 @@
 # Running
 export PYTHONPATH=$(cd ../..; pwd)
-PYTHON_SCRIPT=${PYTHONPATH}/src/run/main.py
+PYTHON_SCRIPT=${PYTHONPATH}/neurallog/run/main.py
 
 python3 ${PYTHON_SCRIPT} train \
     --program program.pl facts.pl \

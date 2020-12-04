@@ -1,16 +1,18 @@
 """
 Tests the structure learning.
 """
+
 import logging
 import os
 import unittest
 from functools import reduce
 
-from src.language.language import Predicate
-from src.language.parser.ply.neural_log_parser import NeuralLogLexer, \
+from neurallog.language.language import Predicate
+from neurallog.language.parser.ply.neural_log_parser import NeuralLogLexer, \
     NeuralLogParser
-from src.run import configure_log
-from src.run.command.learn_structure import load_yaml_configuration, LOG_FORMAT
+from neurallog.run import configure_log
+from neurallog.run.command.learn_structure import load_yaml_configuration, \
+    LOG_FORMAT
 
 PARENT = Predicate("parent", 2)
 

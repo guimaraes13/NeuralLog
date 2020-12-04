@@ -7,11 +7,11 @@ from typing import List
 
 import numpy as np
 
-from src.knowledge.program import NeuralLogProgram
-from src.language.parser.ply.neural_log_parser import NeuralLogLexer
-from src.language.parser.ply.neural_log_parser import NeuralLogParser
-from src.network.dataset import get_predicate_indices, DefaultDataset
-from src.network.network import NeuralLogNetwork
+from neurallog.knowledge.program import NeuralLogProgram
+from neurallog.language.parser.ply.neural_log_parser import NeuralLogLexer
+from neurallog.language.parser.ply.neural_log_parser import NeuralLogParser
+from neurallog.network.dataset import get_predicate_indices, DefaultDataset
+from neurallog.network.network import NeuralLogNetwork
 
 RESOURCES = "network_inference"
 PROGRAM = "kinship.pl"
@@ -162,6 +162,7 @@ def setup(examples_files=EXAMPLES, inverse_relations=False):
 # noinspection PyMissingOrEmptyDocstring
 class TestNetworkInference(unittest.TestCase):
 
+    # noinspection DuplicatedCode,PyTypeChecker
     def predict(self, model, features):
         predictions = model.predict(features)  # type: List[np.ndarray]
         predicates = list(model.predicates)

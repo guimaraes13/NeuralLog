@@ -7,11 +7,11 @@ import unittest
 import numpy as np
 import tensorflow as tf
 
-from src.knowledge.program import NeuralLogProgram
-from src.language.language import Atom
-from src.language.parser.ply.neural_log_parser import NeuralLogLexer
-from src.language.parser.ply.neural_log_parser import NeuralLogParser
-from src.network.layer_factory import LayerFactory
+from neurallog.knowledge.program import NeuralLogProgram
+from neurallog.language.language import Atom
+from neurallog.language.parser.ply.neural_log_parser import NeuralLogLexer
+from neurallog.language.parser.ply.neural_log_parser import NeuralLogParser
+from neurallog.network.layer_factory import LayerFactory
 
 NEUTRAL_ELEMENT = tf.constant(1.0)
 

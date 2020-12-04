@@ -6,12 +6,12 @@ import unittest
 
 import tensorflow as tf
 
-from src.knowledge.program import NeuralLogProgram
-from src.language.language import Predicate, Constant
-from src.language.parser.ply.neural_log_parser import NeuralLogLexer, \
+from neurallog.knowledge.program import NeuralLogProgram
+from neurallog.language.language import Predicate, Constant
+from neurallog.language.parser.ply.neural_log_parser import NeuralLogLexer, \
     NeuralLogParser
-from src.network.dataset import DefaultDataset
-from src.network.network import NeuralLogNetwork
+from neurallog.network.dataset import DefaultDataset
+from neurallog.network.network import NeuralLogNetwork
 
 RESOURCES = "network_training"
 PROGRAM = "kinship.pl"

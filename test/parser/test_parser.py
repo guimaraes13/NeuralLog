@@ -5,12 +5,12 @@ import logging
 import unittest
 from typing import List
 
-from src.knowledge.program import NeuralLogProgram
-from src.language.language import HornClause, Variable, Constant, ListTerms, \
-    Quote, Number, TemplateTerm, Predicate
-from src.language.parser.ply.neural_log_parser import NeuralLogLexer, \
+from neurallog.knowledge.program import NeuralLogProgram
+from neurallog.language.language import HornClause, Variable, Constant, \
+    ListTerms, Quote, Number, TemplateTerm, Predicate
+from neurallog.language.parser.ply.neural_log_parser import NeuralLogLexer, \
     NeuralLogParser
-from src.run import configure_log
+from neurallog.run import configure_log
 
 
 def _read_program(program):

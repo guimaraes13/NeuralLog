@@ -53,6 +53,7 @@ def read_predictions():
 
 
 def main():
+    """The main function."""
     values = read_examples()
     predictions = read_predictions()
 

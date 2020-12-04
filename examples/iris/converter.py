@@ -1,3 +1,7 @@
+"""
+Converts the Iris dataset.
+"""
+
 DATA = "iris.data"
 
 KB_FILE = "facts.pl"
@@ -21,6 +25,7 @@ TRAIN_SIZE = 35
 
 
 def main():
+    """The main function."""
     count = 0
     examples_by_class = {"setosa": 0, "versicolor": 0, "virginica": 0}
     kb = open(KB_FILE, "w")

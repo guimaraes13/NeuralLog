@@ -51,7 +51,7 @@ and a set of atoms separated by commas, forming its body, ending with a
 
 ## Run
 
-The main entry file is src/run/neurallog.py. From there, one can train and
+The main entry file is neurallog/run/neurallog.py. From there, one can train and
 evaluate the models.
 
 ### Training
@@ -68,7 +68,7 @@ Then, the following command trains a neural network, evaluates it and saves the
 results.
 
 ```
-python3 src/run/neurallog.py \ 
+python3 neurallog/run/neurallog.py \ 
     --program examples/family/program.pl examples/family/facts.pl \
     --train examples/family/train.pl \
     --validation examples/family/validation.pl \
@@ -118,7 +118,7 @@ In order to perform inference using a previous trained model, without training,
 one can use the following command:
 
 ```
-python3 src/run/neurallog.py \ 
+python3 neurallog/run/neurallog.py \ 
     --program examples/family/program.pl examples/family/data/best_program.pl \
     --test examples/family/test.pl \
     --loadModel examples/family/data/mean_reciprocal_rank_validation_set_best \ 
@@ -148,4 +148,4 @@ Since the examples are in the test set, in this case:
 The list of all settable parameters can be obtained by running the following
 command:
 
-```python3 src/run/neurallog.py --help```
+```python3 neurallog/run/neurallog.py --help```

@@ -5,9 +5,10 @@
 /test/resources
 /examples/family/data/
 /examples/iris/data/
-src/language/parser/ply/parsetab.py
-src/language/parser/ply/parser.out
-/src/test
+neurallog/language/parser/ply/parsetab.py
+neurallog/language/parser/ply/parser.out
+/neurallog/test
 .DS_Store
 venv
 /test/structure_learning/data*
+/neurallog/test/

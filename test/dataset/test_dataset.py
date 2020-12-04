@@ -6,13 +6,13 @@ import os
 import unittest
 from typing import List
 
-from src.knowledge.program import NeuralLogProgram, NO_EXAMPLE_SET
-from src.language.language import HornClause, Predicate, Constant
-from src.language.parser.ply.neural_log_parser import NeuralLogLexer, \
+from neurallog.knowledge.program import NeuralLogProgram, NO_EXAMPLE_SET
+from neurallog.language.language import HornClause, Predicate, Constant
+from neurallog.language.parser.ply.neural_log_parser import NeuralLogLexer, \
     NeuralLogParser
-from src.network.dataset import LanguageDataset
-from src.network.trainer import Trainer
-from src.run import configure_log
+from neurallog.network.dataset import LanguageDataset
+from neurallog.network.trainer import Trainer
+from neurallog.run import configure_log
 
 RESOURCE_PATH = os.path.dirname(os.path.realpath(__file__))
 VOCABULARY_FILE = os.path.join(RESOURCE_PATH, "vocab.txt")

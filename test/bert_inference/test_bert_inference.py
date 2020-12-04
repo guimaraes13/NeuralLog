@@ -7,13 +7,13 @@ import unittest
 
 import numpy as np
 
-from src.knowledge.program import NeuralLogProgram
-from src.language.language import Predicate
-from src.language.parser.ply.neural_log_parser import NeuralLogLexer, \
+from neurallog.knowledge.program import NeuralLogProgram
+from neurallog.language.language import Predicate
+from neurallog.language.parser.ply.neural_log_parser import NeuralLogLexer, \
     NeuralLogParser
-from src.network.dataset import LanguageDataset
-from src.network.trainer import Trainer
-from src.run import configure_log
+from neurallog.network.dataset import LanguageDataset
+from neurallog.network.trainer import Trainer
+from neurallog.run import configure_log
 
 RESOURCE_PATH = os.path.dirname(os.path.realpath(__file__))
 

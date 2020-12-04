@@ -1,4 +1,4 @@
-!!python/object:src.structure_learning.structure_learning_method.IterativeStructureLearning
+!!python/object:neurallog.structure_learning.structure_learning_method.IterativeStructureLearning
 
 data_directory: "structure_learning/kinship"
 #iteration_prefix:
@@ -9,53 +9,53 @@ logic_file_extension: .pl
 load_pre_trained_parameter: false
 train_parameters_on_remaining_examples: false
 
-engine_system_translator: !!python/object:src.structure_learning.engine_system_translator.NeuralLogEngineSystemTranslator {}
+engine_system_translator: !!python/object:neurallog.structure_learning.engine_system_translator.NeuralLogEngineSystemTranslator {}
 
 theory_metrics:
-  - !!python/object:src.knowledge.theory.evaluation.metric.theory_metric.RocCurveMetric {}
-  - !!python/object:src.knowledge.theory.evaluation.metric.theory_metric.PrecisionRecallCurveMetric {}
-  - !!python/object:src.knowledge.theory.evaluation.metric.theory_metric.LikelihoodMetric {}
-  - !!python/object:src.knowledge.theory.evaluation.metric.theory_metric.LogLikelihoodMetric {}
+  - !!python/object:neurallog.knowledge.theory.evaluation.metric.theory_metric.RocCurveMetric {}
+  - !!python/object:neurallog.knowledge.theory.evaluation.metric.theory_metric.PrecisionRecallCurveMetric {}
+  - !!python/object:neurallog.knowledge.theory.evaluation.metric.theory_metric.LikelihoodMetric {}
+  - !!python/object:neurallog.knowledge.theory.evaluation.metric.theory_metric.LogLikelihoodMetric {}
 
-revision_operator_selector: !!python/object:src.knowledge.theory.manager.revision.revision_operator_selector.BestRevisionOperatorSelector {}
+revision_operator_selector: !!python/object:neurallog.knowledge.theory.manager.revision.revision_operator_selector.BestRevisionOperatorSelector {}
 
-theory_evaluator: !!python/object:src.knowledge.theory.evaluation.theory_evaluator.TheoryEvaluator {}
+theory_evaluator: !!python/object:neurallog.knowledge.theory.evaluation.theory_evaluator.TheoryEvaluator {}
 
-theory_revision_manager: !!python/object:src.knowledge.theory.manager.theory_revision_manager.TheoryRevisionManager
-  theory_metric: &metric !!python/object:src.knowledge.theory.evaluation.metric.theory_metric.RocCurveMetric {}
+theory_revision_manager: !!python/object:neurallog.knowledge.theory.manager.theory_revision_manager.TheoryRevisionManager
+  theory_metric: &metric !!python/object:neurallog.knowledge.theory.evaluation.metric.theory_metric.RocCurveMetric {}
 
-incoming_example_manager: !!python/object:src.knowledge.manager.tree_manager.TreeExampleManager
-  tree_theory: &tree !!python/object:src.knowledge.manager.tree_manager.TreeTheory {}
+incoming_example_manager: !!python/object:neurallog.knowledge.manager.tree_manager.TreeExampleManager
+  tree_theory: &tree !!python/object:neurallog.knowledge.manager.tree_manager.TreeTheory {}
 
-revision_manager: !!python/object:src.knowledge.theory.manager.revision.revision_manager.BestLeafRevisionManager
+revision_manager: !!python/object:neurallog.knowledge.theory.manager.revision.revision_manager.BestLeafRevisionManager
   tree_theory: *tree
   number_of_leaves_to_revise: -1
-  revision_heuristic: !!python/object:src.knowledge.theory.manager.revision.revision_manager.RepairableNodeHeuristic {}
+  revision_heuristic: !!python/object:neurallog.knowledge.theory.manager.revision.revision_manager.RepairableNodeHeuristic {}
 
 revision_operator_evaluators:
-  - !!python/object:src.knowledge.theory.manager.revision.revision_operator_evaluator.RevisionOperatorEvaluator
-    revision_operator: !!python/object:src.knowledge.theory.manager.revision.operator.tree_revision_operator.RemoveNodeTreeRevisionOperator
+  - !!python/object:neurallog.knowledge.theory.manager.revision.revision_operator_evaluator.RevisionOperatorEvaluator
+    revision_operator: !!python/object:neurallog.knowledge.theory.manager.revision.operator.tree_revision_operator.RemoveNodeTreeRevisionOperator
       theory_metric: *metric
       tree_theory: *tree
-  - !!python/object:src.knowledge.theory.manager.revision.revision_operator_evaluator.RevisionOperatorEvaluator
-    revision_operator: !!python/object:src.knowledge.theory.manager.revision.operator.tree_revision_operator.AddNodeTreeRevisionOperator
+  - !!python/object:neurallog.knowledge.theory.manager.revision.revision_operator_evaluator.RevisionOperatorEvaluator
+    revision_operator: !!python/object:neurallog.knowledge.theory.manager.revision.operator.tree_revision_operator.AddNodeTreeRevisionOperator
       theory_metric: *metric
       tree_theory: *tree
       maximum_side_way_movements: false
       refine: true
-      append_operator: !!python/object:src.knowledge.theory.manager.revision.operator.literal_appender_operator.RelevantLiteralAppendOperator
+      append_operator: !!python/object:neurallog.knowledge.theory.manager.revision.operator.literal_appender_operator.RelevantLiteralAppendOperator
         infer_relevant: false
         theory_metric: *metric
         relevant_depth: 1
         maximum_based_examples: -1
         positive_threshold: 0.5
-  - !!python/object:src.knowledge.theory.manager.revision.revision_operator_evaluator.RevisionOperatorEvaluator
-    revision_operator: !!python/object:src.knowledge.theory.manager.revision.operator.tree_revision_operator.AddNodeTreeRevisionOperator
+  - !!python/object:neurallog.knowledge.theory.manager.revision.revision_operator_evaluator.RevisionOperatorEvaluator
+    revision_operator: !!python/object:neurallog.knowledge.theory.manager.revision.operator.tree_revision_operator.AddNodeTreeRevisionOperator
       theory_metric: *metric
       tree_theory: *tree
       maximum_side_way_movements: false
       refine: true
-      append_operator: !!python/object:src.knowledge.theory.manager.revision.operator.literal_appender_operator.PathFinderAppendOperator
+      append_operator: !!python/object:neurallog.knowledge.theory.manager.revision.operator.literal_appender_operator.PathFinderAppendOperator
         infer_relevant: false
         theory_metric: *metric
         relevant_depth: 1
