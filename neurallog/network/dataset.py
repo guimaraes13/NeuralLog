@@ -50,7 +50,8 @@ def get_dataset_class(identifier):
     """
     return dataset_classes.get(identifier, DefaultDataset)
 
-
+# IMPROVE: create a parameter to specify whether or not to print prediction
+#  that are not in the dataset
 # noinspection PyTypeChecker,DuplicatedCode
 def print_neural_log_predictions(model, neural_program, neural_dataset, dataset,
                                  writer=sys.stdout, dataset_name=None,

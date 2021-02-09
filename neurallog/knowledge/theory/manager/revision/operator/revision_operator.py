@@ -1294,3 +1294,21 @@ class CombinedBottomClauseBreadthSearch(CombinedBottomClauseBoundedRule):
         theory_evaluator = self.learning_system.theory_evaluator
         return theory_evaluator.evaluate_theory_appending_clause(
             targets, self.theory_metric, clauses)
+
+
+class DumbRevisionOperator(RevisionOperator):
+    """
+    An operator that does nothing. It is only for test purpose.
+    """
+
+    # noinspection PyMissingOrEmptyDocstring
+    def perform_operation(self, targets, minimum_threshold=None):
+        return self.learning_system.theory
+
+    # noinspection PyMissingOrEmptyDocstring
+    def required_fields(self):
+        return ["learning_system"]
+
+    # noinspection PyMissingOrEmptyDocstring
+    def initialize(self):
+        pass

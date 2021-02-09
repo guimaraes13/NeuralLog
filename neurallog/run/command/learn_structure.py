@@ -68,6 +68,8 @@ class LearnStructure(Command):
     Learns the logic program structure.
     """
 
+    COMMAND_NAME = COMMAND_NAME
+
     def __init__(self, program, args, direct=False):
         # configure_log(LOG_FORMAT, level=logging.INFO)
         self.yaml_path = None
@@ -210,7 +212,7 @@ class LearnStructure(Command):
             os.path.join(self.output_directory, OUTPUT_RUN_FILE_NAME), "w")
         run_file.write(self.program)
         run_file.write(" ")
-        run_file.write(COMMAND_NAME)
+        run_file.write(self.COMMAND_NAME)
 
         yaml_config = os.path.join(self.output_directory,
                                    OUTPUT_CONFIGURATION_YAML)
@@ -239,6 +241,8 @@ class LearnStructureIterative(LearnStructure):
     """
     Iteratively learns the logic program structure.
     """
+
+    COMMAND_NAME = COMMAND_NAME_ITERATIVE
 
     def __init__(self, program, args, direct=False):
         # configure_log(LOG_FORMAT, level=logging.INFO)

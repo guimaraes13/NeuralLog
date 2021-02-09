@@ -529,6 +529,7 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
         if trainer.model.has_trainable_parameters:
             dataset = trainer.build_dataset()
             dataset = dataset.get_dataset(TEMPORARY_SET_NAME)
+            # IMPROVE: Log the history of the training
             trainer.fit(dataset)
         self.current_trainer = trainer
 

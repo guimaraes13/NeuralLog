@@ -982,6 +982,7 @@ class NeuralLogProgram:
         grouped_types = self._get_grouped_types()
         _iterable_constants_per_term = dict()
         for type_terms in grouped_types:
+            # TODO: Use ordered set instead of set
             iterable_constant = set()
             for predicate_term in type_terms:
                 _iterable_constants_per_term[predicate_term] = iterable_constant
@@ -992,7 +993,9 @@ class NeuralLogProgram:
         self._get_constants_from_clauses(_iterable_constants_per_term)
         self.iterable_constants_per_term = dict()
         for type_terms in grouped_types:
+            # TODO: check if any predicate is set not to sort the constants
             value = _iterable_constants_per_term[list(type_terms)[0]]
+            # TODO: do not sort the constants if specified this way
             dictionary = _build_constant_dict(value)
             for predicate_term in type_terms:
                 self.iterable_constants_per_term[predicate_term] = dictionary
