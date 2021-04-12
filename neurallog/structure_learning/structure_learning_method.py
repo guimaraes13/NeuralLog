@@ -354,6 +354,7 @@ class StructureLearningMethod(Initializable, ABC):
         self.build_theory_revision_manager()
 
         self.learning_system.initialize()
+        self.engine_system_translator.log_parameters()
 
     def build_theory_metrics(self):
         """

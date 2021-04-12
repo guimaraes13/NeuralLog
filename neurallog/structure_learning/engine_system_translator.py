@@ -335,6 +335,13 @@ class EngineSystemTranslator(Initializable):
         """
         pass
 
+    @abstractmethod
+    def log_parameters(self):
+        """
+        Logs the parameters of the learning model.
+        """
+        pass
+
 
 class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
     """
@@ -565,6 +572,17 @@ class NeuralLogEngineSystemTranslator(EngineSystemTranslator):
         self.theory = NeuralLogProgram()
         clauses = read_logic_program_from_file(theory_path)
         self.theory.add_clauses(clauses)
+
+    # noinspection PyMissingOrEmptyDocstring
+    def log_parameters(self):
+        program = self.knowledge_base.copy()
+        theory = self.theory
+        append_theory(program, theory)
+        trainer = Trainer(program, self.output_path)
+        trainer.init_model()
+        trainer.read_parameters()
+        logger.info("Model parameters:")
+        trainer.log_parameters()
 
 
 def permute_terms(*iterables):

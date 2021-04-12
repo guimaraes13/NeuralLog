@@ -302,18 +302,19 @@ class Trainer:
             else:
                 return [loss, self.parameters["metrics"]]
 
-    def log_parameters(self, parameter_keys, map_dict=None):
+    def log_parameters(self, parameter_keys=None, map_dict=None):
         """
         Logs the parameters.
 
         :param parameter_keys: the keys of the parameters to log.
-        :type parameter_keys: collections.Collection[str]
+        :type parameter_keys: collections.Collection[str] or None
         :param map_dict: a map of strings to replace the names of the outputs
         :type map_dict: dict[str, str]
         """
         if logger.isEnabledFor(logging.INFO):
-            parameters = dict(filter(lambda x: x[0] in parameter_keys,
-                                     self.parameters.items()))
+            parameters = dict(filter(
+                lambda x: parameter_keys is None or x[0] in parameter_keys,
+                self.parameters.items()))
             if len(parameters) == 0:
                 return
             if map_dict is not None:

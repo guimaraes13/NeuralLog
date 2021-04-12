@@ -9,7 +9,6 @@ from typing import TypeVar, Generic, Set, Dict, List, Tuple
 from neurallog.knowledge.examples import Examples, ExampleIterator, \
     ExamplesInferences, GroupedAtoms
 from neurallog.knowledge.manager.tree_manager import TRUE_LITERAL
-from neurallog.knowledge.program import NeuralLogProgram
 from neurallog.knowledge.theory.manager.revision.operator.revision_operator \
     import RevisionOperator, is_positive, relevant_breadth_first_search
 from neurallog.language.equivalent_clauses import EquivalentAtom
@@ -117,7 +116,7 @@ def build_all_literals_from_clause(initial_clause, candidates, answer_literals,
             answer_literals.add(candidate)
 
 
-def build_substitution_clause(initial_clause, program):
+def build_substitution_clause(initial_clause, predicate_types):
     """
     Creates the clause to find the substitution of variables instantiated by the
     initial clause and a `type` clause, to associate the type of the
@@ -125,20 +124,20 @@ def build_substitution_clause(initial_clause, program):
 
     :param initial_clause: the initial clause
     :type initial_clause: HornClause
-    :param program: the program
-    :type program: NeuralLogProgram
+    :param predicate_types: the program
+    :type predicate_types: Dict[Predicate, Tuple[TermType]]
     :return: the clause to find the substitutions and the type clause
     :rtype: Tuple[HornClause, HornClause]
     """
     terms: List[Term] = []
-    append_variables_from_atom(initial_clause.head, program, terms)
+    append_variables_from_atom(initial_clause.head, predicate_types, terms)
 
     body: List[Literal] = []
     if not initial_clause.body:
         body.append(TRUE_LITERAL)
     else:
         for literal in initial_clause.body:
-            append_variables_from_atom(literal, program, terms)
+            append_variables_from_atom(literal, predicate_types, terms)
         body = initial_clause.body
 
     substitution_head = Atom(SUBSTITUTION_NAME, *terms)
@@ -151,18 +150,18 @@ def build_substitution_clause(initial_clause, program):
     return substitution_clause, type_clause
 
 
-def append_variables_from_atom(atom, program, append):
+def append_variables_from_atom(atom, predicate_types, append):
     """
     Appends the variables from the `atom` to the `append` list.
 
     :param atom: the atom
     :type atom: Atom
-    :param program: the program
-    :type program: NeuralLogProgram
+    :param predicate_types: the program
+    :type predicate_types: Dict[Predicate, Tuple[TermType]]
     :param append: the append list
     :type append: List[Term]
     """
-    term_types = program.predicates[atom.predicate]
+    term_types = predicate_types[atom.predicate]
     for i in range(atom.arity()):
         term = atom.terms[i]
         if not term.is_constant() and not term_types[i].number and \
@@ -497,9 +496,10 @@ class RelevantLiteralAppendOperator(LiteralAppendOperator[Literal]):
         initial_clause_head = \
             get_initial_clause_head(initial_clause.head, target_predicate)
         _initial_clause = HornClause(initial_clause_head, *initial_clause.body)
+        predicate_types = dict(self.learning_system.knowledge_base.predicates)
+        predicate_types.update(self.learning_system.theory.predicates)
         substitution_clause, type_clause = \
-            build_substitution_clause(
-                _initial_clause, self.learning_system.knowledge_base)
+            build_substitution_clause(_initial_clause, predicate_types)
         query_set = build_queries_from_examples(
             self.get_based_examples(examples), initial_clause_head,
             substitution_clause.head, True)
@@ -606,8 +606,10 @@ class PathFinderAppendOperator(LiteralAppendOperator[Set[Literal]]):
     # noinspection PyMissingOrEmptyDocstring,DuplicatedCode
     def build_extended_horn_clause(self, examples, initial_clause,
                                    equivalent_literals, target_predicate=None):
+        predicate_types = dict(self.learning_system.knowledge_base.predicates)
+        predicate_types.update(self.learning_system.theory.predicates)
         substitution_clause, type_clause = build_substitution_clause(
-            initial_clause, self.learning_system.knowledge_base)
+            initial_clause, predicate_types)
         initial_clause_head = \
             get_initial_clause_head(initial_clause.head, target_predicate)
         query_set = build_queries_from_examples(

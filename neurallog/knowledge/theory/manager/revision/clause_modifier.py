@@ -4,6 +4,7 @@ Modifies proposed clauses.
 import re
 from abc import abstractmethod
 from typing import Optional
+import hashlib
 
 import \
     neurallog.knowledge.theory.manager.revision.operator.revision_operator as ro
@@ -265,3 +266,98 @@ class AppendLiteralWithUniqueTermModifier(ClauseModifier):
     def __repr__(self):
         return f"[{super().__repr__()}] {self.predicate}/1[" + \
                f"{self.term_prefix} + ()]"
+
+
+class AppendHashLiteralTermModifier(ClauseModifier):
+    """
+    Appends a literal term, whose name is computed from the hash of the clause,
+    to the end of the clause, with term that can be either a constant or
+    extracted from the clause.
+    """
+
+    OPTIONAL_FIELDS = dict(ClauseModifier.OPTIONAL_FIELDS)
+    OPTIONAL_FIELDS.update({
+        "literal_prefix": "w_",
+        "head_term_index": None,
+        "hash_length": 4,
+    })
+
+    def __init__(self, learning_system=None,
+                 literal_prefix=None, head_term_index=None, hash_length=None):
+        """
+        Creates a clause modifier.
+
+        :param learning_system: the learning system
+        :type learning_system: sls.StructureLearningSystem
+        :param literal_prefix: the prefix of the literal
+        :type literal_prefix: Optional[str]
+        :param head_term_index: if not `None`, adds the term of index from
+        the head of the clause to the created predicate.
+        :type head_term_index: Optional[int]
+        :param hash_length: Sets the length of the hash to be appended to the
+        literal name
+        :type hash_length: Optional[int]
+        """
+        super().__init__(learning_system)
+        self.literal_prefix = literal_prefix
+        if self.literal_prefix is None:
+            self.literal_prefix = self.OPTIONAL_FIELDS["literal_prefix"]
+
+        self.head_term_index = head_term_index
+        if self.append_at_beginning is None:
+            self.append_at_beginning = self.OPTIONAL_FIELDS["head_term_index"]
+
+        self.hash_length = hash_length
+        if self.hash_length is None:
+            self.hash_length = self.OPTIONAL_FIELDS["hash_length"]
+
+    # noinspection PyMissingOrEmptyDocstring
+    def required_fields(self):
+        return super().required_fields()
+
+    # noinspection PyMissingOrEmptyDocstring,PyAttributeOutsideInit
+    def initialize(self):
+        super().initialize()
+
+    def _contains_predicate(self, clause):
+        """
+        Checks if the clause contains a predicate with the same prefix.
+
+        :param clause: the clause
+        :type clause: HornClause
+        :return: `None`, if the clause does not contain the predicate;
+        otherwise, the literal of the predicate
+        :rtype: Optional[Literal]
+        """
+        for literal in clause.body:
+            if literal.predicate.name.startswith(self.literal_prefix):
+                return literal
+
+        return None
+
+    # noinspection PyMissingOrEmptyDocstring
+    def modify_clause(self, clause, examples):
+        old_literal = self._contains_predicate(clause)
+        if old_literal is not None:
+            clause.body.remove(old_literal)
+
+        new_literal_name = hashlib.sha1(str(clause).encode("utf-8")).hexdigest()
+        new_literal_name = new_literal_name[:self.hash_length]
+
+        terms = []
+        if self.head_term_index is not None:
+            terms.append(clause.head.terms[self.head_term_index])
+
+        literal = Literal(Atom(self.literal_prefix + new_literal_name, *terms))
+        clause.body.append(literal)
+        if isinstance(clause.provenance, ro.LearnedClause):
+            clause.provenance.add_modifier(self)
+
+        return clause
+
+    def __repr__(self):
+        if self.head_term_index is None:
+            return f"[{super().__repr__()}] {self.literal_prefix}"
+        else:
+            return f"[{super().__repr__()}] {self.literal_prefix}[" + \
+                   f"{self.head_term_index}]"

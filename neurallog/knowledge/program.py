@@ -693,7 +693,7 @@ class NeuralLogProgram:
 
     BUILTIN_PREDICATES = {
         EXAMPLE_PREDICATE: [Predicate(EXAMPLE_PREDICATE, -1)],
-        LEARN_BUILTIN_PREDICATE: [Predicate(LEARN_BUILTIN_PREDICATE, 1)],
+        LEARN_BUILTIN_PREDICATE: [Predicate(LEARN_BUILTIN_PREDICATE, -1)],
         "set_parameter": [Predicate("set_parameter", -1)],
         "set_predicate_parameter": [Predicate("set_predicate_parameter", -1)],
         MEGA_EXAMPLE_PREDICATE: [Predicate(MEGA_EXAMPLE_PREDICATE, -1)]
@@ -770,6 +770,9 @@ class NeuralLogProgram:
         self.trainable_predicates: Set[Predicate] = set()
         "The trainable predicates"
 
+        self.trainable_prefix: Set[str] = set()
+        "The trainable prefix"
+
         self.parameters: Dict[Any, Any] = dict()
         "A dictionary with the parameters defined in the program"
 
@@ -843,11 +846,21 @@ class NeuralLogProgram:
     def _expand_clauses(self):
         self.logic_predicates = set(self.fact_predicates)
         expanded_trainable = set()
+
+        # Finds the trainable predicates defined by name
         for trainable in self.trainable_predicates:
             for predicate in self.predicates.keys():
                 if trainable.equivalent(predicate):
                     expanded_trainable.add(predicate)
                     self.logic_predicates.add(predicate)
+
+        # Finds the trainable predicates defined by prefix
+        for prefix in self.trainable_prefix:
+            for predicate in self.predicates.keys():
+                if predicate.name.startswith(prefix):
+                    expanded_trainable.add(predicate)
+                    self.logic_predicates.add(predicate)
+
         self.trainable_predicates.update(expanded_trainable)
         self._update_logic_predicates()
         # self.logic_predicates.update(self.clause_predicates)
@@ -1671,8 +1684,39 @@ class NeuralLogProgram:
         :param clause: the learn clause
         :type clause: AtomClause
         """
-        predicate = get_predicate_from_string(clause.atom.terms[0].get_name())
-        self.trainable_predicates.add(predicate)
+        # terms = clause.atom.terms
+        # if len(terms) == 1:
+        #     predicate = get_predicate_from_string(terms[0].get_name())
+        #     self.trainable_predicates.add(predicate)
+        # elif len(terms) > 1:
+        #     mode = terms[0].get_name().lower()
+        #     if mode == "prefix":
+        #         self.trainable_prefix.add(terms[1].get_name())
+        predicate = self.get_learn_predicate(clause)
+        if isinstance(predicate, Predicate):
+            self.trainable_predicates.add(predicate)
+        elif isinstance(predicate, str):
+            self.trainable_prefix.add(predicate)
+
+    @staticmethod
+    def get_learn_predicate(clause):
+        """
+        Gets the learning predicate or prefix.
+
+        :param clause: the clause
+        :type clause: AtomClause
+        :return: the learning predicate (Predicate) or the prefix (str)
+        :rtype: Predicate or str or None
+        """
+        terms = clause.atom.terms
+        if len(terms) == 1:
+            return get_predicate_from_string(terms[0].get_name())
+        else:
+            mode = terms[0].get_name().lower()
+            if mode == "prefix":
+                return terms[1].get_name()
+
+        return None
 
     # noinspection PyUnusedLocal
     @builtin("set_parameter")
