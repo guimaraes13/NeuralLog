@@ -139,6 +139,7 @@ class Trainer:
         """
         Initializes the NeuralLog model.
         """
+        self.neural_program.build_program()
         self.model = NeuralLogNetwork(self.neural_program, train=True,
                                       regularizer=self.regularizer)
 
