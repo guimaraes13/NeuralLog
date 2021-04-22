@@ -49,7 +49,7 @@ and a set of atoms separated by commas, forming its body, ending with a
 
 `isParent(A, B) :- isMarried(A, C), isParent(C, B).`
 
-## Run
+## Parameter Learning
 
 The main entry file is neurallog/run/neurallog.py. From there, one can train and
 evaluate the models.

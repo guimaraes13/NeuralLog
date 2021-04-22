@@ -1979,8 +1979,8 @@ DEFAULT_PARAMETERS = [
 
     ("allow_sparse", True,
      "by default, we represent constant facts as sparse matrices whenever "
-     "it is possible. Although it reduces the amount of used memory, "
-     "it limits the multiplication to matrices with rank at most 2. We case "
+     "possible. Although it reduces the amount of used memory, "
+     "it limits the multiplication to matrices with rank at most 2. In case "
      "one needs to work if higher order matrices, this options must be set to "
      "`False`."),
 
@@ -2025,11 +2025,11 @@ DEFAULT_PARAMETERS = [
 
     ("edge_combining_function_2d", "tf.matmul",
      "function to extract the value of the fact based on the input, "
-     "for binary facts. The default is the dot multiplication implemented "
+     "for binary facts. The default is the matrix multiplication implemented "
      "by the `tf.matmul` function"),
     ("edge_combining_function_2d:sparse", "edge_combining_function_2d:sparse",
      "function to extract the value of the fact based on the input, "
-     "for binary facts. The default is the dot multiplication implemented "
+     "for binary facts. The default is the matrix multiplication implemented "
      "by the `tf.matmul` function"),
 
     ("invert_fact_function", "tf.transpose",

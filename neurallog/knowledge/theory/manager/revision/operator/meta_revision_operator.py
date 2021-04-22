@@ -1270,14 +1270,25 @@ class BFSMetaRevisionOperator(MetaRevisionOperator):
     possible meta program.
     """
 
+    OPTIONAL_FIELDS = dict(MetaRevisionOperator.OPTIONAL_FIELDS)
+    OPTIONAL_FIELDS.update({
+        "skip_evaluation": False,
+    })
+
     def __init__(self, learning_system=None, theory_metric=None,
                  clause_modifiers=None, meta_program=None, maximum_depth=None,
                  tree_theory=None, find_best_theory=None,
-                 iterate_over_predicate=False):
+                 iterate_over_predicate=False, skip_evaluation=None):
         super().__init__(learning_system, theory_metric, clause_modifiers,
                          meta_program, maximum_depth, tree_theory,
                          find_best_theory, iterate_over_predicate)
         self._target_atoms = set()
+
+        self.skip_evaluation = skip_evaluation
+        "If true, returns the found theory without evaluating it."
+
+        if self.skip_evaluation is None:
+            self.skip_evaluation = self.OPTIONAL_FIELDS["skip_evaluation"]
 
     # noinspection PyMissingOrEmptyDocstring
     def initialize(self):
@@ -1409,23 +1420,23 @@ class BFSMetaRevisionOperator(MetaRevisionOperator):
                 "\n".join(map(lambda x: str(x), full_program)))
 
         self._target_atoms.add(target_atom)
-        # noinspection PyBroadException
-        try:
-            evaluation = \
-                self.theory_evaluator.evaluate_theory_appending_clause(
-                    examples, self.theory_metric, full_program)
-            improvement = \
-                self.theory_metric.compare(evaluation, best_evaluation)
-            logger.debug(
-                "Program evaluation of %.3f, with improvement of %.3f "
-                "over the current theory", evaluation, improvement)
+        if not self.skip_evaluation:
+            # noinspection PyBroadException
+            try:
+                evaluation = \
+                    self.theory_evaluator.evaluate_theory_appending_clause(
+                        examples, self.theory_metric, full_program)
+                improvement = \
+                    self.theory_metric.compare(evaluation, best_evaluation)
+                logger.debug(
+                    "Program evaluation of %.3f, with improvement of %.3f "
+                    "over the current theory", evaluation, improvement)
+            except Exception:
+                logger.exception(
+                    "Error evaluating theory:\n%s", full_program)
+                full_program = None
 
-            return full_program
-        except Exception:
-            logger.exception(
-                "Error evaluating theory:\n%s", full_program)
-
-        return None
+        return full_program
 
 # def revise_root_node(self, targets, minimum_threshold):
 #     """
