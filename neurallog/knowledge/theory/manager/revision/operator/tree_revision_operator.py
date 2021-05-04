@@ -354,8 +354,15 @@ class AddNodeTreeRevisionOperator(TreeRevisionOperator):
         :param theory: the theory
         :type theory: NeuralLogProgram
         """
-        theory.clauses_by_predicate[node.element.head.predicate].remove(
-            node.element)
+        element = node.element
+        clauses = theory.clauses_by_predicate[element.head.predicate]
+        if element in clauses:
+            clauses.remove(element)
+            logger.debug("Removing %s from theory %s.", element, clauses)
+            theory.build_program()
+        # else:
+        #     logger.warning("Could not remove %s, because it is not in %s.",
+        #                    element, clauses)
 
     def __repr__(self):
         return f"[{self.__class__.__name__}] {self.append_operator}"
@@ -455,13 +462,15 @@ class RemoveNodeTreeRevisionOperator(TreeRevisionOperator):
             # Root case
             revision_leaf.element.body.clear()
             revision_leaf.element.body.append(FALSE_LITERAL)
+            logger.info("Rule removed from theory:\t%s", revision_leaf.element)
         elif revision_leaf.is_default_child and \
                 len(revision_leaf.parent.children) == 1:
             # Remove Literal case
-            self.tree_theory.remove_literal_from_tree(revision_leaf)
+            revision_node = next(iter(revision_leaf.parent.children))
+            self.tree_theory.remove_literal_from_tree(revision_node)
+            logger.info("Literal removed %s removed from rule %s",
+                        revision_node.element.body[-1], revision_node.element)
         else:
             # Remove Rule case
             TreeTheory.remove_node_from_tree(revision_leaf)
-            for predicate in examples:
-                self.tree_theory.remove_example_from_leaf(
-                    predicate, revision_leaf)
+            logger.info("Rule removed from theory:\t%s", revision_leaf.element)

@@ -358,7 +358,7 @@ class TreeTheory:
         :param leaf: the leaf
         :type leaf: Node[HornClause]
         :return: the removed set of examples
-        :rtype: RevisionExamples
+        :rtype: re.RevisionExamples
         """
         return self.leaf_examples_map.get(predicate, dict()).pop(leaf, None)
 
@@ -371,7 +371,7 @@ class TreeTheory:
         :param leaf: the leaf
         :type leaf: Node[HornClause]
         :return: the set of examples
-        :rtype: RevisionExamples
+        :rtype: re.RevisionExamples
         """
         return self.leaf_examples_map.get(predicate).get(leaf)
 
@@ -417,11 +417,10 @@ class TreeTheory:
         predicate = revision_node.element.head.predicate
         if revision_node.is_leaf:
             # Gets the examples from the last literal, which has been deleted
-            examples_from_leaf = self.get_example_from_leaf(
+            # and unbinds the examples from the leaf that will be removed from
+            # the tree
+            examples_from_leaf = self.remove_example_from_leaf(
                 predicate, revision_node)
-            # Unbinds the examples from the leaf that will be removed from
-            #  the tree
-            self.remove_example_from_leaf(predicate, revision_node)
             # Removes the leaf from the tree
             TreeTheory.remove_node_from_tree(revision_node)
             # Links the examples to the removed leaf's parent
@@ -615,7 +614,7 @@ class TreeExampleManager(IncomingExampleManager):
         "Caches the list of all rules, except the rules of the key predicate."
 
         self.tree_theory.learning_system = self.learning_system
-        self.tree_theory.initialize()
+        self.tree_theory.initialize(self.learning_system.theory)
 
     # noinspection PyMissingOrEmptyDocstring
     def incoming_examples(self, examples):

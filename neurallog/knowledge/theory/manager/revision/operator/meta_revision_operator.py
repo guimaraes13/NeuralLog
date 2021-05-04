@@ -875,6 +875,8 @@ class MetaRevisionOperator(ro.RevisionOperator):
 
         body = filter(lambda x: x != TRUE_LITERAL, first_clause.body)
         new_clause = HornClause(first_clause.head, *body)
+        if len(new_clause.body) == 0:
+            return None
         new_clause = self.apply_clause_modifiers(new_clause, targets)
         if len(new_clause.body) == 1 and \
                 Literal(new_clause.head) == new_clause.body[0]:

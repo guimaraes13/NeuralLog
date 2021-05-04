@@ -2,7 +2,8 @@
 
 knowledge_base_file_paths:
   - "structure_learning/kinship.pl"
-#theory_file_paths:
+theory_file_paths:
+  - "structure_learning/init_theory.pl"
 example_file_paths:
   - "structure_learning/kinship_examples_1_tree.pl"
 test_file_paths:
