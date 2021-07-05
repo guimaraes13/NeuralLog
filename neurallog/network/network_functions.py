@@ -771,11 +771,17 @@ class Bert(NeuralLogLayer):
                  bert_checkpoint_file=None,
                  out_layer_indices=None,
                  maximum_sentence_length=None,
+                 compute_mask=False,
+                 compute_token_type_ids=False,
+                 batch_size=None,
                  **kwargs):
         name = kwargs.get("name", "bert")
         name += "_layer"
         super(Bert, self).__init__(name)
         parameters = bert.params_from_pretrained_ckpt(model_path)
+        self.compute_mask = compute_mask
+        self.compute_token_type_ids = compute_token_type_ids
+        self.batch_size = batch_size
         if maximum_sentence_length is None:
             self.maximum_sentence_length = parameters.max_position_embeddings
         else:
@@ -788,9 +794,13 @@ class Bert(NeuralLogLayer):
             # noinspection SpellCheckingInspection
             parameters.out_layer_ndxs = out_layer_indices
         self.bert_layer = bert.BertModelLayer.from_params(parameters, **kwargs)
-        layer_input_ids = keras.layers.Input(
+        layer_input = keras.layers.Input(
             shape=(self.maximum_sentence_length,), dtype='int32')
-        self.bert_layer(layer_input_ids)
+        if self.compute_token_type_ids:
+            self.bert_layer([layer_input, keras.layers.Input(
+                shape=(self.maximum_sentence_length,), dtype='int32')])
+        else:
+            self.bert_layer(layer_input)
         self.bert_checkpoint_file = bert_checkpoint_file
         self.loaded = False
 
@@ -809,7 +819,28 @@ class Bert(NeuralLogLayer):
 
     # noinspection PyMissingOrEmptyDocstring
     def call(self, inputs, mask=None, training=None):
-        result = self.bert_layer(inputs, mask=mask, training=training)
+        if isinstance(inputs, list) or isinstance(inputs, tuple):
+            input_ids, token_type_ids = inputs
+        else:
+            input_ids: tf.Tensor = inputs
+            token_type_ids = None
+
+        if self.compute_mask and mask is None:
+            mask = tf.not_equal(input_ids, 0)
+
+        if self.compute_token_type_ids:
+            if token_type_ids is None:
+                if input_ids.shape[0] is None:
+                    token_type_ids = tf.zeros(
+                        [self.batch_size, self.maximum_sentence_length],
+                        dtype=input_ids.dtype)
+                else:
+                    token_type_ids = tf.zeros(
+                        input_ids.shape, dtype=input_ids.dtype)
+            result = self.bert_layer(
+                [input_ids, token_type_ids], mask=mask, training=training)
+        else:
+            result = self.bert_layer(inputs, mask=mask, training=training)
         return result
 
     __call__ = call
