@@ -774,6 +774,7 @@ class Bert(NeuralLogLayer):
                  compute_mask=False,
                  compute_token_type_ids=False,
                  batch_size=None,
+                 pooled=False,
                  **kwargs):
         name = kwargs.get("name", "bert")
         name += "_layer"
@@ -804,6 +805,8 @@ class Bert(NeuralLogLayer):
         self.bert_checkpoint_file = bert_checkpoint_file
         self.loaded = False
 
+        self.pooled = pooled
+
     # noinspection PyMissingOrEmptyDocstring
     def build(self, input_shape):
         super().build(input_shape)
@@ -826,6 +829,10 @@ class Bert(NeuralLogLayer):
             token_type_ids = None
 
         if self.compute_mask and mask is None:
+            # if input_ids.__class__.__name__ == "MapDataset":
+            #     mask = tf.zeros(self.maximum_sentence_length, dtype=tf.int32)
+            # else:
+            #     mask = tf.not_equal(input_ids, 0)
             mask = tf.not_equal(input_ids, 0)
 
         if self.compute_token_type_ids:
@@ -841,6 +848,10 @@ class Bert(NeuralLogLayer):
                 [input_ids, token_type_ids], mask=mask, training=training)
         else:
             result = self.bert_layer(inputs, mask=mask, training=training)
+
+        if self.pooled:
+            result = tf.squeeze(result[:, 0:1, :], axis=1)
+
         return result
 
     __call__ = call

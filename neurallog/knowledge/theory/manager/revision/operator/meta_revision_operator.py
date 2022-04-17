@@ -545,13 +545,15 @@ class MetaRevisionOperator(ro.RevisionOperator):
         "find_best_theory": False,
         "tree_theory": None,
         "iterate_over_predicate": False,
+        "filter_repeated_literals": False,
         "avoid_program_predicates": ()
     })
 
     def __init__(self, learning_system=None, theory_metric=None,
                  clause_modifiers=None, meta_program=None, maximum_depth=None,
                  tree_theory=None, find_best_theory=None,
-                 iterate_over_predicate=False, avoid_program_predicates=None):
+                 iterate_over_predicate=False, filter_repeated_literals=None,
+                 avoid_program_predicates=None):
         super().__init__(learning_system, theory_metric, clause_modifiers)
 
         self.meta_program: str = meta_program
@@ -590,6 +592,17 @@ class MetaRevisionOperator(ro.RevisionOperator):
         if self.iterate_over_predicate is None:
             self.iterate_over_predicate = \
                 self.OPTIONAL_FIELDS["iterate_over_predicate"]
+
+        self.filter_repeated_literals = filter_repeated_literals
+        """
+        If `Ture`, when appending literals to the body of a rule, literals 
+        that are already present in the rule are ignored, avoiding repeated 
+        literals in the body.
+        """
+
+        if self.filter_repeated_literals is None:
+            self.filter_repeated_literals = \
+                self.OPTIONAL_FIELDS["filter_repeated_literals"]
 
         self.avoid_program_predicates = avoid_program_predicates
         """
@@ -848,6 +861,26 @@ class MetaRevisionOperator(ro.RevisionOperator):
         self.removed_item = best_removed_item
         return best_theory
 
+    @staticmethod
+    def filter_elements(elements):
+        """
+        Gets a list of unique elements from elements
+
+        :param elements: the original list of elements
+        :type elements: Iterator[T]
+        :return: the list with unique elements
+        :rtype: List[T]
+        """
+        element_set = set()
+        result = []
+        for element in elements:
+            if element in element_set:
+                continue
+            result.append(element)
+            element_set.add(element)
+
+        return result
+
     # noinspection PyUnusedLocal,DuplicatedCode
     def _build_root_node_theory(self, program, revision_leaf, targets):
         """
@@ -874,6 +907,8 @@ class MetaRevisionOperator(ro.RevisionOperator):
             return None
 
         body = filter(lambda x: x != TRUE_LITERAL, first_clause.body)
+        if self.filter_repeated_literals:
+            body = self.filter_elements(body)
         new_clause = HornClause(first_clause.head, *body)
         if len(new_clause.body) == 0:
             return None
@@ -918,20 +953,23 @@ class MetaRevisionOperator(ro.RevisionOperator):
         # noinspection PyTypeChecker
         first_clause: HornClause = program[0]
         # filter programs whose added clause is false
-        if FALSE_LITERAL in first_clause.body:
+        new_body = first_clause.body
+        if FALSE_LITERAL in new_body:
             return None
 
         if NEW_PREDICATE_NAME in \
-                map(lambda x: x.predicate.name, first_clause.body):
+                map(lambda x: x.predicate.name, new_body):
             # This program attempted to use a placeholder predicate, skip it
             return None
 
         original_clause: HornClause = revision_leaf.parent.element
         body = original_clause.body
+        if self.filter_repeated_literals:
+            new_body = self.filter_elements(new_body)
         if len(body) == 1 and body[0] == FALSE_LITERAL:
-            body = first_clause.body
+            body = new_body
         else:
-            body = body + first_clause.body
+            body = body + new_body
         body = filter(lambda x: x != TRUE_LITERAL, body)
         new_clause = HornClause(original_clause.head, *body)
         if len(new_clause.body) == 0:
@@ -975,8 +1013,9 @@ class MetaRevisionOperator(ro.RevisionOperator):
         """
         # noinspection PyTypeChecker
         first_clause: HornClause = program[0]
+        new_body = first_clause.body
         if NEW_PREDICATE_NAME in \
-                map(lambda x: x.predicate.name, first_clause.body):
+                map(lambda x: x.predicate.name, new_body):
             # This program attempted to use a placeholder predicate, skip it
             return None
 
@@ -986,7 +1025,7 @@ class MetaRevisionOperator(ro.RevisionOperator):
             original_clause.head.predicate]
         if original_clause in clauses:
             clauses.remove(original_clause)
-        if FALSE_LITERAL in first_clause.body:
+        if FALSE_LITERAL in new_body:
             # the program added a false literal to the clause, just remove
             # the clause
             removed_item = original_clause
@@ -996,7 +1035,9 @@ class MetaRevisionOperator(ro.RevisionOperator):
             # the program replaces a literal from the clause by a
             # non-false, possibly empty, set of literals
             removed_item = original_clause.body[-1]
-            body = original_clause.body[:-1] + first_clause.body
+            if self.filter_repeated_literals:
+                new_body = self.filter_elements(new_body)
+            body = original_clause.body[:-1] + new_body
             body = filter(lambda x: x != TRUE_LITERAL, body)
             new_clause = HornClause(original_clause.head, *body)
             if len(new_clause.body) == 0:

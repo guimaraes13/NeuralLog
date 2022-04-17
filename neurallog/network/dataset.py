@@ -29,7 +29,7 @@ from bert.tokenization.bert_tokenization import FullTokenizer
 
 from neurallog.knowledge.examples import Examples
 from neurallog.knowledge.program import NeuralLogProgram, NO_EXAMPLE_SET, \
-    get_predicate_from_string
+    get_predicate_from_string, BiDict
 from neurallog.language.language import AtomClause, Atom, Predicate, \
     get_constant_from_string, get_term_from_string, TermType, Constant, Quote
 from neurallog.network import registry
@@ -834,6 +834,336 @@ class DefaultDataset(NeuralLogDataset):
         return print_neural_log_predictions(
             model, program, self, dataset, writer=writer,
             dataset_name=dataset_name, print_batch_header=print_batch_header)
+
+
+@neural_log_dataset("relation_extraction_dataset")
+class RelationExtractionDataset(DefaultDataset):
+
+    def __init__(self, program,
+                 inverse_relations,
+                 vocabulary_file,
+                 initial_token="[CLS]",
+                 final_token="[SEP]",
+                 pad_token="[PAD]",
+                 maximum_sentence_length=None,
+                 do_lower_case=True,
+                 pad_to_maximum_length=False,
+                 compute_token_type_ids=True):
+        super().__init__(program, inverse_relations=inverse_relations)
+        self.tokenizer = FullTokenizer(vocabulary_file, do_lower_case)
+
+        self.maximum_sentence_length = maximum_sentence_length
+
+        self.initial_token_index = self.tokenizer.vocab[initial_token]
+
+        self.final_token_index = self.tokenizer.vocab[final_token]
+
+        self.skip_tokens = [initial_token, final_token]
+
+        self.pad_index = self.tokenizer.vocab[pad_token]
+
+        self.pad_to_maximum_length = \
+            pad_to_maximum_length and maximum_sentence_length is not None
+
+        self.compute_token_type_ids = compute_token_type_ids
+
+        self.sentence_tokens_map: BiDict[str, Tuple[int]] = BiDict()
+
+    # noinspection PyUnusedLocal,DuplicatedCode
+    def call(self, features, labels, *args, **kwargs):
+        """
+        Used to transform the features and examples from the sparse
+        representation to dense in order to train the network.
+
+        :param features: A dense index tensor of the features
+        :type features: tuple[tf.SparseTensor]
+        :param labels: A tuple sparse tensor of labels
+        :type labels: tuple[tf.SparseTensor]
+        :param args: additional arguments
+        :type args: list
+        :param kwargs: additional arguments
+        :type kwargs: dict
+        :return: the features and label tensors
+        :rtype: (tf.Tensor or tuple[tf.Tensor], tuple[tf.Tensor])
+        """
+        dense_features = []
+        for i in range(len(self._target_predicates)):
+            predicate, inverted = self._target_predicates[i]
+            indices, _ = get_predicate_indices(predicate, inverted)
+
+            input_ids = features[0]
+            if self.compute_token_type_ids and input_ids.shape[0] is not None:
+                token_type_ids = tf.zeros(
+                    input_ids.shape, dtype=input_ids.dtype)
+                dense_features.append([input_ids, token_type_ids])
+            else:
+                dense_features.append(input_ids)
+
+            count = 1
+            for index in indices[1:]:
+                feature = tf.one_hot(
+                    features[count],
+                    self.program.get_constant_size(predicate, index))
+                dense_features.append(feature)
+                count += 1
+
+        labels = tuple(map(lambda x: tf.sparse.to_dense(x), labels))
+
+        if len(dense_features) > 1:
+            dense_features = tuple(dense_features)
+        else:
+            dense_features = dense_features[0]
+
+        # all_dense_features = tuple(all_dense_features)
+
+        return dense_features, labels
+
+    __call__ = call
+
+    def _build(self, examples):
+        """
+        Builds the features and label to train the neural network based on
+        the `example_set`.
+
+        The labels are always a sparse tensor.
+
+        :param examples: the set of examples
+        :type examples: Examples
+        :return: the features and labels
+        :rtype: (tuple[tf.SparseTensor], tuple[tf.SparseTensor])
+        """
+        output_by_term = OrderedDict()
+        input_terms = []
+        for predicate, inverted in self._target_predicates:
+            facts = examples.get(predicate, dict())
+            facts = facts.values()
+            for example in facts:
+                for fact in self.ground_atom(example):
+                    if predicate.arity < 3:
+                        input_term = (fact.terms[-1 if inverted else 0],)
+                    else:
+                        input_term = tuple(fact.terms[0:predicate.arity - 1])
+                    if input_term not in output_by_term:
+                        output = dict()
+                        output_by_term[input_term] = output
+                        input_terms.append(input_term)
+                    else:
+                        output = output_by_term[input_term]
+
+                    if predicate.arity == 1:
+                        output[(predicate, inverted)] = fact.weight
+                    else:
+                        output_term = fact.terms[0 if inverted else -1]
+                        # noinspection PyTypeChecker
+                        output.setdefault((predicate, inverted), []).append(
+                            (output_term, fact.weight))
+
+        all_features = []
+        all_labels = []
+        for predicate, inverted in self._target_predicates:
+            features = [[] for _ in range(max(1, predicate.arity - 1))]
+            label_values = []
+            label_indices = []
+
+            in_indices, out_index = get_predicate_indices(predicate, inverted)
+            for i in range(len(input_terms)):
+                outputs = output_by_term[input_terms[i]].get(
+                    (predicate, inverted), None)
+
+                features[0].append(
+                    self.get_token_sequence(input_terms[i][0].value))
+
+                constant_index = 1
+                for input_index in in_indices[1:]:
+                    index = None
+                    if outputs is not None:
+                        index = self.program.get_index_of_constant(
+                            predicate, input_index,
+                            input_terms[i][constant_index])
+                    if index is None:
+                        index = self._get_out_of_vocabulary_index(
+                            predicate, input_index)
+                    features[constant_index].append(index)
+                    constant_index += 1
+
+                if outputs is not None:
+                    if predicate.arity == 1:
+                        label_indices.append([i, 0])
+                        label_values.append(outputs)
+                    else:
+                        # noinspection PyTypeChecker
+                        for output_term, output_value in outputs:
+                            output_term_index = \
+                                self.program.get_index_of_constant(
+                                    predicate, out_index, output_term)
+                            label_indices.append([i, output_term_index])
+                            label_values.append(output_value)
+
+            all_features += features
+            if predicate.arity == 1:
+                dense_shape = [len(input_terms), 1]
+                empty_index = [[0, 0]]
+            else:
+                dense_shape = [
+                    len(input_terms),
+                    self.program.get_constant_size(predicate, out_index)]
+                empty_index = [[0, 0]]
+            if len(label_values) == 0:
+                sparse_tensor = tf.SparseTensor(indices=empty_index,
+                                                values=[0.0],
+                                                dense_shape=dense_shape)
+            else:
+                sparse_tensor = tf.SparseTensor(indices=label_indices,
+                                                values=label_values,
+                                                dense_shape=dense_shape)
+            sparse_tensor = tf.sparse.reorder(sparse_tensor)
+            all_labels.append(sparse_tensor)
+
+        return tuple(all_features), tuple(all_labels)
+
+    def get_token_sequence(self, sentence):
+        """
+        Gets the token sequence for the sentence.
+
+        :param sentence: the sentence
+        :type sentence: str
+        :return: the token sequence
+        :rtype: list[int]
+        """
+        token_ids = self.sentence_tokens_map.get(sentence)
+        if token_ids is not None:
+            return token_ids
+
+        token_ids = self.tokenizer.convert_tokens_to_ids(
+            self.tokenizer.tokenize(sentence))
+        if len(token_ids) > self.maximum_sentence_length - 2:
+            token_ids = token_ids[0:self.maximum_sentence_length - 2]
+        token_ids = [self.initial_token_index] + token_ids
+
+        token_ids.append(self.final_token_index)
+
+        if self.pad_to_maximum_length:
+            token_ids.extend([self.pad_index] *
+                             (self.maximum_sentence_length - len(token_ids)))
+
+        self.sentence_tokens_map[sentence] = tuple(token_ids)
+
+        return token_ids
+
+    # noinspection PyMissingOrEmptyDocstring
+    def print_predictions(self, model, neural_program, dataset,
+                          writer=sys.stdout,
+                          dataset_name=None, print_batch_header=False):
+        """
+        Prints the predictions of `model` to `writer`.
+
+        :param model: the model
+        :type model: NeuralLogNetwork
+        :param neural_program: the neural program
+        :type neural_program: NeuralLogProgram
+        :param dataset: the dataset
+        :type dataset: tf.data.Dataset
+        :param writer: the writer. Default is to print to the standard output
+        :type writer: Any
+        :param dataset_name: the name of the dataset
+        :type dataset_name: str
+        :param print_batch_header: if `True`, prints a commented line before
+        each
+        batch
+        :type print_batch_header: bool
+        """
+        count = 0
+        batches = None
+        empty_entry = None
+        for features, _ in dataset:
+            if print_batch_header:
+                batch = batches[count] if batches is not None else count
+                print("%% Batch:", batch, file=writer, sep="\t")
+                count += 1
+            y_scores = model.predict(features)
+            if len(model.predicates) == 1:
+                # if not isinstance(neural_dataset, WordCharDataset):
+                y_scores = [y_scores]
+                if model.predicates[0][0].arity < 3:
+                    features = [features]
+            for i in range(len(model.predicates)):
+                predicate, inverted = model.predicates[i]
+                if inverted:
+                    continue
+                row_scores = y_scores[i]
+                if len(row_scores.shape) == 3:
+                    row_scores = np.squeeze(row_scores, axis=1)
+                for j in range(len(row_scores)):
+                    y_score = row_scores[j]
+                    subjects = []
+                    stop = False
+                    offset = sum(model.input_sizes[:i])
+
+                    sentence = self.rebuild_sentence(
+                        features[offset][j].numpy())
+                    subjects.append(sentence)
+
+                    for k in range(1, model.input_sizes[i]):
+                        x_k = features[offset + k][j].numpy()
+                        if x_k.dtype == np.float32:
+                            if np.max(x_k) == 0:
+                                stop = True
+                                break
+                            arg_max = np.argmax(x_k)
+                            if arg_max == empty_entry:
+                                stop = True
+                                break
+                        else:
+                            arg_max = x_k[0]
+                            if arg_max < 0 or arg_max == empty_entry:
+                                stop = True
+                                break
+                        subjects.append(neural_program.get_constant_by_index(
+                            predicate, k, arg_max))
+                    offset += model.input_sizes[i]
+                    if stop:
+                        continue
+
+                    if predicate.arity == 1:
+                        clause = AtomClause(Atom(predicate, subjects[0],
+                                                 weight=float(y_score)))
+                        print(clause, file=writer)
+                    else:
+                        clauses = []
+                        for index in range(len(y_score)):
+                            object_term = neural_program.get_constant_by_index(
+                                predicate, -1, index)
+                            prediction = Atom(predicate, *subjects, object_term,
+                                              weight=float(y_score[index]))
+                            if dataset_name is not None and \
+                                    not self.has_example_key(
+                                        prediction.simple_key()):
+                                continue
+                            clauses.append(AtomClause(prediction))
+
+                        if len(clauses) > 0:
+                            clause = AtomClause(Atom(predicate, *subjects, "X"))
+                            print("%%", clause, file=writer, sep=" ")
+                            for clause in sorted(
+                                    clauses,
+                                    key=lambda c: c.atom.weight,
+                                    reverse=True):
+                                print(clause, file=writer)
+                            print(file=writer)
+
+    def rebuild_sentence(self, sentence_ids):
+        """
+        Rebuilds the sentence from the ids.
+
+        :param sentence_ids: the sentence ids
+        :type sentence_ids: np.ndarray or List[int]
+        :return: the rebuilt sentence
+        :rtype: Term
+        """
+        sentence_key = tuple(sentence_ids)
+
+        return Quote(
+            "\"" + self.sentence_tokens_map.inverse[sentence_key] + "\"")
 
 
 class AbstractSequenceDataset(DefaultDataset, ABC):
