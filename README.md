@@ -20,7 +20,7 @@ Different versions of the libraries may work as well, although it is not
 - matplotlib 3.3.1;
 - [bert-for-tf2](https://github.com/kpe/bert-for-tf2);
 
-### Logic Syntax
+## Logic Syntax
 
 The logic syntax is simple, it is based on a function-free logic similar to 
 Prolog. The elements are defined as follows:
@@ -135,10 +135,10 @@ By using the `loadModel` parameter to load the best saved model
 (`examples/family/data/best_program.pl`), the model will be load from the saved
 weights.
 
-One could possible resume training from here, but, in this case, by passing no
+One could possibly resume training from here, but, in this case, by passing no
 training set, there will be no training.
 
-The inferences will be save to the file: 
+The inferences will be saved to the file: 
 `outputPath` + `lastInference` + `test_set.pl`.
 Since the examples are in the test set, in this case:
 `examples/family/data/best_eval_test_set.pl`
@@ -149,3 +149,47 @@ The list of all settable parameters can be obtained by running the following
 command:
 
 ```python3 neurallog/run/neurallog.py --help```
+
+## References
+
+If you use NeuralLog on your research, please, considering cite one or more 
+of the following papers:
+
+[NeuralLog: a Neural Logic Language](https://arxiv.org/abs/2105.01442)
+```
+@article{vGuimaraes21a,
+  author    = {Victor Guimar{\~{a}}es and
+                 V{\'{\i}}tor Santos Costa},
+  title     = {NeuralLog: a Neural Logic Language},
+  journal   = {CoRR},
+  volume    = {abs/2105.01442},
+  year      = {2021},
+  url       = {https://arxiv.org/abs/2105.01442},
+  eprinttype = {arXiv},
+  eprint    = {2105.01442},
+  timestamp = {Wed, 12 May 2021 15:54:31 +0200},
+}
+```
+
+[Meta-Interpretive Learning meets Neural Networks](https://www.geist.re/_media/sedami:sedami2021-victorguimaraes.pdf)
+```
+@article{vGuimaraes21b,
+  author = {Guimar{\~a}es, Victor and Costa, V{\'i}tor Santos},
+  year = {2021},
+  month = {08},
+  title = {Meta-Interpretive Learning meets Neural Networks},
+  journal = {The Semantic Data Mining Workshop, SEDAMI 2021}
+}
+```
+
+[Online Learning of Logic Based Neural Network Structures](https://link.springer.com/chapter/10.1007/978-3-030-97454-1_10)
+```
+@inproceedings{vGuimaraes21c,
+  author = {Guimar{\~a}es, Victor and Costa, V{\'i}tor Santos},
+  title="Online Learning of Logic Based Neural Network Structures",
+  booktitle="Inductive Logic Programming",
+  year="2021",
+  publisher="Springer International Publishing",
+  address="Athens, Greece",
+}
+```
