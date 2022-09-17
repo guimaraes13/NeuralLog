@@ -22,16 +22,16 @@ set_parameter(validation_period, 1). %% the model will be evaluated every epoch
 %% Setting the parameters of the model
 %% Sets the individual loss function for each predicate
 %% Default: `mean_squared_error`
-set_parameter(loss_function, grand_father, mean_squared_error).
-set_parameter(loss_function, grand_mother, mean_absolute_error).
+%% set_parameter(loss_function, grand_father, mean_squared_error).
+%% set_parameter(loss_function, grand_mother, mean_absolute_error).
 
 %% Sets a single loss function for the model
 %% Default: the loss function
-%% set_parameter(loss_function, binary_crossentropy).
+set_parameter(loss_function, binary_crossentropy).
 
 %% Defines individual metrics for each predicate
-set_parameter(metrics, grand_father, mean_squared_error).
-set_parameter(metrics, grand_mother, mean_absolute_error).
+%% set_parameter(metrics, grand_father, mean_squared_error).
+%% set_parameter(metrics, grand_mother, mean_absolute_error).
 %% set_parameter(metrics, all, accuracy). %% defines for all predicates
 %% set_parameter(metrics, all, poisson). %% possibly, defines more metrics
 
