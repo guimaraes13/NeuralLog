@@ -602,6 +602,22 @@ class SKLearnRoc(ListAccumulator):
         return "SKLearn ROC Curve"
 
 
+class SKLearnAccuracy(ListAccumulator):
+    """
+    Computes the area under the ROC curve using the SKLearn library.
+    """
+
+    # noinspection PyMissingOrEmptyDocstring
+    def calculate_result(self, result):
+        if len(result) == 0:
+            return self.default_value
+        result = convert_true_pred(result)
+        return sklearn.metrics.accuracy_score(*result)
+
+    def __repr__(self):
+        return "SKLearn Accuracy"
+
+
 class PrecisionRecallCurveMetric(CurveMetric):
     """
     Computes the area under the Precision-Recall curve.
